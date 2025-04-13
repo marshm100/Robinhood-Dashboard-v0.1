@@ -1,0 +1,697 @@
+"Activity Date","Process Date","Settle Date","Instrument","Description","Trans Code","Quantity","Price","Amount"
+"3/10/2025","3/10/2025","3/11/2025","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704
+Dividend Reinvestment","Buy","2.085796","$31.97","($66.69)"
+"3/7/2025","3/7/2025","3/7/2025","BITU","Cash Div: R/D 2025-03-03 P/D 2025-03-07 - 84.269919 shares at 0.791388","CDIV","","","$66.69"
+"3/5/2025","3/5/2025","3/6/2025","AGQ","ProShares Ultra Silver
+CUSIP: 74347W353","Buy","0.35856","$41.75","($14.97)"
+"3/5/2025","3/5/2025","3/5/2025","","Instant bank transfer - account ending in 8682","RTP","","","$1,500.00"
+"2/10/2025","2/10/2025","2/11/2025","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704
+Dividend Reinvestment","Buy","1.980569","$50.44","($99.89)"
+"2/7/2025","2/7/2025","2/7/2025","BITU","Cash Div: R/D 2025-02-03 P/D 2025-02-07 - 82.28935 shares at 1.213841","CDIV","","","$99.89"
+"2/5/2025","2/5/2025","2/6/2025","AGQ","ProShares Ultra Silver
+CUSIP: 74347W353","Buy","0.34589","$42.50","($14.70)"
+"2/5/2025","2/5/2025","2/5/2025","","Instant bank transfer - account ending in 8682","RTP","","","$1,500.00"
+"1/31/2025","1/31/2025","2/3/2025","AGQ","ProShares Ultra Silver
+CUSIP: 74347W353","Buy","0.55058","$40.48","($22.29)"
+"1/31/2025","1/31/2025","2/3/2025","AGQ","ProShares Ultra Silver
+CUSIP: 74347W353","Buy","12","$40.48","($485.75)"
+"1/31/2025","1/31/2025","2/3/2025","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Sell","0.87491","$57.24","$50.08"
+"1/31/2025","1/31/2025","2/3/2025","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Sell","8","$57.24","$457.92"
+"1/27/2025","1/27/2025","1/27/2025","","Cash reward","MISC","","","$0.48"
+"1/24/2025","1/24/2025","1/24/2025","","Cash reward","MISC","","","$0.50"
+"1/21/2025","1/21/2025","1/21/2025","","Cash reward","MISC","","","$0.50"
+"1/21/2025","1/21/2025","1/21/2025","","Cash reward","MISC","","","$0.50"
+"1/21/2025","1/21/2025","1/21/2025","","Instant bank transfer - withdrawal fee","RTP","","","($8.76)"
+"1/21/2025","1/21/2025","1/21/2025","","Instant bank transfer - account ending in 8682","RTP","","","($491.72)"
+"1/6/2025","1/6/2025","1/6/2025","","Instant bank transfer - account ending in 0882","RTP","","","$1,500.00"
+"1/6/2025","1/6/2025","1/6/2025","","Transfer from Brokerage to Roth IRA","ITRF","","","($0.11)"
+"12/31/2024","12/31/2024","12/31/2024","BITU","Cap Gains: R/D 2024-12-23 P/D 2024-12-31 - 52.26053 shares at 0.004531","SCAP","","","$0.24"
+"12/31/2024","12/31/2024","12/31/2024","TSLL","Cash Div: R/D 2024-12-23 P/D 2024-12-31 - 82.89559 shares at 0.13986","CDIV","","","$11.59"
+"12/31/2024","12/31/2024","1/2/2025","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Buy","0.16426","$52.11","($8.56)"
+"12/31/2024","12/31/2024","1/2/2025","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Buy","91","$52.11","($4,742.01)"
+"12/31/2024","12/31/2024","1/2/2025","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Buy","0.71856","$29.74","($21.37)"
+"12/31/2024","12/31/2024","1/2/2025","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Buy","159","$29.74","($4,728.66)"
+"12/30/2024","12/30/2024","12/30/2024","","Cash reward","MISC","","","$0.25"
+"12/30/2024","12/30/2024","12/31/2024","SBIT","ProShares UltraShort Bitcoin ETF
+CUSIP: 74349Y803","Sell","387","$12.13","$4,694.69"
+"12/30/2024","12/30/2024","12/31/2024","SBIT","ProShares UltraShort Bitcoin ETF
+CUSIP: 74349Y803","Sell","0.164326","$12.14","$1.99"
+"12/30/2024","12/30/2024","12/31/2024","TSDD","GraniteShares ETF Trust GraniteShares 2x Short TSLA Daily ETF
+CUSIP: 38747R769","Sell","2971.423101","$1.53","$4,553.68"
+"12/30/2024","12/30/2024","12/31/2024","SBIT","ProShares UltraShort Bitcoin ETF
+CUSIP: 74349Y803","Buy","386.931115","$12.29","($4,754.30)"
+"12/30/2024","12/30/2024","12/31/2024","SBIT","ProShares UltraShort Bitcoin ETF
+CUSIP: 74349Y803","Buy","0.233211","$12.28","($2.86)"
+"12/30/2024","12/30/2024","12/31/2024","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Sell","52","$47.17","$2,452.77"
+"12/30/2024","12/30/2024","12/31/2024","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Sell","0.7882","$47.23","$37.23"
+"12/30/2024","12/30/2024","12/31/2024","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Sell","48","$47.23","$2,267.16"
+"12/30/2024","12/30/2024","12/31/2024","TSDD","GraniteShares ETF Trust GraniteShares 2x Short TSLA Daily ETF
+CUSIP: 38747R769","Buy","2971.423101","$1.57","($4,656.22)"
+"12/30/2024","12/30/2024","12/31/2024","TSLS","Direxion Shares ETF Trust Direxion Daily TSLA Bear 1X Shares
+CUSIP: 25460G260","Sell","0.3837","$7.74","$2.97"
+"12/30/2024","12/30/2024","12/31/2024","TSLS","Direxion Shares ETF Trust Direxion Daily TSLA Bear 1X Shares
+CUSIP: 25460G260","Sell","601","$7.74","$4,653.25"
+"12/30/2024","12/30/2024","12/31/2024","TSLS","Direxion Shares ETF Trust Direxion Daily TSLA Bear 1X Shares
+CUSIP: 25460G260","Buy","0.3837","$7.75","($2.97)"
+"12/30/2024","12/30/2024","12/31/2024","TSLS","Direxion Shares ETF Trust Direxion Daily TSLA Bear 1X Shares
+CUSIP: 25460G260","Buy","601","$7.75","($4,656.13)"
+"12/30/2024","12/30/2024","12/31/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Sell","76.24218","$29.42","$2,242.58"
+"12/30/2024","12/30/2024","12/31/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Sell","24","$29.47","$707.26"
+"12/30/2024","12/30/2024","12/31/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Sell","10","$29.47","$294.70"
+"12/30/2024","12/30/2024","12/31/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Sell","1","$29.47","$29.47"
+"12/30/2024","12/30/2024","12/31/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Sell","1","$29.47","$29.47"
+"12/30/2024","12/30/2024","12/31/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Sell","5","$29.47","$147.35"
+"12/30/2024","12/30/2024","12/31/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Sell","1","$29.47","$29.47"
+"12/30/2024","12/30/2024","12/31/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Sell","1","$29.47","$29.47"
+"12/30/2024","12/30/2024","12/31/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Sell","20","$29.47","$589.38"
+"12/30/2024","12/30/2024","12/31/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Sell","5","$29.47","$147.35"
+"12/30/2024","12/30/2024","12/31/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Sell","10","$29.47","$294.70"
+"12/30/2024","12/30/2024","12/31/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Sell","1","$29.47","$29.47"
+"12/30/2024","12/30/2024","12/31/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Sell","1","$29.47","$29.47"
+"12/30/2024","12/30/2024","12/31/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Sell","2","$29.48","$58.96"
+"12/27/2024","12/27/2024","12/30/2024","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Buy","0.52767","$51.52","($27.18)"
+"12/27/2024","12/27/2024","12/30/2024","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Buy","48","$51.52","($2,472.82)"
+"12/27/2024","12/27/2024","12/30/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Buy","0.34659","$33.18","($11.50)"
+"12/27/2024","12/27/2024","12/30/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Buy","75","$33.18","($2,488.50)"
+"12/27/2024","12/27/2024","12/27/2024","","Instant bank transfer - account ending in 8682","RTP","","","$5,000.00"
+"12/23/2024","12/23/2024","12/23/2024","","Instant bank transfer - withdrawal fee","RTP","","","($8.76)"
+"12/23/2024","12/23/2024","12/23/2024","","Instant bank transfer - account ending in 0882","RTP","","","($491.85)"
+"12/23/2024","12/23/2024","12/23/2024","","Cash reward","MISC","","","$0.50"
+"12/20/2024","12/20/2024","12/23/2024","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Buy","0.26053","$54.25","($14.13)"
+"12/20/2024","12/20/2024","12/23/2024","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Buy","52","$54.25","($2,820.80)"
+"12/20/2024","12/20/2024","12/23/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Buy","0.89559","$34.20","($30.63)"
+"12/20/2024","12/20/2024","12/23/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Buy","82","$34.20","($2,804.30)"
+"12/20/2024","12/20/2024","12/20/2024","","Instant bank transfer - account ending in 0882","RTP","","","$350.00"
+"12/20/2024","12/20/2024","12/23/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Sell","104.49627","$29.81","$3,114.96"
+"12/19/2024","12/19/2024","12/20/2024","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Sell","40.92348","$53.88","$2,204.90"
+"12/19/2024","12/19/2024","12/20/2024","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Buy","40.92348","$56.07","($2,294.58)"
+"12/19/2024","12/19/2024","12/20/2024","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Sell","2.929633","$54.94","$160.95"
+"12/19/2024","12/19/2024","12/20/2024","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Sell","39","$54.71","$2,133.63"
+"12/13/2024","12/13/2024","12/16/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Buy","104.49627","$30.85","($3,223.71)"
+"12/11/2024","12/11/2024","12/12/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Sell","0.91","$31.47","$28.64"
+"12/11/2024","12/11/2024","12/12/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Sell","31","$31.47","$975.68"
+"12/11/2024","12/11/2024","12/12/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Sell","0.09","$31.32","$2.82"
+"12/11/2024","12/11/2024","12/12/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Sell","20","$31.32","$626.47"
+"12/11/2024","12/11/2024","12/12/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Sell","50.755295","$31.31","$1,589.09"
+"12/10/2024","12/10/2024","12/10/2024","","Instant bank transfer - account ending in 0882","RTP","","","$100.62"
+"12/5/2024","12/5/2024","12/6/2024","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Buy","2.79552","$62.60","($175.00)"
+"12/5/2024","12/5/2024","12/5/2024","","Instant bank transfer - account ending in 8682","RTP","","","$1,500.00"
+"12/5/2024","12/5/2024","12/6/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Buy","7.559395","$23.15","($175.00)"
+"12/5/2024","12/5/2024","12/5/2024","","Instant bank transfer - account ending in 8682","RTP","","","$350.00"
+"12/4/2024","12/4/2024","12/4/2024","","Instant bank transfer - withdrawal fee","RTP","","","($15.75)"
+"12/4/2024","12/4/2024","12/4/2024","","Instant bank transfer - account ending in 0882","RTP","","","($884.23)"
+"12/2/2024","12/2/2024","12/3/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Buy","42.05615","$22.62","($951.10)"
+"12/2/2024","12/2/2024","12/3/2024","NVDU","Direxion Shares ETF Trust Direxion Daily NVDA Bull 2X Shares
+CUSIP: 25461A833","Sell","8","$118.89","$951.10"
+"12/2/2024","12/2/2024","12/3/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Buy","0.67694","$22.70","($15.37)"
+"12/2/2024","12/2/2024","12/3/2024","NVDU","Direxion Shares ETF Trust Direxion Daily NVDA Bull 2X Shares
+CUSIP: 25461A833","Sell","0.13167","$116.71","$15.37"
+"11/29/2024","11/29/2024","11/29/2024","","Instant bank transfer - withdrawal fee","RTP","","","($8.75)"
+"11/29/2024","11/29/2024","11/29/2024","","Instant bank transfer - account ending in 0882","RTP","","","($491.41)"
+"11/22/2024","11/22/2024","11/22/2024","","Instant bank transfer - account ending in 8682","RTP","","","$1,500.00"
+"11/20/2024","11/20/2024","11/21/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Buy","4.22297","$20.72","($87.50)"
+"11/20/2024","11/20/2024","11/21/2024","NVDU","Direxion Shares ETF Trust Direxion Daily NVDA Bull 2X Shares
+CUSIP: 25461A833","Buy","0.70092","$124.84","($87.50)"
+"11/20/2024","11/20/2024","11/21/2024","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Buy","3.25006","$53.84","($175.00)"
+"11/20/2024","11/20/2024","11/20/2024","","Instant bank transfer - account ending in 0882","RTP","","","$350.00"
+"11/18/2024","11/18/2024","11/19/2024","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Buy","17.596294","$49.12","($864.33)"
+"11/18/2024","11/18/2024","11/19/2024","NVDU","Direxion Shares ETF Trust Direxion Daily NVDA Bull 2X Shares
+CUSIP: 25461A833","Sell","7.39083","$116.95","$864.33"
+"11/18/2024","11/18/2024","11/19/2024","NVDU","Direxion Shares ETF Trust Direxion Daily NVDA Bull 2X Shares
+CUSIP: 25461A833","Buy","14.82158","$116.58","($1,727.90)"
+"11/18/2024","11/18/2024","11/19/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Sell","11.758923","$74.87","$880.36"
+"11/18/2024","11/18/2024","11/19/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Sell","0.072612","$87.96","$6.39"
+"11/18/2024","11/18/2024","11/19/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Sell","6","$88.27","$529.60"
+"11/18/2024","11/18/2024","11/19/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Sell","3.529467","$88.27","$311.55"
+"11/15/2024","11/15/2024","11/18/2024","TSLL","Direxion Shares ETF Trust Direxion Daily TSLA Bull 2X Shares
+CUSIP: 25460G286","Buy","48.23984","$18.34","($884.96)"
+"11/15/2024","11/15/2024","11/18/2024","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Sell","18","$48.32","$869.76"
+"11/15/2024","11/15/2024","11/18/2024","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Sell","0.005678","$48.32","$0.27"
+"11/15/2024","11/15/2024","11/18/2024","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Sell","0.308822","$48.34","$14.93"
+"11/13/2024","11/13/2024","11/14/2024","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Buy","35.98735","$51.80","($1,864.08)"
+"11/13/2024","11/13/2024","11/14/2024","BITU","ProShares Ultra Bitcoin ETF
+CUSIP: 74349Y704","Buy","0.614909","$51.78","($31.84)"
+"11/13/2024","11/13/2024","11/14/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Sell","11.75177","$81.90","$962.44"
+"11/13/2024","11/13/2024","11/14/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Sell","9.60203","$97.22","$933.48"
+"11/6/2024","11/6/2024","11/7/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","1","$78.69","($78.69)"
+"11/6/2024","11/6/2024","11/7/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.145453","$78.68","($11.44)"
+"11/6/2024","11/6/2024","11/7/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.956697","$94.22","($90.14)"
+"11/6/2024","11/6/2024","11/6/2024","","Instant bank transfer - account ending in 8682","RTP","","","$180.27"
+"11/5/2024","11/5/2024","11/6/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","2.41262","$72.54","($175.00)"
+"11/5/2024","11/5/2024","11/6/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","2.02382","$86.47","($175.00)"
+"11/5/2024","11/5/2024","11/5/2024","","Instant bank transfer - account ending in 8682","RTP","","","$350.00"
+"10/28/2024","10/28/2024","10/28/2024","","Transfer from Brokerage to Roth IRA","ITRF","","","($6,979.99)"
+"10/25/2024","10/25/2024","10/28/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","19.95262","$76.83","($1,532.96)"
+"10/25/2024","10/25/2024","10/28/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","15.995783","$94.49","($1,511.44)"
+"10/25/2024","10/25/2024","10/28/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.227809","$94.46","($21.52)"
+"10/25/2024","10/25/2024","10/28/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Sell","51.567434","$94.35","$4,865.33"
+"10/25/2024","10/25/2024","10/28/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Sell","67","$76.85","$5,148.79"
+"10/25/2024","10/25/2024","10/28/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Sell","0.413598","$76.86","$31.79"
+"10/21/2024","10/21/2024","10/22/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","1.631827","$74.15","($121.00)"
+"10/21/2024","10/21/2024","10/22/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.053944","$74.15","($4.00)"
+"10/21/2024","10/21/2024","10/22/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.043744","$91.44","($4.00)"
+"10/21/2024","10/21/2024","10/22/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","1.323272","$91.44","($121.00)"
+"10/21/2024","10/21/2024","10/21/2024","","Instant bank transfer - account ending in 0882","RTP","","","$250.00"
+"10/7/2024","10/7/2024","10/8/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.05596","$71.47","($4.00)"
+"10/7/2024","10/7/2024","10/8/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.046197","$86.58","($4.00)"
+"10/7/2024","10/7/2024","10/8/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","1.69479","$71.40","($121.00)"
+"10/7/2024","10/7/2024","10/8/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","1.396359","$86.65","($121.00)"
+"10/7/2024","10/7/2024","10/7/2024","","Instant bank transfer - account ending in 0882","RTP","","","$250.00"
+"10/3/2024","10/3/2024","10/4/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831
+Dividend Reinvestment","Buy","0.21263","$69.04","($14.68)"
+"10/2/2024","10/2/2024","10/2/2024","TQQQ","Cash Div: R/D 2024-09-25 P/D 2024-10-02 - 63.764447 shares at 0.230214","CDIV","","","$14.68"
+"9/20/2024","9/20/2024","9/23/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.000476","$83.74","($0.04)"
+"9/20/2024","9/20/2024","9/23/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","1.487209","$84.02","($124.96)"
+"9/20/2024","9/20/2024","9/23/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","1.790574","$69.81","($125.00)"
+"9/20/2024","9/20/2024","9/20/2024","","Instant bank transfer - account ending in 8682","RTP","","","$250.00"
+"9/5/2024","9/5/2024","9/6/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","2.00336","$62.40","($125.00)"
+"9/5/2024","9/5/2024","9/6/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","1.744104","$71.67","($125.00)"
+"9/5/2024","9/5/2024","9/5/2024","","Instant bank transfer - account ending in 8682","RTP","","","$250.00"
+"8/21/2024","8/21/2024","8/22/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","1.398757","$88.82","($124.24)"
+"8/21/2024","8/21/2024","8/22/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.008556","$88.82","($0.76)"
+"8/20/2024","8/20/2024","8/21/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.999858","$70.71","($70.70)"
+"8/20/2024","8/20/2024","8/21/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.768033","$70.70","($54.30)"
+"8/20/2024","8/20/2024","8/20/2024","","Instant bank transfer - account ending in 8682","RTP","","","$250.00"
+"8/5/2024","8/5/2024","8/6/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","2.32601","$53.74","($125.00)"
+"8/5/2024","8/5/2024","8/6/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","1.998393","$62.25","($124.40)"
+"8/5/2024","8/5/2024","8/6/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.009646","$62.20","($0.60)"
+"8/5/2024","8/5/2024","8/5/2024","","Instant bank transfer - account ending in 8682","RTP","","","$250.00"
+"7/22/2024","7/22/2024","7/23/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","1.69239","$73.86","($125.00)"
+"7/22/2024","7/22/2024","7/23/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.999787","$93.80","($93.78)"
+"7/22/2024","7/22/2024","7/23/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.332906","$93.78","($31.22)"
+"7/22/2024","7/22/2024","7/22/2024","","Instant bank transfer - account ending in 8682","RTP","","","$250.00"
+"7/9/2024","7/9/2024","7/10/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.00311","$109.38","($0.34)"
+"7/9/2024","7/9/2024","7/10/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.048218","$82.95","($4.00)"
+"7/9/2024","7/9/2024","7/10/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","1.458622","$82.95","($120.99)"
+"7/9/2024","7/9/2024","7/10/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.00012","$82.95","($0.01)"
+"7/9/2024","7/9/2024","7/10/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.036488","$109.32","($3.99)"
+"7/9/2024","7/9/2024","7/10/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.000091","$109.32","($0.01)"
+"7/9/2024","7/9/2024","7/10/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","1.103762","$109.32","($120.66)"
+"7/9/2024","7/9/2024","7/10/2024","","ACH Deposit","ACH","","","$8.00"
+"7/9/2024","7/9/2024","7/10/2024","","ACH Deposit","ACH","","","$242.00"
+"7/5/2024","7/5/2024","7/8/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831
+Dividend Reinvestment","Buy","0.184508","$80.43","($14.84)"
+"7/3/2024","7/3/2024","7/3/2024","TQQQ","Cash Div: R/D 2024-06-26 P/D 2024-07-03 - 52.492754 shares at 0.282777","CDIV","","","$14.84"
+"7/3/2024","7/3/2024","7/5/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102
+Dividend Reinvestment","Buy","0.038698","$100.78","($3.90)"
+"7/2/2024","7/2/2024","7/2/2024","TECL","Cash Div: R/D 2024-06-25 P/D 2024-07-02 - 39.595879 shares at 0.09845","CDIV","","","$3.90"
+"6/20/2024","6/20/2024","6/21/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","1.612591","$77.44","($124.88)"
+"6/20/2024","6/20/2024","6/21/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.001549","$77.44","($0.12)"
+"6/20/2024","6/20/2024","6/21/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","1.184497","$105.53","($125.00)"
+"6/20/2024","6/20/2024","6/20/2024","","Instant bank transfer - account ending in 8682","RTP","","","$250.00"
+"6/5/2024","6/5/2024","6/6/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","1","$65.06","($65.06)"
+"6/5/2024","6/5/2024","6/6/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.859964","$65.06","($55.94)"
+"6/5/2024","6/5/2024","6/6/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.999756","$82.10","($82.08)"
+"6/5/2024","6/5/2024","6/6/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.474261","$82.08","($38.92)"
+"6/5/2024","6/5/2024","6/6/2024","","ACH Deposit","ACH","","","$242.00"
+"5/21/2024","5/21/2024","5/23/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.004417","$63.36","($0.28)"
+"5/21/2024","5/21/2024","5/23/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","1.904761","$63.38","($120.72)"
+"5/20/2024","5/20/2024","5/22/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","1.437054","$84.20","($121.00)"
+"5/20/2024","5/20/2024","5/20/2024","","Instant bank transfer - account ending in 0882","RTP","","","$242.00"
+"5/6/2024","5/6/2024","5/8/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","1.999826","$57.57","($115.13)"
+"5/6/2024","5/6/2024","5/8/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.101971","$57.56","($5.87)"
+"5/6/2024","5/6/2024","5/8/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","1","$72.98","($72.98)"
+"5/6/2024","5/6/2024","5/8/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.658102","$72.98","($48.02)"
+"5/6/2024","5/6/2024","5/6/2024","","Instant bank transfer - account ending in 0882","RTP","","","$242.00"
+"4/22/2024","4/22/2024","4/24/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","2.476964","$50.45","($124.96)"
+"4/22/2024","4/22/2024","4/24/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.000792","$50.45","($0.04)"
+"4/22/2024","4/22/2024","4/24/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","1.956487","$63.70","($124.63)"
+"4/22/2024","4/22/2024","4/24/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.005808","$63.70","($0.37)"
+"4/22/2024","4/22/2024","4/23/2024","","ACH Deposit","ACH","","","$250.00"
+"4/12/2024","4/12/2024","4/16/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","4.998799","$58.32","($291.53)"
+"4/12/2024","4/12/2024","4/16/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.111225","$58.30","($6.48)"
+"4/12/2024","4/12/2024","4/16/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","3.948268","$75.73","($299.00)"
+"4/12/2024","4/12/2024","4/15/2024","","ACH Deposit","ACH","","","$597.00"
+"4/5/2024","4/8/2024","4/9/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.57296","$76.90","($44.06)"
+"4/5/2024","4/8/2024","4/9/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","BCXL","0.57296","$76.92","$44.07"
+"4/5/2024","4/5/2024","4/9/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","1.999892","$59.42","($118.83)"
+"4/5/2024","4/5/2024","4/9/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.036522","$59.42","($2.17)"
+"4/5/2024","4/5/2024","4/9/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","1","$76.89","($76.89)"
+"4/5/2024","4/5/2024","4/9/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.00052","$76.89","($0.04)"
+"4/5/2024","4/5/2024","4/9/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.57296","$76.92","($44.07)"
+"4/5/2024","4/5/2024","4/8/2024","","ACH Deposit","ACH","","","$242.00"
+"4/1/2024","4/1/2024","4/3/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.807884","$61.89","($50.00)"
+"4/1/2024","4/1/2024","4/3/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.620501","$80.58","($50.00)"
+"4/1/2024","4/1/2024","4/2/2024","","ACH Deposit","ACH","","","$100.00"
+"3/28/2024","3/28/2024","4/2/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831
+Dividend Reinvestment","Buy","0.112616","$61.98","($6.98)"
+"3/27/2024","3/27/2024","3/27/2024","TQQQ","Cash Div: R/D 2024-03-21 P/D 2024-03-27 - 32.429366 shares at 0.215144","CDIV","","","$6.98"
+"3/27/2024","3/27/2024","4/1/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102
+Dividend Reinvestment","Buy","0.03397","$79.48","($2.70)"
+"3/26/2024","3/26/2024","3/26/2024","TECL","Cash Div: R/D 2024-03-20 P/D 2024-03-26 - 24.172629 shares at 0.1119","CDIV","","","$2.70"
+"3/20/2024","3/20/2024","3/22/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","1.999831","$59.50","($118.99)"
+"3/20/2024","3/20/2024","3/22/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.033784","$59.50","($2.01)"
+"3/20/2024","3/20/2024","3/22/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","1.531066","$79.03","($121.00)"
+"3/20/2024","3/20/2024","3/21/2024","","ACH Deposit","ACH","","","$242.00"
+"3/5/2024","3/5/2024","3/7/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","2","$60.12","($120.23)"
+"3/5/2024","3/5/2024","3/7/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.012808","$60.12","($0.77)"
+"3/5/2024","3/5/2024","3/7/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","1.517243","$79.75","($121.00)"
+"3/5/2024","3/5/2024","3/6/2024","","ACH Deposit","ACH","","","$242.00"
+"2/20/2024","2/20/2024","2/22/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","2.133474","$56.55","($120.65)"
+"2/20/2024","2/20/2024","2/22/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.006189","$56.55","($0.35)"
+"2/20/2024","2/20/2024","2/22/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","1.621331","$74.02","($120.01)"
+"2/20/2024","2/20/2024","2/22/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.013374","$74.02","($0.99)"
+"2/20/2024","2/20/2024","2/21/2024","","ACH Deposit","ACH","","","$242.00"
+"2/5/2024","2/5/2024","2/7/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","2.116494","$57.17","($121.00)"
+"2/5/2024","2/5/2024","2/7/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","1.582526","$76.46","($121.00)"
+"2/5/2024","2/5/2024","2/6/2024","","ACH Deposit","ACH","","","$242.00"
+"1/22/2024","1/22/2024","1/24/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","1.999817","$54.82","($109.63)"
+"1/22/2024","1/22/2024","1/24/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.207424","$54.82","($11.37)"
+"1/22/2024","1/22/2024","1/24/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","1.622642","$74.57","($121.00)"
+"1/22/2024","1/22/2024","1/23/2024","","ACH Deposit","ACH","","","$242.00"
+"1/5/2024","1/5/2024","1/9/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","2.646365","$46.63","($123.40)"
+"1/5/2024","1/5/2024","1/9/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","2","$59.17","($118.34)"
+"1/5/2024","1/5/2024","1/9/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.0847","$59.16","($5.01)"
+"1/5/2024","1/5/2024","1/8/2024","","ACH Deposit","ACH","","","$246.74"
+"1/3/2024","1/3/2024","1/5/2024","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102
+Dividend Reinvestment","Buy","0.018527","$59.91","($1.11)"
+"1/2/2024","1/2/2024","1/2/2024","TECL","Cash Div: R/D 2023-12-22 P/D 2023-12-29 - 15.712286 shares at 0.07088","CDIV","","","$1.11"
+"12/29/2023","12/29/2023","1/3/2024","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831
+Dividend Reinvestment","Buy","0.082018","$51.33","($4.21)"
+"12/28/2023","12/28/2023","12/28/2023","TQQQ","Cash Div: R/D 2023-12-21 P/D 2023-12-28 - 18.857669 shares at 0.223447","CDIV","","","$4.21"
+"12/20/2023","12/20/2023","12/22/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","2","$50.77","($101.54)"
+"12/20/2023","12/20/2023","12/22/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.000196","$50.77","($0.01)"
+"12/20/2023","12/20/2023","12/22/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.366912","$50.78","($18.63)"
+"12/20/2023","12/20/2023","12/22/2023","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","1.791191","$67.10","($120.18)"
+"12/20/2023","12/20/2023","12/21/2023","","ACH Deposit","ACH","","","$240.37"
+"12/5/2023","12/5/2023","12/7/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","2.447591","$43.08","($105.43)"
+"12/5/2023","12/5/2023","12/7/2023","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","1","$58.62","($58.62)"
+"12/5/2023","12/5/2023","12/7/2023","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.00017","$58.62","($0.01)"
+"12/5/2023","12/5/2023","12/7/2023","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.79855","$58.62","($46.81)"
+"12/5/2023","12/5/2023","12/7/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","1","$42.95","($42.95)"
+"12/5/2023","12/5/2023","12/7/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.14","$42.94","($6.01)"
+"12/5/2023","12/5/2023","12/6/2023","","ACH Deposit","ACH","","","$259.83"
+"11/29/2023","11/29/2023","12/1/2023","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.664948","$60.15","($40.00)"
+"11/29/2023","11/29/2023","12/1/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.899381","$44.48","($40.00)"
+"11/29/2023","11/29/2023","11/30/2023","","ACH Deposit","ACH","","","$80.00"
+"11/1/2023","11/1/2023","11/3/2023","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.357103","$44.80","($16.00)"
+"11/1/2023","11/1/2023","11/3/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.463432","$34.52","($16.00)"
+"11/1/2023","11/1/2023","11/2/2023","","ACH Deposit","ACH","","","$32.00"
+"10/5/2023","10/5/2023","10/6/2023","","ACH Withdrawal","ACH","","","($120.01)"
+"10/3/2023","10/3/2023","10/5/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Sell","0.280824","$35.62","$10.00"
+"10/3/2023","10/3/2023","10/5/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Sell","0.00004","$35.62","$0.01"
+"10/3/2023","10/3/2023","10/5/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Sell","0.280824","$35.64","$10.01"
+"10/3/2023","10/3/2023","10/5/2023","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Sell","0.145737","$43.56","$6.35"
+"10/3/2023","10/3/2023","10/5/2023","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Sell","1","$43.64","$43.64"
+"10/3/2023","10/3/2023","10/5/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Sell","1.402327","$35.65","$49.99"
+"10/3/2023","10/3/2023","10/5/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Sell","0.00028","$35.65","$0.01"
+"10/2/2023","10/2/2023","10/4/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.438656","$36.47","($16.00)"
+"10/2/2023","10/2/2023","10/4/2023","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.361459","$44.26","($16.00)"
+"10/2/2023","10/2/2023","10/3/2023","","ACH Deposit","ACH","","","$32.00"
+"9/27/2023","9/27/2023","9/29/2023","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.673076","$41.60","($28.00)"
+"9/27/2023","9/27/2023","9/29/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Sell","0.811006","$34.52","$28.00"
+"9/27/2023","9/27/2023","9/29/2023","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","1.856597","$41.68","($77.38)"
+"9/27/2023","9/27/2023","9/29/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Sell","2","$34.62","$69.24"
+"9/27/2023","9/27/2023","9/29/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Sell","0.000288","$34.62","$0.01"
+"9/27/2023","9/27/2023","9/29/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Sell","0.234801","$34.62","$8.13"
+"9/27/2023","9/27/2023","9/29/2023","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","3","$41.76","($125.28)"
+"9/27/2023","9/27/2023","9/29/2023","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.109195","$41.76","($4.56)"
+"9/27/2023","9/27/2023","9/29/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Sell","0.012356","$34.80","$0.43"
+"9/27/2023","9/27/2023","9/29/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Sell","3.718745","$34.80","$129.41"
+"9/26/2023","9/26/2023","9/28/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","21.996817","$34.56","($760.21)"
+"9/26/2023","9/26/2023","9/28/2023","TQQQ","ProShares UltraPro QQQ
+CUSIP: 74347X831","Buy","0.213283","$34.56","($7.37)"
+"9/26/2023","9/26/2023","9/28/2023","QLD","ProShares Ultra QQQ
+CUSIP: 74347R206","Sell","8.902422","$58.14","$517.58"
+"9/26/2023","9/26/2023","9/28/2023","QLD","ProShares Ultra QQQ
+CUSIP: 74347R206","Buy","3.998968","$58.17","($232.62)"
+"9/26/2023","9/26/2023","9/28/2023","QLD","ProShares Ultra QQQ
+CUSIP: 74347R206","Buy","0.298856","$58.16","($17.38)"
+"9/26/2023","9/26/2023","9/27/2023","","ACH Deposit","ACH","","","$500.00"
+"9/25/2023","9/25/2023","9/27/2023","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.578235","$43.20","($24.98)"
+"9/25/2023","9/25/2023","9/27/2023","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.000462","$43.20","($0.02)"
+"9/25/2023","9/25/2023","9/27/2023","QLD","ProShares Ultra QQQ
+CUSIP: 74347R206","Buy","0.424016","$58.96","($25.00)"
+"9/25/2023","9/25/2023","9/26/2023","","ACH Deposit","ACH","","","$50.00"
+"9/22/2023","9/22/2023","9/26/2023","QLD","ProShares Ultra QQQ
+CUSIP: 74347R206","Buy","4","$60.30","($241.22)"
+"9/22/2023","9/22/2023","9/26/2023","QLD","ProShares Ultra QQQ
+CUSIP: 74347R206","Buy","0.180582","$60.30","($10.89)"
+"9/22/2023","9/22/2023","9/26/2023","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","4.99846","$44.49","($222.38)"
+"9/22/2023","9/22/2023","9/26/2023","TECL","Direxion Daily Technology Bull ETF
+CUSIP: 25459W102","Buy","0.668577","$44.48","($29.73)"
+"9/22/2023","9/22/2023","9/26/2023","NDAQ","Nasdaq
+CUSIP: 631103108","Sell","5","$49.08","$245.43"
+"9/22/2023","9/22/2023","9/26/2023","NDAQ","Nasdaq
+CUSIP: 631103108","Sell","0.10837","$49.08","$5.32"
+"9/22/2023","9/22/2023","9/26/2023","QQQ","Invesco QQQ
+CUSIP: 46090E103","Sell","0.349916","$361.01","$126.32"
+"9/22/2023","9/22/2023","9/26/2023","VGT","Vanguard Information Technology ETF
+CUSIP: 92204A702","Sell","0.304063","$418.16","$127.15"
+"9/18/2023","9/18/2023","9/20/2023","NDAQ","Nasdaq
+CUSIP: 631103108","Buy","2","$50.61","($101.22)"
+"9/18/2023","9/18/2023","9/20/2023","NDAQ","Nasdaq
+CUSIP: 631103108","Buy","0.850819","$50.61","($43.06)"
+"9/18/2023","9/18/2023","9/20/2023","BCD","abrdn Bloomberg All Commodity Longer Dated Strategy K-1 Free ETF
+CUSIP: 003261203","Sell","1","$33.96","$33.96"
+"9/18/2023","9/18/2023","9/20/2023","VGT","Vanguard Information Technology ETF
+CUSIP: 92204A702","Buy","0.151762","$425.17","($64.52)"
+"9/18/2023","9/18/2023","9/20/2023","VGT","Vanguard Information Technology ETF
+CUSIP: 92204A702","Buy","0.000047","$425.17","($0.02)"
+"9/18/2023","9/18/2023","9/20/2023","NDAQ","Nasdaq
+CUSIP: 631103108","Buy","2.236628","$50.66","($113.31)"
+"9/18/2023","9/18/2023","9/20/2023","NDAQ","Nasdaq
+CUSIP: 631103108","Buy","0.020923","$50.66","($1.06)"
+"9/18/2023","9/18/2023","9/20/2023","VGT","Vanguard Information Technology ETF
+CUSIP: 92204A702","Buy","0.152254","$425.24","($64.74)"
+"9/18/2023","9/18/2023","9/20/2023","BCD","abrdn Bloomberg All Commodity Longer Dated Strategy K-1 Free ETF
+CUSIP: 003261203","Sell","0.183752","$34.00","$6.25"
+"9/18/2023","9/18/2023","9/20/2023","IEF","iShares 7-10 Year Treasury Bond ETF
+CUSIP: 464287440","Sell","0.836143","$92.98","$77.74"
+"9/18/2023","9/18/2023","9/20/2023","VOO","Vanguard S&P 500 ETF
+CUSIP: 922908363","Sell","0.380705","$408.73","$155.61"
+"9/18/2023","9/18/2023","9/20/2023","QQQ","Invesco QQQ
+CUSIP: 46090E103","Buy","0.349916","$369.46","($129.28)"
+"9/18/2023","9/18/2023","9/20/2023","GLD","SPDR Gold Trust
+CUSIP: 78463V107","Sell","0.219219","$178.67","$39.17"
+"9/18/2023","9/18/2023","9/20/2023","TLT","iShares 20+ Year Treasury Bond ETF
+CUSIP: 464287432","Sell","2.196532","$93.09","$204.48"
+"9/11/2023","9/11/2023","9/13/2023","VOO","Vanguard S&P 500 ETF
+CUSIP: 922908363","Buy","0.189592","$410.94","($77.91)"
+"9/11/2023","9/11/2023","9/13/2023","NDAQ","Nasdaq
+CUSIP: 631103108","Sell","1","$51.24","$51.24"
+"9/11/2023","9/11/2023","9/13/2023","NDAQ","Nasdaq
+CUSIP: 631103108","Sell","0.505133","$51.24","$25.88"
+"9/8/2023","9/8/2023","9/8/2023","IEF","Cash Div: R/D 2023-09-05 P/D 2023-09-08 - 0.786387 shares at 0.241752","CDIV","","","$0.19"
+"9/8/2023","9/8/2023","9/8/2023","TLT","Cash Div: R/D 2023-09-05 P/D 2023-09-08 - 2.064216 shares at 0.288579","CDIV","","","$0.60"
+"9/7/2023","9/7/2023","9/11/2023","BCD","abrdn Bloomberg All Commodity Longer Dated Strategy K-1 Free ETF
+CUSIP: 003261203","Buy","1","$33.59","($33.59)"
+"9/7/2023","9/7/2023","9/11/2023","BCD","abrdn Bloomberg All Commodity Longer Dated Strategy K-1 Free ETF
+CUSIP: 003261203","Buy","0.000595","$33.59","($0.02)"
+"9/7/2023","9/7/2023","9/11/2023","BCD","abrdn Bloomberg All Commodity Longer Dated Strategy K-1 Free ETF
+CUSIP: 003261203","Buy","0.183157","$33.60","($6.15)"
+"9/7/2023","9/7/2023","9/11/2023","USCI","United States Commodity Index Fund
+CUSIP: 911717106","Sell","0.672215","$59.15","$39.76"
+"9/5/2023","9/5/2023","9/7/2023","USCI","United States Commodity Index Fund
+CUSIP: 911717106","Buy","0.03876","$59.86","($2.32)"
+"9/5/2023","9/5/2023","9/7/2023","GLD","SPDR Gold Trust
+CUSIP: 78463V107","Buy","0.01303","$178.80","($2.33)"
+"9/5/2023","9/5/2023","9/7/2023","IEF","iShares 7-10 Year Treasury Bond ETF
+CUSIP: 464287440","Buy","0.049756","$93.46","($4.65)"
+"9/5/2023","9/5/2023","9/7/2023","TLT","iShares 20+ Year Treasury Bond ETF
+CUSIP: 464287432","Buy","0.132316","$93.72","($12.40)"
+"9/5/2023","9/5/2023","9/7/2023","NDAQ","Nasdaq
+CUSIP: 631103108","Buy","0.09074","$51.24","($4.65)"
+"9/5/2023","9/5/2023","9/7/2023","VOO","Vanguard S&P 500 ETF
+CUSIP: 922908363","Buy","0.011242","$413.60","($4.65)"
+"9/5/2023","9/5/2023","9/6/2023","","ACH Deposit","ACH","","","$31.00"
+"8/30/2023","8/30/2023","9/1/2023","TLT","iShares 20+ Year Treasury Bond ETF
+CUSIP: 464287432","Buy","0.1288","$96.20","($12.39)"
+"8/30/2023","8/30/2023","9/1/2023","VOO","Vanguard S&P 500 ETF
+CUSIP: 922908363","Buy","0.011221","$414.38","($4.65)"
+"8/30/2023","8/30/2023","9/1/2023","NDAQ","Nasdaq
+CUSIP: 631103108","Buy","0.088344","$52.64","($4.65)"
+"8/30/2023","8/30/2023","9/1/2023","IEF","iShares 7-10 Year Treasury Bond ETF
+CUSIP: 464287440","Buy","0.049156","$94.60","($4.65)"
+"8/30/2023","8/30/2023","9/1/2023","GLD","SPDR Gold Trust
+CUSIP: 78463V107","Buy","0.01292","$180.34","($2.33)"
+"8/30/2023","8/30/2023","9/1/2023","USCI","United States Commodity Index Fund
+CUSIP: 911717106","Buy","0.039602","$58.84","($2.33)"
+"8/30/2023","8/30/2023","8/31/2023","","ACH Deposit","ACH","","","$31.00"
+"8/30/2023","8/30/2023","9/1/2023","USCI","United States Commodity Index Fund
+CUSIP: 911717106","Buy","0.593853","$58.74","($34.88)"
+"8/30/2023","8/30/2023","9/1/2023","GSG","iShares S&P GSCI Commodity-Indexed Trust
+CUSIP: 46428R107","Sell","1.623923","$21.48","$34.88"
+"8/30/2023","8/30/2023","9/1/2023","GSG","iShares S&P GSCI Commodity-Indexed Trust
+CUSIP: 46428R107","Buy","1.623923","$21.48","($34.89)"
+"8/30/2023","8/30/2023","9/1/2023","IAU","iShares Gold Trust
+CUSIP: 464285204","Sell","0.946682","$36.85","$34.89"
+"8/30/2023","8/30/2023","9/1/2023","IAU","iShares Gold Trust
+CUSIP: 464285204","Buy","0.946682","$36.85","($34.89)"
+"8/30/2023","8/30/2023","9/1/2023","GLD","SPDR Gold Trust
+CUSIP: 78463V107","Buy","0.193269","$180.52","($34.89)"
+"8/30/2023","8/30/2023","9/1/2023","IEF","iShares 7-10 Year Treasury Bond ETF
+CUSIP: 464287440","Buy","0.737231","$94.67","($69.79)"
+"8/30/2023","8/30/2023","9/1/2023","NDAQ","Nasdaq
+CUSIP: 631103108","Buy","1.326049","$52.63","($69.79)"
+"8/30/2023","8/30/2023","9/1/2023","VOO","Vanguard S&P 500 ETF
+CUSIP: 922908363","Buy","0.16865","$413.82","($69.79)"
+"8/30/2023","8/30/2023","9/1/2023","TLT","iShares 20+ Year Treasury Bond ETF
+CUSIP: 464287432","Buy","1.935416","$96.16","($186.10)"
+"8/30/2023","8/30/2023","9/1/2023","VOO","Vanguard S&P 500 ETF
+CUSIP: 922908363","Sell","0.300271","$413.73","$124.23"
+"8/30/2023","8/30/2023","9/1/2023","TLT","iShares 20+ Year Treasury Bond ETF
+CUSIP: 464287432","Sell","1","$96.13","$96.13"
+"8/30/2023","8/30/2023","9/1/2023","TLT","iShares 20+ Year Treasury Bond ETF
+CUSIP: 464287432","Sell","0.948459","$96.14","$91.18"
+"8/30/2023","8/30/2023","9/1/2023","IEF","iShares 7-10 Year Treasury Bond ETF
+CUSIP: 464287440","Sell","0.723643","$94.65","$68.49"
+"8/30/2023","8/30/2023","9/1/2023","IAU","iShares Gold Trust
+CUSIP: 464285204","Sell","0.938348","$36.85","$34.58"
+"8/30/2023","8/30/2023","9/1/2023","NDAQ","Nasdaq
+CUSIP: 631103108","Sell","0.310261","$52.54","$16.30"
+"8/30/2023","8/30/2023","9/1/2023","GLD","SPDR Gold Trust
+CUSIP: 78463V107","Sell","0.190123","$180.64","$34.34"
+"8/29/2023","8/29/2023","8/31/2023","GLD","SPDR Gold Trust
+CUSIP: 78463V107","Buy","0.190123","$179.52","($34.13)"
+"8/29/2023","8/29/2023","8/31/2023","GSG","iShares S&P GSCI Commodity-Indexed Trust
+CUSIP: 46428R107","Sell","1.593378","$21.42","$34.13"
+"8/28/2023","8/28/2023","8/30/2023","VOO","Vanguard S&P 500 ETF
+CUSIP: 922908363","Buy","0.003627","$405.24","($1.47)"
+"8/28/2023","8/28/2023","8/30/2023","NDAQ","Nasdaq
+CUSIP: 631103108","Buy","0.027523","$53.04","($1.46)"
+"8/28/2023","8/28/2023","8/30/2023","TLT","iShares 20+ Year Treasury Bond ETF
+CUSIP: 464287432","Buy","0.020473","$95.24","($1.95)"
+"8/28/2023","8/28/2023","8/30/2023","IAU","iShares Gold Trust
+CUSIP: 464285204","Buy","0.10281","$36.48","($3.75)"
+"8/28/2023","8/28/2023","8/30/2023","GSG","iShares S&P GSCI Commodity-Indexed Trust
+CUSIP: 46428R107","Buy","0.175274","$21.40","($3.75)"
+"8/28/2023","8/28/2023","8/30/2023","IEF","iShares 7-10 Year Treasury Bond ETF
+CUSIP: 464287440","Buy","0.079901","$93.86","($7.50)"
+"8/28/2023","8/28/2023","8/30/2023","TLT","iShares 20+ Year Treasury Bond ETF
+CUSIP: 464287432","Buy","0.21005","$95.22","($20.00)"
+"8/28/2023","8/28/2023","8/30/2023","NDAQ","Nasdaq
+CUSIP: 631103108","Sell","0.091962","$53.06","$4.88"
+"8/28/2023","8/28/2023","8/30/2023","NDAQ","Nasdaq
+CUSIP: 631103108","Sell","0.659692","$53.06","$35.00"
+"8/25/2023","8/25/2023","8/29/2023","NDAQ","Nasdaq
+CUSIP: 631103108","Buy","0.053454","$52.76","($2.82)"
+"8/25/2023","8/25/2023","8/29/2023","NDAQ","Nasdaq
+CUSIP: 631103108","Buy","0.9","$52.42","($47.18)"
+"8/25/2023","8/25/2023","8/28/2023","","ACH Deposit","ACH","","","$50.00"
+"8/22/2023","8/22/2023","8/24/2023","NDAQ","Nasdaq
+CUSIP: 631103108","Buy","0.080938","$52.02","($4.21)"
+"8/22/2023","8/22/2023","8/24/2023","AMZN","Amazon
+CUSIP: 023135106","Sell","0.03135","$134.24","$4.21"
+"8/17/2023","8/17/2023","8/21/2023","GSG","iShares S&P GSCI Commodity-Indexed Trust
+CUSIP: 46428R107","Buy","1","$21.16","($21.16)"
+"8/17/2023","8/17/2023","8/21/2023","GSG","iShares S&P GSCI Commodity-Indexed Trust
+CUSIP: 46428R107","Buy","0.418104","$21.16","($8.84)"
+"8/17/2023","8/17/2023","8/21/2023","IAU","iShares Gold Trust
+CUSIP: 464285204","Buy","0.835538","$35.91","($30.00)"
+"8/17/2023","8/17/2023","8/21/2023","IEF","iShares 7-10 Year Treasury Bond ETF
+CUSIP: 464287440","Buy","0.643742","$93.20","($60.00)"
+"8/17/2023","8/17/2023","8/21/2023","VOO","Vanguard S&P 500 ETF
+CUSIP: 922908363","Buy","0.296644","$404.52","($120.00)"
+"8/17/2023","8/17/2023","8/21/2023","TLT","iShares 20+ Year Treasury Bond ETF
+CUSIP: 464287432","Buy","1","$93.14","($93.14)"
+"8/17/2023","8/17/2023","8/21/2023","TLT","iShares 20+ Year Treasury Bond ETF
+CUSIP: 464287432","Buy","0.717936","$93.14","($66.86)"
+"8/16/2023","8/16/2023","8/18/2023","AMZN","Amazon
+CUSIP: 023135106","Sell","0.010617","$136.56","$1.45"
+"8/16/2023","8/16/2023","8/18/2023","VOO","Vanguard S&P 500 ETF
+CUSIP: 922908363","Sell","0.979435","$406.92","$398.55"
+"8/15/2023","8/15/2023","8/17/2023","VOO","Vanguard S&P 500 ETF
+CUSIP: 922908363","Buy","0.491297","$407.08","($200.00)"
+"8/15/2023","8/15/2023","8/16/2023","","ACH Deposit","ACH","","","$200.00"
+"8/11/2023","8/11/2023","8/15/2023","VOO","Vanguard S&P 500 ETF
+CUSIP: 922908363","Buy","0.488138","$409.72","($200.00)"
+"8/11/2023","8/11/2023","8/11/2023","AMZN","Amazon
+CUSIP: 023135106","REC","0.042","",""
+"8/10/2023","8/10/2023","8/11/2023","","ACH Deposit","ACH","","","$200.00"
+""
+"","","","","","","","","","The data provided is for informational purposes only. Please consult a professional tax service or personal tax advisor if you need instructions on how to calculate cost basis or questions regarding your specific tax situation. Reminder: This data does not include Robinhood Crypto or Robinhood Spending activity."
