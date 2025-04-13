@@ -1,36 +1,78 @@
-require('dotenv').config(); // Add this at the top
-const express = require('express');
-const multer = require('multer');
-const Papa = require('papaparse');
-const sqlite3 = require('sqlite3').verbose();
-const fs = require('fs');
-const path = require('path');
-const { formatDateForDatabase, toYYYYMMDD } = require('./date-utils');
-const app = express();
-const port = 3002;
+// --- Step 1: Load Dependencies ---
+// This section imports necessary libraries (modules) for the server to function.
 
+require('dotenv').config(); // Loads environment variables from a .env file (like API keys) into process.env
+const express = require('express'); // Imports the Express framework for building web servers
+const multer = require('multer'); // Imports Multer, used for handling file uploads (like the CSV)
+const Papa = require('papaparse'); // Imports PapaParse, used for parsing CSV data
+const sqlite3 = require('sqlite3').verbose(); // Imports SQLite3 for database operations (with extra debugging info)
+const fs = require('fs'); // Imports the built-in Node.js File System module for reading/writing files
+const path = require('path'); // Imports the built-in Node.js Path module for working with file paths
+const { formatDateForDatabase, toYYYYMMDD } = require('./date-utils'); // Imports custom date formatting functions from another file
+
+// --- Step 2: Initialize Express App ---
+const app = express(); // Creates an instance of the Express application
+const port = 3002; // Defines the port number the server will listen on (e.g., http://localhost:3002)
+
+// --- Step 3: Configure Middleware ---
+// Middleware functions run for every incoming request, potentially modifying it or performing checks before it reaches the route handler.
+
+// Allows the server to parse incoming request bodies as JSON
 app.use(express.json());
+// Allows the server to parse incoming request bodies with URL-encoded payloads (often used by HTML forms)
 app.use(express.urlencoded({ extended: true }));
 
-// Setup CORS
+// Setup CORS (Cross-Origin Resource Sharing)
+// This middleware is crucial for allowing the frontend (running on a different port, e.g., 5173)
+// to make requests to this backend server (running on port 3002).
+// Without CORS configured correctly, the browser would block these requests for security reasons.
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*'); // Allow all origins for testing
+  // 'Access-Control-Allow-Origin': Specifies which origins (domains/ports) are allowed to access the backend.
+  // '*' allows any origin, which is okay for development but should be restricted to your frontend's specific URL in production.
+  res.header('Access-Control-Allow-Origin', '*');
+  // 'Access-Control-Allow-Headers': Specifies which HTTP headers are allowed in requests from the frontend.
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  // 'Access-Control-Allow-Methods': Specifies which HTTP methods (GET, POST, etc.) are allowed.
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS'); // OPTIONS is needed for some pre-flight requests
+  // 'next()' passes control to the next middleware function or route handler in the stack.
   next();
 });
 
 // Configure multer for file uploads
+// Sets up Multer to store uploaded files temporarily in the 'uploads/' directory within the backend folder.
+// When a file is uploaded (e.g., in the /upload route), Multer handles saving it here.
 const upload = multer({ dest: 'uploads/' });
 
-// Setup SQLite database
+// --- Step 4: Setup SQLite Database ---
+// Connects to the SQLite database file and ensures necessary tables exist.
+// SQLite is a lightweight, file-based database, good for simple applications.
+
+// Define the path to the database file. `__dirname` is the directory where this script (index.js) resides.
+// This will create 'robinhood.db' in the backend/ directory if it doesn't exist.
 const dbPath = path.join(__dirname, 'robinhood.db');
+
+// Create a database connection instance using the specified path.
+// The second argument is a callback function that runs after attempting to connect.
 const db = new sqlite3.Database(dbPath, (err) => {
+  // Check if there was an error during connection.
   if (err) {
+    // Log an error message to the console if connection failed.
     console.error('Error opening database:', err.message);
   } else {
-    console.log('Connected to the SQLite database');
-    // Create transactions table if it doesn't exist
+    // Log a success message if connection is successful.
+    console.log('Connected to the SQLite database.');
+
+    // --- Step 4a: Create 'transactions' Table (if needed) ---
+    // This SQL command uses 'CREATE TABLE IF NOT EXISTS' which is safe to run every time;
+    // it only creates the table if it's missing.
+    // Define columns for the transactions table:
+    // id: Unique ID for each transaction, automatically generated
+    // activity_date: Date of the transaction (stored as text in YYYY-MM-DD format)
+    // ticker: Stock symbol (e.g., AAPL, GOOG)
+    // trans_code: Transaction type (e.g., Buy, Sell, CDIV for dividend)
+    // quantity: Number of shares involved (REAL allows decimal values)
+    // price: Price per share at the time of transaction
+    // amount: Total value of the transaction (negative for debits like buys/fees, positive for credits like sells/deposits)
     db.run(`CREATE TABLE IF NOT EXISTS transactions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       activity_date TEXT,
@@ -40,14 +82,22 @@ const db = new sqlite3.Database(dbPath, (err) => {
       price REAL,
       amount REAL
     )`, (err) => {
+      // Callback runs after the CREATE TABLE command executes.
       if (err) {
         console.error('Error creating transactions table:', err.message);
       } else {
-        console.log('Transactions table is ready');
+        // Log success confirmation
+        console.log('Transactions table confirmed or created.');
       }
     });
-    
-    // Create portfolio_config table if it doesn't exist
+
+    // --- Step 4b: Create 'portfolio_config' Table (if needed) ---
+    // Stores user-defined portfolio settings like total investment and asset allocation.
+    // Define columns for portfolio configuration:
+    // id: Unique ID for each config entry
+    // total_investment: Total amount invested by the user
+    // ticker: Stock symbol for a specific allocation
+    // allocation_percentage: Percentage of the total investment allocated to this ticker
     db.run(`CREATE TABLE IF NOT EXISTS portfolio_config (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       total_investment REAL,
@@ -57,11 +107,19 @@ const db = new sqlite3.Database(dbPath, (err) => {
       if (err) {
         console.error('Error creating portfolio_config table:', err.message);
       } else {
-        console.log('Portfolio config table is ready');
+        console.log('Portfolio config table is ready.');
       }
     });
 
-    // Create stock_prices table if it doesn't exist
+    // --- Step 4c: Create 'stock_prices' Table (if needed) ---
+    // Caches historical stock prices fetched from the Alpha Vantage API.
+    // This helps avoid hitting API rate limits and speeds up subsequent calculations.
+    // Define columns for caching stock prices:
+    // id: Unique ID for each price entry
+    // ticker: Stock symbol the price belongs to
+    // date: Date of the price (YYYY-MM-DD)
+    // close_price: Closing price for that stock on that date
+    // UNIQUE(ticker, date): IMPORTANT constraint ensuring only one price entry per ticker per day.
     db.run(`CREATE TABLE IF NOT EXISTS stock_prices (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       ticker TEXT,
@@ -72,397 +130,734 @@ const db = new sqlite3.Database(dbPath, (err) => {
       if (err) {
         console.error('Error creating stock_prices table:', err.message);
       } else {
-        console.log('Stock prices table is ready');
+        console.log('Stock prices table is ready.');
       }
     });
   }
 });
 
+// --- Step 5: Define API Routes (Endpoints) ---
+// These blocks define how the server responds when a client (like the frontend)
+// sends a request to a specific URL path (e.g., '/', '/upload') using a specific HTTP method (e.g., GET, POST).
+
+// --- Route 1: GET / ---
+// Defines a handler for GET requests to the root URL (e.g., http://localhost:3002/).
+// 'app.get' specifies the HTTP method (GET) and the path ('/').
+// The callback function `(req, res) => { ... }` is executed when a request matches.
+// - `req` (request) object contains information about the incoming request.
+// - `res` (response) object is used to send a response back to the client.
 app.get('/', (req, res) => {
+  // Sends a simple plain text response back to the client.
   res.send('Robinhood Dashboard Backend');
 });
 
-// Test endpoint to check API keys
+// --- Route 2: GET /test-keys ---
+// A simple test endpoint to check if API keys were loaded correctly from the .env file.
+// Handles GET requests to '/test-keys' (e.g., http://localhost:3002/test-keys).
 app.get('/test-keys', (req, res) => {
+  // Responds with a JSON object containing the values of the API keys read from `process.env`.
+  // `process.env.ALPHA_VANTAGE_KEY` gets the value associated with that key in the .env file (loaded by dotenv).
+  // If a key wasn't found in .env, its value here will be `undefined`.
   res.json({
     alphaVantageKey: process.env.ALPHA_VANTAGE_KEY,
     finnhubKey: process.env.FINNHUB_KEY
   });
 });
 
-// Add this new route at the beginning, right after the mount point and middleware setup
-// Route to get portfolio growth data
+// --- Route 3: GET /portfolio-growth ---
+// Calculates and returns data points for the portfolio growth chart.
+// This involves fetching daily portfolio values, fetching benchmark (e.g., SPY) prices,
+// aligning them by date, and scaling the benchmark to start at the same value as the portfolio.
+// It responds with an array of { date, portfolioValue, benchmarkValue } objects.
 app.get('/portfolio-growth', async (req, res) => {
+  // Get the benchmark ticker from query parameters (e.g., /portfolio-growth?benchmark=VOO).
+  // If no benchmark is specified in the query, default to 'SPY'.
   const benchmarkTicker = req.query.benchmark || 'SPY';
-  
+  console.log(`[API /portfolio-growth] Request received. Benchmark: ${benchmarkTicker}`);
+
+  // Use a try...catch block to handle potential errors during async operations.
   try {
-    // Get portfolio daily values
-    const portfolioValues = await calculateDailyPortfolioValues();
-    
+    // --- Step 3a: Calculate Daily Portfolio Values ---
+    // Calls the async helper function `calculateDailyPortfolioValues` (defined later).
+    // This function calculates the portfolio's total value for each day based on transactions and cached/fetched stock prices.
+    console.log('[API /portfolio-growth] Calculating daily portfolio values...');
+    const portfolioValues = await calculateDailyPortfolioValues(); // `await` pauses execution until the promise resolves
+    console.log(`[API /portfolio-growth] Calculated ${portfolioValues?.length ?? 0} portfolio daily values.`);
+
+    // --- Step 3b: Handle No Portfolio Data ---
+    // If the helper function returns an empty array or null (e.g., no transactions uploaded yet).
     if (!portfolioValues || portfolioValues.length === 0) {
-      console.log('No portfolio data available');
+      console.log('[API /portfolio-growth] No portfolio data found.');
+      // Return a 404 Not Found status with an informative JSON error message.
       return res.status(404).json({
         error: 'No portfolio data available',
         message: 'Please upload transaction data before viewing portfolio growth.'
       });
     }
-    
-    // Get benchmark price data
+
+    // --- Step 3c: Fetch Benchmark Price Data ---
+    // Calls the async helper function `getStockPrices` (defined later) for the chosen benchmark ticker.
+    // This function checks the database cache first, then fetches from Alpha Vantage if needed.
+    console.log(`[API /portfolio-growth] Fetching benchmark prices for ${benchmarkTicker}...`);
     const benchmarkPrices = await getStockPrices(benchmarkTicker);
-    
+
+    // --- Step 3d: Handle Missing Benchmark Data ---
+    // Check if fetching benchmark prices failed (returned null) or if the data structure is invalid.
     if (!benchmarkPrices || !benchmarkPrices['Time Series (Daily)']) {
-      console.log(`No benchmark data available for ${benchmarkTicker}`);
+      console.log(`[API /portfolio-growth] No benchmark data available for ${benchmarkTicker}.`);
+      // Return a 500 Server Error status, as this usually indicates an external API issue or configuration problem.
       return res.status(500).json({
         error: 'Benchmark data unavailable',
-        message: `Could not retrieve data for benchmark ${benchmarkTicker}. Please try again with a different benchmark.`
+        message: `Could not retrieve data for benchmark ${benchmarkTicker}. Please try again with a different benchmark or check API key/limits.`
       });
     }
-    
-    // Calculate benchmark values starting with same amount as initial portfolio value
+    console.log(`[API /portfolio-growth] Benchmark prices fetched for ${benchmarkTicker}.`);
+
+    // --- Step 3e: Calculate Initial Benchmark Alignment ---
+    // To compare growth visually, we need to scale the benchmark to start at the same value as the portfolio.
+    // Get the portfolio's starting value and date (first element of the sorted array).
     const initialPortfolioValue = portfolioValues[0].value;
     const initialBenchmarkDate = portfolioValues[0].date;
+    // Find the benchmark's price on that specific starting date using the helper function `getPriceForDate`.
     const initialBenchmarkPrice = getPriceForDate(benchmarkPrices, initialBenchmarkDate);
-    
+
+    // --- Step 3f: Handle Missing Initial Benchmark Price ---
+    // If the benchmark didn't have a price on the portfolio's first day (e.g., market closed, ticker didn't exist yet).
     if (!initialBenchmarkPrice) {
-      console.log(`No benchmark price available for initial date (${initialBenchmarkDate})`);
+      console.log(`[API /portfolio-growth] No benchmark price available for initial date (${initialBenchmarkDate}) for ${benchmarkTicker}.`);
+      // Return a 500 error as alignment isn't possible.
       return res.status(500).json({
-        error: 'Missing benchmark data',
-        message: `Could not find price for ${benchmarkTicker} on initial date (${initialBenchmarkDate}). Please try a different benchmark.`
+        error: 'Missing benchmark data for alignment',
+        message: `Could not find price for ${benchmarkTicker} on initial portfolio date (${initialBenchmarkDate}). The benchmark might not have existed then, or data is unavailable.`
       });
     }
-    
-    // Create combined dataset with portfolio and benchmark values
+    console.log(`[API /portfolio-growth] Initial alignment: Portfolio=${initialPortfolioValue} on ${initialBenchmarkDate}, Benchmark Price=${initialBenchmarkPrice}`);
+
+    // --- Step 3g: Combine Portfolio and Benchmark Values ---
+    // Iterate through each day in the `portfolioValues` array.
+    // For each day, calculate the corresponding scaled benchmark value.
+    console.log('[API /portfolio-growth] Combining portfolio and benchmark data...');
     const growthData = portfolioValues.map(item => {
+      // Find the benchmark price for the current portfolio date.
       const benchmarkPrice = getPriceForDate(benchmarkPrices, item.date);
-      
-      // Only include dates where we have benchmark prices
-      if (benchmarkPrice) {
+
+      // Only include this date if we have a valid benchmark price for it.
+      // Also check that initial benchmark price is valid to avoid division by zero.
+      if (benchmarkPrice && benchmarkPrice > 0 && initialBenchmarkPrice && initialBenchmarkPrice > 0) {
+        // Calculate the scaled benchmark value:
+        // Formula: PortfolioStartValue * (CurrentBenchmarkPrice / InitialBenchmarkPrice)
+        const scaledBenchmarkValue = initialPortfolioValue * (benchmarkPrice / initialBenchmarkPrice);
         return {
-          date: item.date,
-          portfolioValue: item.value,
-          benchmarkValue: initialPortfolioValue * (benchmarkPrice / initialBenchmarkPrice)
+          date: item.date,                 // Date (YYYY-MM-DD)
+          portfolioValue: item.value,       // Portfolio value on this date
+          benchmarkValue: scaledBenchmarkValue // Scaled benchmark value on this date
         };
+      } else {
+        // If no valid benchmark price exists for this date, skip it by returning null.
+        return null;
       }
-      // Skip dates with no benchmark price
-      return null; 
-    }).filter(item => item !== null); // Remove nulls
-    
-    // If after all this we still have no data, return error instead of fallback
+    }).filter(item => item !== null); // Use `filter` to remove the null entries created above.
+
+    console.log(`[API /portfolio-growth] Combined data has ${growthData.length} points.`);
+
+    // --- Step 3h: Handle Empty Combined Data ---
+    // If, after filtering, no valid data points remain (e.g., portfolio dates don't overlap with benchmark data).
     if (growthData.length === 0) {
-      console.log('Growth data is empty after processing');
+      console.log('[API /portfolio-growth] Growth data is empty after combining/filtering.');
+      // Return 404 as no comparable data could be generated.
       return res.status(404).json({
-        error: 'No portfolio growth data available',
-        message: 'Please ensure you have uploaded transaction data with valid dates and try again.'
+        error: 'No comparable portfolio/benchmark data available',
+        message: 'Could not align portfolio dates with available benchmark price data. Check transaction dates and benchmark ticker.'
       });
     }
-    
+
+    // --- Step 3i: Send Response ---
+    // If everything is successful, send the `growthData` array as a JSON response.
+    console.log('[API /portfolio-growth] Sending growth data response.');
     res.json(growthData);
+
   } catch (error) {
-    console.error('Error calculating portfolio growth:', error);
-    // Return error instead of fallback data
+    // --- Step 3j: Handle General Errors ---
+    // Catch any unexpected errors that occurred during the `try` block.
+    console.error('[API /portfolio-growth] Error calculating portfolio growth:', error);
+    // Send a generic 500 Internal Server Error response.
     res.status(500).json({
       error: 'Error calculating portfolio growth',
-      message: 'An error occurred while calculating portfolio growth. Please try again later.'
+      message: `An unexpected error occurred: ${error.message}`
     });
   }
 });
 
-// Route to get portfolio drawdown data
+// --- Route 4: GET /portfolio-drawdown ---
+// Calculates and returns data for the portfolio drawdown chart.
+// Drawdown measures the percentage decline from the portfolio's historical peak value to its current value.
+// It helps visualize the magnitude and duration of losses.
 app.get('/portfolio-drawdown', async (req, res) => {
+  console.log('[API /portfolio-drawdown] Request received.');
+  // Use a try...catch block for async operations.
   try {
-    // Get portfolio daily values
+    // --- Step 4a: Calculate Daily Portfolio Values ---
+    // First, we need the portfolio value for each day.
+    console.log('[API /portfolio-drawdown] Calculating daily portfolio values...');
     const portfolioValues = await calculateDailyPortfolioValues();
-    
+    console.log(`[API /portfolio-drawdown] Calculated ${portfolioValues?.length ?? 0} portfolio daily values.`);
+
+    // --- Step 4b: Handle No Portfolio Data ---
+    // If no transactions or values exist, drawdown cannot be calculated.
     if (!portfolioValues || portfolioValues.length === 0) {
+      console.log('[API /portfolio-drawdown] No portfolio data available.');
+      // Return 404 Not Found.
       return res.status(404).json({
-        success: false,
-        error: 'No portfolio data available'
+        success: false, // Indicate failure
+        error: 'No portfolio data available',
+        message: 'Upload transaction data first before viewing drawdown.'
       });
     }
-    
-    // Calculate running maximum and drawdown percentage
-    let runningMax = portfolioValues[0].value;
+
+    // --- Step 4c: Calculate Drawdown ---
+    // Iterate through the daily values, keeping track of the highest value seen so far (running maximum or peak).
+    console.log('[API /portfolio-drawdown] Calculating drawdown percentages...');
+    let runningMax = portfolioValues[0].value; // Initialize the peak with the first day's value.
+    // Use `map` to create a new array containing drawdown information for each day.
     const drawdownData = portfolioValues.map(item => {
+      // Update the running maximum if the current day's value is higher.
       if (item.value > runningMax) {
         runningMax = item.value;
       }
-      
-      // Calculate drawdown as percentage from peak
+
+      // Calculate the drawdown percentage for the current day:
+      // Formula: ((Peak Value - Current Value) / Peak Value) * 100
+      // Handle division by zero if the peak value is 0 (though unlikely with filtered daily values).
       const drawdownPercentage = runningMax > 0 ? ((runningMax - item.value) / runningMax) * 100 : 0;
-      
+
+      // Return an object containing the date, the portfolio value, the peak value at that time,
+      // and the calculated drawdown percentage for that day.
       return {
         date: item.date,
-        value: item.value,
-        peak: runningMax,
-        drawdownPercentage: drawdownPercentage
+        value: item.value,          // Portfolio value on this date
+        peak: runningMax,           // Highest value seen up to this date
+        drawdownPercentage: drawdownPercentage // Percentage decline from the peak
       };
     });
-    
+    console.log(`[API /portfolio-drawdown] Calculated drawdown for ${drawdownData.length} points.`);
+
+    // --- Step 4d: Send Response ---
+    // Send the array of drawdown data objects as a JSON response.
+    console.log('[API /portfolio-drawdown] Sending drawdown data response.');
     res.json(drawdownData);
+
   } catch (error) {
-    console.error('Error calculating portfolio drawdown:', error);
+    // --- Step 4e: Handle General Errors ---
+    // Catch any unexpected errors during the process.
+    console.error('[API /portfolio-drawdown] Error calculating portfolio drawdown:', error);
+    // Send a 500 Internal Server Error response.
     res.status(500).json({
-      success: false,
-      error: 'Failed to calculate portfolio drawdown data'
+      success: false, // Indicate failure
+      error: 'Failed to calculate portfolio drawdown data',
+      message: `An unexpected error occurred: ${error.message}`
     });
   }
 });
 
-// POST route to upload CSV file
+// --- CSV Upload and Processing ---
+
+// --- Route 5: POST /upload ---
+// Handles the primary action of uploading the user's Robinhood transaction CSV file.
+// It uses the 'upload' middleware (defined earlier using Multer) to handle the file data
+// attached to the request under the field name 'file'.
 app.post('/upload', upload.single('file'), (req, res) => {
+  console.log('[API /upload] Request received.');
+  // --- Step 5a: Check if File Was Uploaded ---
+  // Multer adds the `req.file` object if a file named 'file' was successfully uploaded.
+  // If `req.file` is missing, it means no file was sent or the field name was wrong.
   if (!req.file) {
+    console.log('[API /upload] No file uploaded in the request.');
+    // Return a 400 Bad Request error.
     return res.status(400).json({ error: 'No file uploaded' });
   }
+  console.log(`[API /upload] File uploaded: ${req.file.originalname}, Temp path: ${req.file.path}`);
 
+  // --- Step 5b: Get Temporary File Path ---
+  // Multer saves the uploaded file to a temporary location (in the 'uploads/' directory)
+  // and provides the path via `req.file.path`.
   const filePath = req.file.path;
-  
-  // Read the file
+
+  // --- Step 5c: Read File Content ---
+  // Use the Node.js 'fs' (File System) module to read the content of the temporary CSV file.
+  // 'utf8' specifies the character encoding.
+  // This is an asynchronous operation; the callback function `(err, data) => { ... }` runs when reading is done or an error occurs.
+  console.log('[API /upload] Reading uploaded file content...');
   fs.readFile(filePath, 'utf8', (err, data) => {
+    // --- Step 5d: Handle File Reading Errors ---
     if (err) {
+      console.error('[API /upload] Error reading uploaded file:', err);
+      // Attempt to clean up the temporary file even if reading failed.
+      fs.unlink(filePath, (unlinkErr) => {
+        if (unlinkErr) console.error('[API /upload] Error deleting temp file after read error:', unlinkErr);
+      });
+      // Return a 500 Internal Server Error.
       return res.status(500).json({ error: 'Error reading file' });
     }
+    console.log('[API /upload] File read successfully.');
 
-    // Parse CSV
+    // --- Step 5e: Parse CSV Data ---
+    // Use the PapaParse library to parse the CSV string (`data`) into a JavaScript structure.
+    console.log('[API /upload] Parsing CSV data...');
     Papa.parse(data, {
-      header: true,
-      skipEmptyLines: true,
+      header: true, // Treat the first row of the CSV as headers (keys for the resulting objects).
+      skipEmptyLines: true, // Ignore any blank lines in the CSV.
+
+      // --- Step 5f: Processing Callback (on successful parse) ---
+      // The `complete` function is called by PapaParse when parsing finishes successfully.
+      // `results` contains the parsed data (`results.data`) and metadata/errors.
       complete: (results) => {
+        console.log(`[API /upload] CSV parsing complete. Found ${results.data.length} rows.`);
+        // `results.data` is an array of objects, where each object represents a row in the CSV.
         const transactions = results.data;
-        
-        if (transactions.length === 0) {
+
+        // --- Step 5g: Check for Empty Results ---
+        // Ensure that the parsing resulted in at least one transaction row.
+        if (!transactions || transactions.length === 0) {
+          console.log('[API /upload] No transactions found in the parsed CSV.');
+          // Clean up the temporary file.
+          fs.unlink(filePath, (unlinkErr) => {
+            if (unlinkErr) console.error('[API /upload] Error deleting temp file after empty parse:', unlinkErr);
+          });
+          // Return a 400 Bad Request error if the CSV was empty or contained no data rows.
           return res.status(400).json({ error: 'No transactions found in file' });
         }
 
-        // Insert transactions into database
-        const insertStmt = db.prepare(`
-          INSERT INTO transactions (
-            activity_date, ticker, trans_code, quantity, price, amount
-          ) VALUES (?, ?, ?, ?, ?, ?)
-        `);
-
-        let insertedCount = 0;
-        let errorCount = 0;
-
-        transactions.forEach(transaction => {
-          try {
-            // Extract and clean data
-            const activityDate = transaction['Activity Date'] || '';
-            const ticker = transaction['Instrument'] || '';
-            const transCode = transaction['Trans Code'] || '';
-            
-            // Parse quantity (may be empty for non-trades)
-            let quantity = 0;
-            if (transaction['Quantity'] && transaction['Quantity'].trim() !== '') {
-              quantity = parseFloat(transaction['Quantity'].replace(/,/g, ''));
-            }
-            
-            // Parse price (remove $ and parentheses, may be empty for non-trades)
-            let price = 0;
-            if (transaction['Price'] && transaction['Price'].trim() !== '') {
-              price = parseFloat(transaction['Price'].replace(/[$,]/g, '').replace(/[()]/g, ''));
-            }
-            
-            // Parse amount (remove $ and convert parentheses to negative values)
-            let amount = 0;
-            if (transaction['Amount'] && transaction['Amount'].trim() !== '') {
-              const amountStr = transaction['Amount'].replace(/[$,]/g, '');
-              if (amountStr.includes('(') && amountStr.includes(')')) {
-                amount = -parseFloat(amountStr.replace(/[()]/g, ''));
-              } else {
-                amount = parseFloat(amountStr);
-              }
-            }
-
-            // Insert into database
-            insertStmt.run(
-              activityDate,
-              ticker,
-              transCode,
-              quantity,
-              price,
-              amount
-            );
-            
-            insertedCount++;
-          } catch (error) {
-            console.error('Error inserting transaction:', error.message);
-            errorCount++;
+        // --- Step 5h: Clear Existing Database Transactions ---
+        // Before inserting the new data, delete all records currently in the 'transactions' table.
+        // This ensures we only have the data from the latest uploaded file.
+        console.log('[API /upload] Clearing existing transactions from database...');
+        db.run('DELETE FROM transactions', (deleteErr) => {
+          // Callback runs after the DELETE operation attempts to execute.
+          if (deleteErr) {
+            console.error('[API /upload] Error clearing existing transactions:', deleteErr.message);
+            // Clean up the temporary file.
+            fs.unlink(filePath, (unlinkErr) => {
+              if (unlinkErr) console.error('[API /upload] Error deleting temp file after DB clear error:', unlinkErr);
+            });
+            // Return a 500 Internal Server Error if clearing the database fails.
+            return res.status(500).json({ error: 'Error preparing database for new transactions' });
           }
-        });
+          console.log('[API /upload] Cleared existing transactions table.');
 
-        insertStmt.finalize();
+          // --- Step 5i: Prepare SQL Insert Statement ---
+          // Preparing the statement beforehand is more efficient than creating a new SQL string for every row.
+          // The `?` symbols are placeholders that will be filled with values for each transaction.
+          const insertStmt = db.prepare(`
+            INSERT INTO transactions (
+              activity_date, ticker, trans_code, quantity, price, amount
+            ) VALUES (?, ?, ?, ?, ?, ?)
+          `);
 
-        // Clean up the uploaded file
-        fs.unlink(filePath, (err) => {
-          if (err) console.error('Error deleting file:', err);
-        });
+          let insertedCount = 0; // Counter for successfully inserted rows.
+          let errorCount = 0; // Counter for rows that caused an insertion error.
 
-        res.json({ 
-          message: 'File uploaded and processed successfully',
-          totalTransactions: transactions.length,
-          insertedCount,
-          errorCount
+          // --- Step 5j: Iterate and Insert Each Transaction ---
+          console.log(`[API /upload] Processing ${transactions.length} transactions for insertion...`);
+          // Loop through each transaction object parsed from the CSV.
+          transactions.forEach((transaction, index) => {
+            // Use a try...catch block to handle errors during the processing of a single row,
+            // preventing one bad row from stopping the entire upload.
+            try {
+              // --- Step 5k: Data Cleaning and Formatting ---
+              // Extract data for each column from the transaction object (using header names from CSV).
+              // Provide default values (e.g., empty string, 0) if a field is missing in the CSV row.
+              let activityDateRaw = transaction['Activity Date'] || '';
+              // Use the imported utility function to format the date consistently (e.g., to YYYY-MM-DD).
+              let activityDate = formatDateForDatabase(activityDateRaw);
+
+              const ticker = transaction['Instrument'] || '';
+              const transCode = transaction['Trans Code'] || '';
+
+              // Parse quantity: Remove commas, convert to float, default to 0 if empty/invalid.
+              let quantity = 0;
+              if (transaction['Quantity'] && transaction['Quantity'].trim() !== '') {
+                quantity = parseFloat(transaction['Quantity'].replace(/,/g, ''));
+                if (isNaN(quantity)) quantity = 0; // Ensure it's a number
+              }
+
+              // Parse price: Remove $, commas, parentheses, convert to float, default to 0.
+              let price = 0;
+              if (transaction['Price'] && transaction['Price'].trim() !== '') {
+                price = parseFloat(transaction['Price'].replace(/[$,()]/g, ''));
+                if (isNaN(price)) price = 0;
+              }
+
+              // Parse amount: Remove $, commas. Handle parentheses for negative numbers.
+              let amount = 0;
+              if (transaction['Amount'] && transaction['Amount'].trim() !== '') {
+                const amountStr = transaction['Amount'].replace(/[$,]/g, ''); // Remove $ and ,
+                if (amountStr.includes('(') && amountStr.includes(')')) {
+                  // Negative value indicated by parentheses
+                  amount = -parseFloat(amountStr.replace(/[()]/g, ''));
+                } else {
+                  // Positive value
+                  amount = parseFloat(amountStr);
+                }
+                if (isNaN(amount)) amount = 0;
+              }
+
+              // --- Step 5l: Execute Insert Statement ---
+              // Run the prepared statement, providing the cleaned data values in the correct order
+              // to replace the `?` placeholders.
+              insertStmt.run(
+                activityDate,
+                ticker,
+                transCode,
+                quantity,
+                price,
+                amount,
+                // Callback for this specific `run` execution.
+                (runErr) => {
+                   if (runErr) {
+                      // Log errors for specific rows but don't stop the loop.
+                      console.error(`[API /upload] Error inserting transaction row ${index + 1}:`, transaction, runErr.message);
+                      errorCount++; // Increment error counter.
+                   } else {
+                      insertedCount++; // Increment success counter.
+                   }
+                }
+              );
+
+            } catch (processError) {
+              // Catch any unexpected errors during the data cleaning/formatting of this row.
+              console.error(`[API /upload] Error processing transaction row ${index + 1}:`, transaction, processError.message);
+              errorCount++;
+            }
+          }); // End of transactions.forEach loop
+
+          // --- Step 5m: Finalize Batch Insert ---
+          // Finalizing tells the database we're done with this prepared statement and releases resources.
+          // The callback runs after finalization is complete.
+          console.log('[API /upload] Finalizing database insert operation...');
+          insertStmt.finalize((finalizeErr) => {
+            if (finalizeErr) {
+               // Log finalization errors, as they might indicate a bigger problem.
+               console.error("[API /upload] Error finalizing insert statement:", finalizeErr.message);
+               // Depending on severity, might want to rollback or send error response here.
+            }
+
+            // --- Step 5n: Delete Temporary File ---
+            // Clean up the uploaded file from the 'uploads/' directory now that it's processed.
+            console.log(`[API /upload] Deleting temporary file: ${filePath}`);
+            fs.unlink(filePath, (unlinkErr) => {
+              if (unlinkErr) {
+                // Log error but don't stop the response, it's just cleanup.
+                console.error('[API /upload] Error deleting uploaded temporary file:', unlinkErr);
+              }
+            });
+
+            // --- Step 5o: Send Success Response ---
+            // Send a JSON response back to the frontend indicating success,
+            // along with counts of processed, inserted, and errored rows.
+            console.log(`[API /upload] CSV Upload Complete: ${insertedCount} inserted, ${errorCount} errors.`);
+            res.json({
+              message: 'File uploaded and processed successfully.',
+              totalTransactions: transactions.length, // Total rows found in CSV
+              insertedCount, // Rows successfully inserted into DB
+              errorCount // Rows that failed processing or insertion
+            });
+          }); // End of finalize callback
+        }); // End of DELETE FROM transactions callback
+      }, // End of PapaParse 'complete' callback
+
+      // --- Step 5p: Error Callback (on parse error) ---
+      // This function is called by PapaParse if it encounters an error while parsing the CSV data itself
+      // (e.g., malformed CSV structure).
+      error: (parseError) => {
+        console.error('[API /upload] Error parsing CSV:', parseError);
+        // Clean up the temporary file.
+        fs.unlink(filePath, (unlinkErr) => {
+          if (unlinkErr) console.error('[API /upload] Error deleting temp file after parse error:', unlinkErr);
         });
-      },
-      error: (error) => {
-        console.error('Error parsing CSV:', error);
-        res.status(500).json({ error: 'Error parsing CSV file' });
+        // Return a 500 Internal Server Error, indicating the file likely couldn't be understood.
+        res.status(500).json({ error: 'Error parsing CSV file', details: parseError.message });
       }
-    });
-  });
-});
+    }); // End of Papa.parse call
+  }); // End of fs.readFile callback
+}); // End of app.post('/upload') route handler
 
-// POST route to save portfolio configuration
-app.post('/portfolio-config', (req, res) => {
-  const { total_investment, allocations } = req.body;
-  
-  if (!total_investment || !allocations || !Array.isArray(allocations) || allocations.length === 0) {
-    return res.status(400).json({ error: 'Invalid portfolio configuration. Required: total_investment and allocations array.' });
+// --- Function: processTickers (Helper for potential pre-caching) ---
+// This asynchronous function is designed to fetch historical prices for a given list of tickers
+// while respecting API rate limits (specifically Alpha Vantage's 5 calls/minute limit).
+// It processes tickers in small batches with delays between them.
+// Note: This function is defined here but doesn't seem to be called directly by any active API route in the current code.
+// It might be intended for a future feature or a separate script to pre-populate the price cache.
+async function processTickers(tickers) {
+  console.log(`[Helper processTickers] Starting processing for ${tickers.length} tickers.`);
+  // Define Alpha Vantage API limits (adjust if needed, but 5/min is the free tier limit).
+  const maxRequestsPerMinute = 5;
+  // Determine the size of each batch to process, respecting the API limit.
+  const chunkSize = Math.min(maxRequestsPerMinute, tickers.length);
+
+  // Loop through the tickers array in chunks (steps of `chunkSize`).
+  for (let i = 0; i < tickers.length; i += chunkSize) {
+    // Get the current batch of tickers using `slice`.
+    const chunk = tickers.slice(i, i + chunkSize);
+    console.log(`[Helper processTickers] Processing chunk ${Math.floor(i / chunkSize) + 1}: ${chunk.join(', ')}`);
+
+    // Process the current chunk of tickers concurrently using `Promise.all`.
+    // `map` creates an array of Promises, one for each ticker in the chunk.
+    const promises = chunk.map(ticker => {
+      // Call `getStockPrices` for each ticker. This function handles caching and fetching.
+      // Use `.catch` on each individual promise to handle errors gracefully.
+      // If one ticker fails, we log the error but don't stop the processing of others in the chunk.
+      return getStockPrices(ticker).catch(err => {
+        console.error(`[Helper processTickers] Error fetching prices for ${ticker} in batch:`, err);
+        return null; // Return null to indicate failure for this specific ticker.
+      });
+    });
+
+    // Wait for all promises (API calls/cache checks) in the current chunk to complete.
+    await Promise.all(promises);
+    console.log(`[Helper processTickers] Finished processing chunk ${Math.floor(i / chunkSize) + 1}.`);
+
+    // Pause execution if there are more tickers left to process in subsequent chunks.
+    if (i + chunkSize < tickers.length) {
+      // Wait for slightly longer than a minute (e.g., 65 seconds) to ensure the rate limit resets.
+      const waitTimeSeconds = 65;
+      console.log(`[Helper processTickers] Waiting ${waitTimeSeconds} seconds before next batch...`);
+      // Create a promise that resolves after the specified timeout.
+      await new Promise(resolve => setTimeout(resolve, waitTimeSeconds * 1000));
+    }
   }
-  
-  // Validate the allocations format
-  const invalidAllocations = allocations.filter(item => !item.ticker || !item.allocation_percentage);
+
+  console.log('[Helper processTickers] Finished pre-caching all ticker price data.');
+}
+
+// --- Route 6: POST /portfolio-config ---
+// Handles requests to save the user's portfolio configuration settings.
+// This includes the total investment amount and the desired allocation percentages for different assets (tickers).
+app.post('/portfolio-config', (req, res) => {
+  console.log('[API /portfolio-config] Request received.');
+  // Extract `total_investment` and the `allocations` array from the request body (expected to be JSON).
+  const { total_investment, allocations } = req.body;
+
+  // --- Step 6a: Validate Input Data ---
+  // Check if required fields are present and if allocations is a non-empty array.
+  if (total_investment === undefined || total_investment === null || !allocations || !Array.isArray(allocations) || allocations.length === 0) {
+    console.log('[API /portfolio-config] Invalid input data (missing fields or empty allocations).');
+    return res.status(400).json({ error: 'Invalid portfolio configuration. Required: total_investment (number) and allocations (non-empty array).' });
+  }
+
+  // Further validation: Check if each item in the `allocations` array has the necessary structure.
+  const invalidAllocations = allocations.filter(item =>
+    !item.ticker || typeof item.ticker !== 'string' || item.ticker.trim() === '' || // Ticker must be a non-empty string
+    item.allocation_percentage === undefined || item.allocation_percentage === null || typeof item.allocation_percentage !== 'number' // Percentage must be a number
+  );
   if (invalidAllocations.length > 0) {
-    return res.status(400).json({ 
-      error: 'Invalid allocations format. Each allocation must have ticker and allocation_percentage.'
+    console.log('[API /portfolio-config] Invalid allocation format found:', invalidAllocations);
+    return res.status(400).json({
+      error: 'Invalid allocations format. Each allocation must have a ticker (string) and allocation_percentage (number).'
     });
   }
-  
-  // Check if allocations add up to 100%
+
+  // --- Step 6b: Validate Allocation Sum ---
+  // Calculate the sum of all provided allocation percentages.
   const totalPercentage = allocations.reduce((sum, item) => sum + parseFloat(item.allocation_percentage), 0);
-  if (Math.abs(totalPercentage - 100) > 0.01) { // Allow small floating point errors
+  // Check if the sum is reasonably close to 100% (allowing for minor floating-point inaccuracies).
+  if (Math.abs(totalPercentage - 100) > 0.01) {
+    console.log(`[API /portfolio-config] Allocation percentages sum to ${totalPercentage.toFixed(2)}%, not 100%.`);
     return res.status(400).json({
       error: `Allocation percentages must add up to 100%. Current total: ${totalPercentage.toFixed(2)}%`
     });
   }
-  
+  console.log(`[API /portfolio-config] Input validation passed. Total Investment: ${total_investment}, Allocations: ${allocations.length}`);
+
+  // --- Step 6c: Save to Database (within a transaction) ---
+  // Use a try...catch block to handle potential errors during database operations.
   try {
-    // Begin transaction
+    // `db.serialize` ensures that the database operations within its callback run sequentially.
     db.serialize(() => {
+      // Begin a database transaction. This groups the DELETE and INSERT operations.
+      // If any operation fails, the entire transaction can be rolled back, ensuring data consistency.
       db.run('BEGIN TRANSACTION');
-      
-      // Clear existing portfolio configuration
+      console.log('[API /portfolio-config] Began database transaction.');
+
+      // --- Step 6c1: Clear Existing Configuration ---
+      // Delete all previous entries from the `portfolio_config` table.
+      console.log('[API /portfolio-config] Clearing existing portfolio_config table...');
       db.run('DELETE FROM portfolio_config', (err) => {
         if (err) {
+          // If clearing fails, throw an error. This will be caught by the outer catch block,
+          // which will then trigger a rollback.
+          console.error('[API /portfolio-config] Error clearing portfolio_config:', err.message);
           throw new Error(`Error clearing portfolio_config: ${err.message}`);
         }
-        
-        // Insert new portfolio configuration
+        console.log('[API /portfolio-config] Existing config cleared.');
+
+        // --- Step 6c2: Insert New Configuration ---
+        // Prepare the SQL statement for inserting the new allocation data.
         const insertStmt = db.prepare(
           'INSERT INTO portfolio_config (total_investment, ticker, allocation_percentage) VALUES (?, ?, ?)'
         );
-        
-        allocations.forEach(allocation => {
+
+        console.log('[API /portfolio-config] Inserting new configuration...');
+        // Loop through the `allocations` array received from the request.
+        allocations.forEach((allocation, index) => {
+          // Execute the prepared statement for each allocation item.
           insertStmt.run(
-            total_investment,
+            total_investment, // Use the same total investment amount for each row
             allocation.ticker,
-            allocation.allocation_percentage
+            allocation.allocation_percentage,
+            (insertErr) => { // Add callback to catch errors during individual row insertion
+              if (insertErr) {
+                // Log the error, but potentially allow the loop to continue.
+                // Critical applications might want to throw an error here to ensure rollback.
+                console.error(`[API /portfolio-config] Error inserting allocation ${index + 1} (${allocation.ticker}):`, insertErr.message);
+                // Consider throwing `insertErr` here if one failed insert should abort the whole process.
+              }
+            }
           );
         });
-        
-        insertStmt.finalize();
-        
-        db.run('COMMIT', () => {
-          res.json({
-            message: 'Portfolio configuration saved successfully',
-            portfolio: {
-              total_investment,
-              allocations
-            }
-          });
-        });
-      });
-    });
+
+        // Finalize the prepared statement after looping through all allocations.
+        insertStmt.finalize((finalizeErr) => {
+           if (finalizeErr) {
+               console.error("[API /portfolio-config] Error finalizing insert statement:", finalizeErr.message);
+               // Throwing an error here ensures a rollback if finalization fails.
+               throw new Error(`Error finalizing insert statement: ${finalizeErr.message}`);
+           }
+           console.log('[API /portfolio-config] Insert statement finalized.');
+
+           // --- Step 6c3: Commit Transaction ---
+           // If all preceding operations (DELETE, INSERT runs, finalize) were successful (didn't throw errors),
+           // commit the transaction to make the changes permanent in the database.
+           db.run('COMMIT', (commitErr) => {
+             if (commitErr) {
+               // If committing fails (unlikely but possible), throw an error to trigger rollback.
+               console.error('[API /portfolio-config] Error committing transaction:', commitErr.message);
+               throw new Error(`Error committing transaction: ${commitErr.message}`);
+             }
+             console.log('[API /portfolio-config] Database transaction committed successfully.');
+
+             // --- Step 6d: Send Success Response ---
+             // If the commit was successful, send a success response back to the client.
+             res.json({
+               message: 'Portfolio configuration saved successfully.',
+               // Optionally include the saved data in the response for confirmation.
+               portfolio: {
+                 total_investment,
+                 allocations
+               }
+             });
+           }); // End commit callback
+        }); // End finalize callback
+      }); // End delete callback
+    }); // End db.serialize
   } catch (error) {
-    db.run('ROLLBACK');
-    console.error('Error saving portfolio configuration:', error.message);
-    res.status(500).json({ error: 'Error saving portfolio configuration' });
+    // --- Step 6e: Handle Errors and Rollback ---
+    // This block catches any errors thrown during the `try` block (e.g., from db operations).
+    console.error('[API /portfolio-config] Error saving portfolio configuration, rolling back transaction:', error.message);
+    // Attempt to explicitly roll back the transaction to undo any changes made before the error occurred.
+    db.run('ROLLBACK', (rollbackErr) => {
+       if (rollbackErr) console.error('[API /portfolio-config] Error executing ROLLBACK:', rollbackErr.message);
+       else console.log('[API /portfolio-config] Transaction rolled back.');
+    });
+    // Send a 500 Internal Server Error response to the client.
+    res.status(500).json({ error: 'Error saving portfolio configuration', details: error.message });
   }
 });
 
-// GET route for portfolio composition
+// --- Route 7: GET /portfolio-composition ---
+// Retrieves the currently saved portfolio composition (tickers, names, allocation percentages)
+// and the total investment amount from the `portfolio_config` database table.
 app.get('/portfolio-composition', (req, res) => {
-  // Common stock ticker to name mapping
+  console.log('[API /portfolio-composition] Request received.');
+  // --- Step 7a: Define Stock Name Mapping (Optional Enhancement) ---
+  // This object provides user-friendly names for common stock tickers.
+  // In a more complex application, this data might come from a separate database table or an external API.
   const stockNames = {
-    'AAPL': 'Apple Inc.',
-    'MSFT': 'Microsoft Corporation',
-    'GOOGL': 'Alphabet Inc. (Google)',
-    'AMZN': 'Amazon.com Inc.',
-    'META': 'Meta Platforms Inc.',
-    'NFLX': 'Netflix Inc.',
-    'TSLA': 'Tesla Inc.',
-    'NVDA': 'NVIDIA Corporation',
-    'JPM': 'JPMorgan Chase & Co.',
-    'V': 'Visa Inc.',
-    'JNJ': 'Johnson & Johnson',
-    'WMT': 'Walmart Inc.',
-    'PG': 'Procter & Gamble Co.',
-    'MA': 'Mastercard Inc.',
-    'DIS': 'The Walt Disney Company',
-    'HD': 'The Home Depot Inc.',
-    'BAC': 'Bank of America Corp.',
-    'VZ': 'Verizon Communications Inc.',
-    'ADBE': 'Adobe Inc.',
-    'INTC': 'Intel Corporation',
-    'CSCO': 'Cisco Systems Inc.',
-    'CMCSA': 'Comcast Corporation',
-    'PFE': 'Pfizer Inc.',
-    'KO': 'The Coca-Cola Company',
-    'PEP': 'PepsiCo Inc.',
-    'T': 'AT&T Inc.',
-    'MRK': 'Merck & Co. Inc.',
-    'BITU': 'ProShares Ultra Bitcoin ETF'
+    'AAPL': 'Apple Inc.', 'MSFT': 'Microsoft Corporation', 'GOOGL': 'Alphabet Inc. (Google)',
+    'AMZN': 'Amazon.com Inc.', 'META': 'Meta Platforms Inc.', 'NFLX': 'Netflix Inc.',
+    'TSLA': 'Tesla Inc.', 'NVDA': 'NVIDIA Corporation', 'JPM': 'JPMorgan Chase & Co.',
+    'V': 'Visa Inc.', 'JNJ': 'Johnson & Johnson', 'WMT': 'Walmart Inc.',
+    'PG': 'Procter & Gamble Co.', 'MA': 'Mastercard Inc.', 'DIS': 'The Walt Disney Company',
+    'HD': 'The Home Depot Inc.', 'BAC': 'Bank of America Corp.', 'VZ': 'Verizon Communications Inc.',
+    'ADBE': 'Adobe Inc.', 'INTC': 'Intel Corporation', 'CSCO': 'Cisco Systems Inc.',
+    'CMCSA': 'Comcast Corporation', 'PFE': 'Pfizer Inc.', 'KO': 'The Coca-Cola Company',
+    'PEP': 'PepsiCo Inc.', 'T': 'AT&T Inc.', 'MRK': 'Merck & Co. Inc.',
+    'BITU': 'ProShares Ultra Bitcoin ETF', /* Add more tickers and names as needed */
   };
 
-  // Query the portfolio configuration
+  // --- Step 7b: Query Allocations from Database ---
+  // Select the ticker and allocation percentage for all entries in the `portfolio_config` table.
+  console.log('[API /portfolio-composition] Querying portfolio_config for allocations...');
+  // `db.all` fetches all rows matching the query.
   db.all('SELECT ticker, allocation_percentage FROM portfolio_config', [], (err, rows) => {
+    // Handle potential database errors during the query.
     if (err) {
-      console.error('Error querying portfolio composition:', err.message);
+      console.error('[API /portfolio-composition] Error querying portfolio allocations:', err.message);
       return res.status(500).json({ error: 'Error retrieving portfolio composition' });
     }
-    
-    // Build the portfolio composition with names
+    console.log(`[API /portfolio-composition] Found ${rows.length} allocation entries.`);
+
+    // --- Step 7c: Format Composition Data ---
+    // Map the raw database `rows` into a more structured array for the frontend.
+    // Include the stock name by looking it up in the `stockNames` object.
     const composition = rows.map(row => {
       return {
         ticker: row.ticker,
-        name: stockNames[row.ticker] || `${row.ticker} (Unknown)`,
+        // Look up the name; if not found, provide a default indicating it's unknown.
+        name: stockNames[row.ticker] || `${row.ticker} (Unknown Name)`,
         allocation_percentage: row.allocation_percentage
       };
     });
-    
-    // Calculate total investment
+
+    // --- Step 7d: Query Total Investment ---
+    // Fetch the `total_investment` value from the `portfolio_config` table.
+    // Since it should be the same for all rows in a single configuration, we only need one (`LIMIT 1`).
+    console.log('[API /portfolio-composition] Querying portfolio_config for total investment...');
+    // `db.get` fetches only the first row matching the query.
     db.get('SELECT total_investment FROM portfolio_config LIMIT 1', [], (err, result) => {
+      // --- Step 7e: Handle Total Investment Query Errors/No Data ---
+      // If there's an error OR if `result` is null/undefined (meaning the table is empty or doesn't have the column).
       if (err || !result) {
-        console.error('Error querying total investment:', err ? err.message : 'No data found');
+        console.error('[API /portfolio-composition] Error querying total investment or no config found:', err ? err.message : 'No config data found in portfolio_config table');
+        // If we can't get the total investment, still return the composition array (which might be empty).
+        // The frontend will need to handle the case where `total_investment` is missing.
         return res.json({ composition });
       }
-      
+      console.log(`[API /portfolio-composition] Total investment found: ${result.total_investment}`);
+
+      // --- Step 7f: Send Response ---
+      // Send the `total_investment` amount and the formatted `composition` array back to the client.
+      console.log('[API /portfolio-composition] Sending composition response.');
       res.json({
         total_investment: result.total_investment,
         composition
       });
-    });
-  });
-});
+    }); // End db.get for total_investment
+  }); // End db.all for allocations
+}); // End app.get('/portfolio-composition')
 
 // Portfolio Summary Metrics Functions
 
 /**
- * Calculate time period from transactions
- * @returns {Object} Start and end dates
+ * Step 78: Determine the start and end date of the transaction history.
+ * @returns {Promise<Object>} A promise that resolves with an object containing { start_date, end_date }.
  */
 function calculateTimePeriod() {
+  // Step 79: Return a promise to handle the asynchronous database query.
   return new Promise((resolve, reject) => {
+    // Step 80: Query the database to find the minimum (earliest) and maximum (latest) activity_date.
     db.get(`
       SELECT 
-        MIN(activity_date) as start_date,
-        MAX(activity_date) as end_date
+        MIN(activity_date) as start_date, -- Find the earliest date
+        MAX(activity_date) as end_date -- Find the latest date
       FROM transactions
     `, [], (err, result) => {
+      // Step 81: Handle potential database query errors.
       if (err) {
+        console.error('Error calculating time period:', err);
         reject(err);
         return;
       }
+      // Step 82: If successful, resolve the promise with the start and end dates.
       resolve({
         start_date: result.start_date,
         end_date: result.end_date
@@ -472,233 +867,260 @@ function calculateTimePeriod() {
 }
 
 /**
- * Calculate portfolio value for a specific date
- * @param {string} date - Date in YYYY-MM-DD format
- * @returns {Promise<number>} Portfolio value
+ * Step 83: Calculate the total portfolio value for a specific date.
+ * This involves summing the value of all stock holdings and the cash balance on that date.
+ * @param {string} date - The target date in YYYY-MM-DD format.
+ * @returns {Promise<number>} A promise that resolves with the calculated portfolio value.
  */
 function calculatePortfolioValueForDate(date) {
+  // Step 84: Return a promise for the asynchronous operations.
   return new Promise((resolve, reject) => {
-    // Get all transactions up to the given date
+    // Step 85: Get all transactions that occurred on or before the target date.
     db.all(`
       SELECT ticker, trans_code, quantity, price, amount
       FROM transactions
-      WHERE activity_date <= ?
-      ORDER BY activity_date ASC
+      WHERE activity_date <= ? -- Select transactions up to the given date
+      ORDER BY activity_date ASC -- Process transactions chronologically
     `, [date], (err, transactions) => {
+      // Step 86: Handle database errors.
       if (err) {
+        console.error(`Error fetching transactions for date ${date}:`, err);
         reject(err);
         return;
       }
 
+      // Step 87: If no transactions exist by this date, the portfolio value is 0.
       if (transactions.length === 0) {
-        resolve(0); // No transactions yet
+        resolve(0);
         return;
       }
 
-      // Calculate holdings for each ticker
-      const holdings = {};
-      let cashBalance = 0;
+      // Step 88: Calculate current holdings and cash balance based on the transactions.
+      const holdings = {}; // Object to store quantity of each stock { Ticker: Quantity }
+      let cashBalance = 0; // Variable to track cash
 
+      // Step 89: Iterate through each transaction up to the target date.
       transactions.forEach(transaction => {
         const { ticker, trans_code, quantity, price, amount } = transaction;
         
-        // Handle cash transactions (deposits, withdrawals, etc.)
+        // Step 90: Handle cash-only transactions (like deposits, withdrawals, rewards - where ticker is empty).
         if (!ticker || ticker.trim() === '') {
-          // For cash transactions, use the amount directly
-          cashBalance += amount;
-          return;
+          // For these, directly adjust the cash balance by the transaction amount.
+          cashBalance += (amount || 0); // Use amount if available, otherwise 0
+          return; // Move to the next transaction
         }
 
-        // Handle stock transactions
+        // Step 91: Handle stock transactions.
         if (trans_code === 'Buy') {
+          // Increase the quantity of the purchased stock.
           holdings[ticker] = (holdings[ticker] || 0) + quantity;
-          // No need to subtract amount as it's accounted in cashBalance
+          // The cost is implicitly handled by the 'amount' update below.
         } else if (trans_code === 'Sell') {
+          // Decrease the quantity of the sold stock.
           holdings[ticker] = (holdings[ticker] || 0) - quantity;
-          // No need to add amount as it's accounted in cashBalance
-        } else if (trans_code === 'CDIV') {
-          // Dividend
-          cashBalance += amount;
-        }
+          // The proceeds are implicitly handled by the 'amount' update below.
+        } 
+        // Note: Dividends (CDIV) or other codes might directly affect cash balance via 'amount'.
+        // We don't need a specific case for CDIV if its 'amount' is correctly positive.
         
-        // For all transactions, update cash balance
-        if (amount) {
+        // Step 92: Update the cash balance for ALL transactions based on the 'amount' field.
+        // Buys typically have negative amounts, Sells have positive amounts.
+        // Dividends, deposits have positive amounts. Withdrawals have negative amounts.
+        if (amount) { // Only adjust if amount is not null/zero
           cashBalance += amount;
         }
       });
 
-      // Get latest stock prices for each ticker in holdings
-      const tickers = Object.keys(holdings).filter(ticker => holdings[ticker] > 0);
+      // Step 93: Get a list of unique stock tickers currently held (quantity > 0).
+      const tickersInHoldings = Object.keys(holdings).filter(ticker => holdings[ticker] > 0.000001); // Use a small threshold for floating point precision
       
-      if (tickers.length === 0) {
-        // Only cash in portfolio
+      // Step 94: If no stocks are held, the portfolio value is just the cash balance.
+      if (tickersInHoldings.length === 0) {
         resolve(cashBalance);
         return;
       }
 
-      // Get the latest price for each ticker up to the given date
-      const promises = tickers.map(ticker => {
+      // Step 95: Fetch the latest available closing price for each held stock up to the target date.
+      const pricePromises = tickersInHoldings.map(ticker => {
+        // Step 96: Return a promise for each price lookup.
         return new Promise((resolvePrice, rejectPrice) => {
+          // Step 97: Query the stock_prices table for the latest price on or before the date.
           db.get(`
             SELECT close_price 
             FROM stock_prices
             WHERE ticker = ? AND date <= ?
-            ORDER BY date DESC
-            LIMIT 1
-          `, [ticker, date], (err, result) => {
-            if (err) {
-              rejectPrice(err);
+            ORDER BY date DESC -- Get the most recent price first
+            LIMIT 1 -- Only need the latest one
+          `, [ticker, date], (priceErr, result) => {
+            // Step 98: Handle database errors during price lookup.
+            if (priceErr) {
+              console.error(`Error fetching price for ${ticker} on ${date}:`, priceErr);
+              rejectPrice(priceErr);
               return;
             }
             
-            if (!result) {
-              // If we don't have price data for this date, use the transaction price
-              db.get(`
-                SELECT price
-                FROM transactions
-                WHERE ticker = ? AND activity_date <= ?
-                ORDER BY activity_date DESC
-                LIMIT 1
-              `, [ticker, date], (err, transaction) => {
-                if (err) {
-                  rejectPrice(err);
-                  return;
-                }
-                
-                const price = transaction ? transaction.price : 0;
-                resolvePrice({ ticker, price });
-              });
-            } else {
+            // Step 99: If a price is found in the cache, use it.
+            if (result && result.close_price !== null) {
               resolvePrice({ ticker, price: result.close_price });
+            } else {
+              // Step 100: If no price found in cache (e.g., recent transaction, API issue), fallback.
+              // We could try fetching here, but for simplicity in this function, let's log a warning.
+              // A more robust solution might fetch or use the last known transaction price.
+              console.warn(`No cached price found for ${ticker} on or before ${date}. Using 0 value for this holding.`);
+              resolvePrice({ ticker, price: 0 }); // Fallback to 0 price if not found
             }
           });
         });
       });
 
-      Promise.all(promises)
-        .then(results => {
-          // Calculate portfolio value
-          let stockValue = 0;
-          
-          results.forEach(result => {
-            const { ticker, price } = result;
-            stockValue += holdings[ticker] * price;
+      // Step 101: Wait for all price lookups to complete.
+      Promise.all(pricePromises)
+        .then(tickerPrices => {
+          // Step 102: Calculate the total value of all stock holdings.
+          let totalStockValue = 0;
+          tickerPrices.forEach(tp => {
+            // Multiply the quantity held by the fetched price.
+            totalStockValue += (holdings[tp.ticker] || 0) * tp.price;
           });
 
-          const totalValue = stockValue + cashBalance;
-          resolve(totalValue);
+          // Step 103: Calculate the total portfolio value by adding stock value and cash balance.
+          const totalPortfolioValue = totalStockValue + cashBalance;
+          // Step 104: Resolve the main promise with the total calculated value.
+          resolve(totalPortfolioValue);
         })
-        .catch(reject);
+        .catch(reject); // Catch errors from Promise.all (price lookups)
     });
   });
 }
 
 /**
- * Calculate daily portfolio values for the entire time period
- * @returns {Promise<Array>} Array of daily values { date, value }
+ * Step 105: Calculate the daily portfolio values for the entire transaction history period.
+ * @returns {Promise<Array>} A promise resolving to an array of objects { date, value }.
  */
 function calculateDailyPortfolioValues() {
+  // Step 106: Return a promise for the asynchronous operations.
   return new Promise((resolve, reject) => {
+    // Step 107: First, determine the overall start and end date of transactions.
     calculateTimePeriod()
       .then(({ start_date, end_date }) => {
+        // Step 108: Check if valid start and end dates were found.
+        if (!start_date || !end_date) {
+          console.log('No transactions found, cannot calculate daily values.');
+          resolve([]); // Resolve with empty array if no transactions
+          return;
+        }
+
+        // Step 109: Create Date objects for the start and end dates.
         const start = new Date(start_date);
         const end = new Date(end_date);
-        const days = [];
+        const days = []; // Array to hold all dates in the range
         
-        // Generate array of dates
+        // Step 110: Generate an array of all dates from start_date to end_date.
         for (let day = new Date(start); day <= end; day.setDate(day.getDate() + 1)) {
-          days.push(new Date(day).toISOString().split('T')[0]); // YYYY-MM-DD format
+          // Format each date as YYYY-MM-DD
+          days.push(day.toISOString().split('T')[0]);
         }
         
-        // Calculate portfolio value for each date
-        const promises = days.map(date => {
+        // Step 111: Create an array of promises, one for calculating the portfolio value for each day.
+        const dailyValuePromises = days.map(date => {
           return calculatePortfolioValueForDate(date)
-            .then(value => ({ date, value }));
+            .then(value => ({ date, value })); // Map result to { date, value } object
         });
         
-        Promise.all(promises)
+        // Step 112: Wait for all daily value calculations to complete.
+        Promise.all(dailyValuePromises)
           .then(dailyValues => {
-            // Filter out days with zero value (before first transaction)
-            const filteredValues = dailyValues.filter(day => day.value > 0);
+            // Step 113: Filter out any initial days where the portfolio value might be 0 or less (before the first meaningful transaction).
+            const filteredValues = dailyValues.filter(day => day.value > 0.000001); // Use threshold
+            // Step 114: Resolve the main promise with the array of daily values.
             resolve(filteredValues);
           })
-          .catch(reject);
+          .catch(reject); // Catch errors from Promise.all (daily value calculations)
       })
-      .catch(reject);
+      .catch(reject); // Catch errors from calculateTimePeriod
   });
 }
 
 /**
- * Calculate monthly portfolio values
- * @param {Array} dailyValues - Array of daily values { date, value }
- * @returns {Array} Array of monthly values { year_month, value }
+ * Step 115: Calculate month-end portfolio values from daily values.
+ * @param {Array} dailyValues - Array of daily values { date, value }, sorted by date.
+ * @returns {Array} Array of month-end values { year_month, date, value }.
  */
 function calculateMonthlyPortfolioValues(dailyValues) {
-  const monthlyValues = [];
-  const monthMap = {};
+  // Step 116: Check if there's enough data.
+  if (!dailyValues || dailyValues.length === 0) {
+    return [];
+  }
+
+  const monthlyValuesMap = {}; // Use a map to store the last value found for each month
   
-  // Group by year-month and get the last day of each month
+  // Step 117: Iterate through the sorted daily values.
   dailyValues.forEach(day => {
-    const date = new Date(day.date);
-    const yearMonth = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
-    
-    if (!monthMap[yearMonth] || new Date(day.date) > new Date(monthMap[yearMonth].date)) {
-      monthMap[yearMonth] = day;
-    }
+    // Step 118: Get the year and month in YYYY-MM format.
+    const yearMonth = day.date.substring(0, 7);
+    // Step 119: Store the current day's data, overwriting any previous entry for the same month.
+    // Since the input is sorted, the last one processed for a month will be the month-end value.
+    monthlyValuesMap[yearMonth] = day;
   });
   
-  // Convert map to array and sort by date
-  Object.keys(monthMap).forEach(yearMonth => {
-    monthlyValues.push({
-      year_month: yearMonth,
-      date: monthMap[yearMonth].date,
-      value: monthMap[yearMonth].value
-    });
-  });
+  // Step 120: Convert the map values back into an array.
+  const monthlyValuesArray = Object.values(monthlyValuesMap);
   
-  return monthlyValues.sort((a, b) => new Date(a.date) - new Date(b.date));
+  // Step 121: Map to the desired output format { year_month, date, value }.
+  return monthlyValuesArray.map(day => ({
+    year_month: day.date.substring(0, 7),
+    date: day.date,
+    value: day.value
+  }));
+  // Note: Sorting is implicitly handled because Object.values respects insertion order for non-integer keys (like YYYY-MM)
 }
 
 /**
- * Calculate yearly portfolio values
- * @param {Array} dailyValues - Array of daily values { date, value }
- * @returns {Array} Array of yearly values { year, value }
+ * Step 122: Calculate year-end portfolio values from daily values.
+ * @param {Array} dailyValues - Array of daily values { date, value }, sorted by date.
+ * @returns {Array} Array of year-end values { year, date, value }.
  */
 function calculateYearlyPortfolioValues(dailyValues) {
-  const yearlyValues = [];
-  const yearMap = {};
+  // Step 123: Check if there's enough data.
+  if (!dailyValues || dailyValues.length === 0) {
+    return [];
+  }
+
+  const yearlyValuesMap = {}; // Use a map to store the last value found for each year
   
-  // Group by year and get the last day of each year
+  // Step 124: Iterate through the sorted daily values.
   dailyValues.forEach(day => {
-    const date = new Date(day.date);
-    const year = date.getFullYear();
-    
-    if (!yearMap[year] || new Date(day.date) > new Date(yearMap[year].date)) {
-      yearMap[year] = day;
-    }
+    // Step 125: Get the year.
+    const year = day.date.substring(0, 4);
+    // Step 126: Store the current day's data, overwriting previous entries for the same year.
+    yearlyValuesMap[year] = day;
   });
   
-  // Convert map to array and sort by date
-  Object.keys(yearMap).forEach(year => {
-    yearlyValues.push({
-      year: parseInt(year),
-      date: yearMap[year].date,
-      value: yearMap[year].value
-    });
-  });
+  // Step 127: Convert the map values back into an array.
+  const yearlyValuesArray = Object.values(yearlyValuesMap);
   
-  return yearlyValues.sort((a, b) => a.year - b.year);
+  // Step 128: Map to the desired output format { year, date, value }.
+  return yearlyValuesArray.map(day => ({
+    year: parseInt(day.date.substring(0, 4)),
+    date: day.date,
+    value: day.value
+  }));
+  // Note: Sorting by year is implicitly handled due to map iteration order.
 }
 
 /**
- * Calculate the Compound Annual Growth Rate (CAGR)
- * @param {number} startValue - Starting portfolio value
- * @param {number} endValue - Ending portfolio value
- * @param {number} years - Number of years
- * @returns {number} CAGR as a percentage
+ * Step 129: Calculate the Compound Annual Growth Rate (CAGR).
+ * Represents the average annual growth of an investment over a specified period longer than one year.
+ * @param {number} startValue - The beginning value of the investment.
+ * @param {number} endValue - The ending value of the investment.
+ * @param {number} years - The number of years over which the growth occurred.
+ * @returns {number} CAGR expressed as a percentage (e.g., 8.5 for 8.5%). Returns 0 if inputs are invalid.
  */
 function calculateCAGR(startValue, endValue, years) {
+  // Step 130: Validate inputs. Start value and years must be positive.
   if (startValue <= 0 || years <= 0) return 0;
+  // Step 131: Apply the CAGR formula: ((End Value / Start Value)^(1 / Years)) - 1
+  // Multiply by 100 to express as a percentage.
   return (Math.pow(endValue / startValue, 1 / years) - 1) * 100;
 }
 
@@ -735,12 +1157,11 @@ function calculateAnnualizedStdDev(monthlyValues) {
 }
 
 /**
- * Calculate Downside Deviation (for Sortino Ratio)
+ * Calculate downside deviation
  * @param {Array} monthlyValues - Array of monthly values { year_month, value }
- * @param {number} targetReturn - Target return (usually 0)
  * @returns {number} Downside deviation
  */
-function calculateDownsideDeviation(monthlyValues, targetReturn = 0) {
+function calculateDownsideDeviation(monthlyValues) {
   if (monthlyValues.length < 2) return 0;
   
   // Calculate monthly returns
@@ -754,8 +1175,8 @@ function calculateDownsideDeviation(monthlyValues, targetReturn = 0) {
   
   // Calculate negative deviations
   const negativeDeviations = monthlyReturns
-    .filter(r => r < targetReturn)
-    .map(r => Math.pow(targetReturn - r, 2));
+    .filter(r => r < 0)
+    .map(r => Math.pow(r, 2));
   
   if (negativeDeviations.length === 0) return 0;
   
@@ -1217,472 +1638,483 @@ app.get('/portfolio-summary', async (req, res) => { // Make route async
   }
 });
 
-// Calculate style analysis data
+/**
+ * Helper Function: calculateStyleAnalysis
+ * Generates MOCK (placeholder) data for holdings-based style analysis.
+ * Style analysis typically involves looking at the underlying characteristics of the assets
+ * in the portfolio (e.g., Large Cap Value, Small Cap Growth, Bond Duration, P/E Ratio).
+ * !!! IMPORTANT: In this current version, this function generates RANDOM data for demonstration purposes.
+ * !!! A real application would need to fetch this data from a financial data provider API
+ * !!! based on the actual tickers held in the portfolio.
+ * @returns {Promise<Object>} A promise resolving to { styleAnalysis (array), portfolioTotals (object) } or rejecting on DB error.
+ */
 function calculateStyleAnalysis() {
+  console.log('[Helper calculateStyleAnalysis] Starting mock style analysis calculation...');
   return new Promise((resolve, reject) => {
-    // Get portfolio configuration
+    // --- Step SA-a: Get Portfolio Allocations ---
+    // Fetch the configured ticker allocations (ticker and percentage) from the database.
+    // This tells us which assets are supposed to be in the portfolio according to the user's setup.
     db.all('SELECT ticker, allocation_percentage FROM portfolio_config', [], (err, allocations) => {
       if (err) {
-        return reject(err);
+        // Handle database errors when fetching the configuration.
+        console.error('[Helper calculateStyleAnalysis] Error fetching portfolio config:', err.message);
+        return reject(err); // Reject the promise if DB query fails.
       }
-      
+
+      // Handle the case where the user hasn't saved a portfolio configuration yet.
       if (!allocations || allocations.length === 0) {
+        console.log('[Helper calculateStyleAnalysis] No portfolio configuration found.');
+        // Resolve with empty data structures if no config exists.
         return resolve({
-          message: 'No portfolio configuration found',
-          styleAnalysis: []
+          message: 'No portfolio configuration found', // Optional message
+          styleAnalysis: [], // Empty array for per-asset analysis
+          portfolioTotals: {} // Empty object for overall totals
         });
       }
-      
-      // Mock style analysis data for the portfolio
-      // In a real application, this would come from a financial data API
+      console.log(`[Helper calculateStyleAnalysis] Found ${allocations.length} allocations in config.`);
+
+      // --- Step SA-b: Generate Mock Style Data for Each Ticker ---
+      // Loop through each ticker found in the configuration and create placeholder style data.
       const styleAnalysis = allocations.map(allocation => {
-        // Generate mock data for this ticker
-        const secYield = (Math.random() * 2).toFixed(2);
-        const ttmYield = (Math.random() * 2.5).toFixed(2);
-        const netExpenseRatio = (Math.random() * 0.8).toFixed(2);
-        const grossExpenseRatio = ((Math.random() * 0.8) + 0.2).toFixed(2);
-        const peRatio = (Math.random() * 25 + 10).toFixed(2);
-        const duration = (Math.random() * 7).toFixed(2);
-        const contributionToReturn = (Math.random() * 5 - 1).toFixed(2);
-        const contributionToRisk = (Math.random() * 4).toFixed(2);
-        
-        // Assign a random category
-        const categories = ['Large Cap', 'Mid Cap', 'Small Cap', 'International', 'Bond', 'Cash'];
-        const category = categories[Math.floor(Math.random() * categories.length)];
-        
+        // --- Mock Data Generation --- 
+        // Replace these random values with real data fetching in a production version.
+        const mockSecYield = (Math.random() * 2).toFixed(2); // e.g., Mock 30-day SEC Yield %
+        const mockTtmYield = (Math.random() * 2.5).toFixed(2); // e.g., Mock Trailing Twelve Month Yield %
+        const mockNetExpenseRatio = (Math.random() * 0.8).toFixed(2); // e.g., Mock Net Expense Ratio %
+        const mockGrossExpenseRatio = (parseFloat(mockNetExpenseRatio) + Math.random() * 0.2).toFixed(2); // e.g., Mock Gross Expense Ratio %
+        const mockPeRatio = (Math.random() * 25 + 10).toFixed(2); // e.g., Mock Price-to-Earnings Ratio
+        const mockDuration = (Math.random() * 7).toFixed(2); // e.g., Mock Bond Duration (if applicable)
+        const mockContributionToReturn = (Math.random() * 5 - 1).toFixed(2); // e.g., Mock % Contribution to Return
+        const mockContributionToRisk = (Math.random() * 4).toFixed(2); // e.g., Mock % Contribution to Risk
+
+        // Assign a random investment style category for demonstration.
+        const categories = ['Large Cap Value', 'Large Cap Growth', 'Mid Cap Blend', 'Small Cap Value', 'International Equity', 'Intermediate Bond', 'Short-Term Bond', 'Cash/Other'];
+        const mockCategory = categories[Math.floor(Math.random() * categories.length)];
+        // --- End Mock Data Generation ---
+
+        // Return an object representing the style analysis for this specific ticker.
         return {
           ticker: allocation.ticker,
-          category,
-          weight: parseFloat(allocation.allocation_percentage).toFixed(2),
-          secYield,
-          ttmYield,
-          netExpenseRatio,
-          grossExpenseRatio,
-          peRatio,
-          duration,
-          contributionToReturn,
-          contributionToRisk
+          category: mockCategory, // Use the mock category
+          weight: parseFloat(allocation.allocation_percentage).toFixed(2), // Use the user's configured weight %
+          secYield: parseFloat(mockSecYield),
+          ttmYield: parseFloat(mockTtmYield),
+          netExpenseRatio: parseFloat(mockNetExpenseRatio),
+          grossExpenseRatio: parseFloat(mockGrossExpenseRatio),
+          peRatio: parseFloat(mockPeRatio),
+          duration: parseFloat(mockDuration),
+          contributionToReturn: parseFloat(mockContributionToReturn),
+          contributionToRisk: parseFloat(mockContributionToRisk)
         };
       });
-      
-      // Calculate portfolio totals (weighted averages)
+      console.log('[Helper calculateStyleAnalysis] Generated mock style data for each ticker.');
+
+      // --- Step SA-c: Calculate Weighted Portfolio Totals/Averages ---
+      // Calculate the overall portfolio metrics based on the individual asset styles and their weights.
+      // First, find the actual total weight (should be near 100, but might be slightly off).
       const totalWeight = allocations.reduce((sum, a) => sum + parseFloat(a.allocation_percentage), 0);
-      
-      // Only calculate if the total weight is valid
-      if (totalWeight > 0) {
-        let totalSecYield = 0;
-        let totalTtmYield = 0;
-        let totalNetExpenseRatio = 0;
-        let totalGrossExpenseRatio = 0;
-        let totalPeRatio = 0;
-        let totalDuration = 0;
-        let totalContributionToReturn = 0;
-        
+
+      let portfolioTotals = {}; // Initialize empty object for totals
+
+      // Only calculate totals if the total weight is valid (greater than a small threshold) to avoid division by zero.
+      if (totalWeight > 0.01) {
+        console.log('[Helper calculateStyleAnalysis] Calculating weighted portfolio totals...');
+        // Initialize accumulators for the weighted averages/sums.
+        let weightedSecYield = 0;
+        let weightedTtmYield = 0;
+        let weightedNetExpenseRatio = 0;
+        let weightedGrossExpenseRatio = 0;
+        let weightedPeRatio = 0;
+        let weightedDuration = 0;
+        let totalContributionToReturn = 0; // Contribution is usually summed, not averaged
+
+        // Iterate through the generated style data for each ticker.
         styleAnalysis.forEach(item => {
-          const weight = parseFloat(item.weight) / totalWeight;
-          totalSecYield += parseFloat(item.secYield) * weight;
-          totalTtmYield += parseFloat(item.ttmYield) * weight;
-          totalNetExpenseRatio += parseFloat(item.netExpenseRatio) * weight;
-          totalGrossExpenseRatio += parseFloat(item.grossExpenseRatio) * weight;
-          totalPeRatio += parseFloat(item.peRatio) * weight;
-          totalDuration += parseFloat(item.duration) * weight;
-          totalContributionToReturn += parseFloat(item.contributionToReturn) * weight;
+          // Calculate the actual weight fraction of this item (its weight / total weight).
+          const weightFraction = parseFloat(item.weight) / totalWeight;
+          // Add the weighted value of each metric to the corresponding total.
+          // For metrics like Yield, Expense Ratio, P/E, Duration, we calculate a weighted average.
+          weightedSecYield += item.secYield * weightFraction;
+          weightedTtmYield += item.ttmYield * weightFraction;
+          weightedNetExpenseRatio += item.netExpenseRatio * weightFraction;
+          weightedGrossExpenseRatio += item.grossExpenseRatio * weightFraction;
+          weightedPeRatio += item.peRatio * weightFraction;
+          weightedDuration += item.duration * weightFraction;
+          // For contribution to return/risk, we typically sum the individual contributions.
+          totalContributionToReturn += item.contributionToReturn; // Summing contribution
         });
-        
-        // Add portfolio totals
-        const portfolioTotals = {
-          totalSecYield: totalSecYield.toFixed(2),
-          totalTtmYield: totalTtmYield.toFixed(2),
-          totalNetExpenseRatio: totalNetExpenseRatio.toFixed(2),
-          totalGrossExpenseRatio: totalGrossExpenseRatio.toFixed(2),
-          totalPeRatio: totalPeRatio.toFixed(2),
-          totalDuration: totalDuration.toFixed(2),
-          totalContributionToReturn: totalContributionToReturn.toFixed(2)
+
+        // Store the calculated portfolio totals, formatted to 2 decimal places.
+        portfolioTotals = {
+          totalSecYield: parseFloat(weightedSecYield.toFixed(2)),
+          totalTtmYield: parseFloat(weightedTtmYield.toFixed(2)),
+          totalNetExpenseRatio: parseFloat(weightedNetExpenseRatio.toFixed(2)),
+          totalGrossExpenseRatio: parseFloat(weightedGrossExpenseRatio.toFixed(2)),
+          totalPeRatio: parseFloat(weightedPeRatio.toFixed(2)),
+          totalDuration: parseFloat(weightedDuration.toFixed(2)),
+          totalContributionToReturn: parseFloat(totalContributionToReturn.toFixed(2))
         };
-        
-        resolve({
-          styleAnalysis,
-          portfolioTotals
-        });
+        console.log('[Helper calculateStyleAnalysis] Portfolio totals calculated.');
       } else {
-        resolve({
-          message: 'Invalid portfolio weights',
-          styleAnalysis: []
-        });
+        // If total weight is invalid (e.g., 0), log a warning and return empty totals.
+        console.warn('[Helper calculateStyleAnalysis] Total portfolio weight is zero or invalid, cannot calculate totals.');
       }
-    });
-  });
+
+      // --- Step SA-d: Resolve Promise ---
+      // Resolve the promise with the array of per-asset style data and the object of portfolio totals.
+      resolve({
+        styleAnalysis,   // Array of objects, one per ticker
+        portfolioTotals  // Object with overall portfolio metrics
+      });
+    }); // End db.all callback
+  }); // End main promise
 }
 
-// GET route for style analysis
+// --- Route 9: GET /style-analysis ---
+// Retrieves the (currently mock) holdings-based style analysis data for the portfolio.
+// It calls the `calculateStyleAnalysis` helper function.
 app.get('/style-analysis', async (req, res) => {
+  console.log('[API /style-analysis] Request received.');
   try {
+    // --- Step 9a: Calculate Style Data ---
+    // Call the helper function, which currently generates mock data based on the saved configuration.
     const styleAnalysisData = await calculateStyleAnalysis();
+    console.log('[API /style-analysis] Style analysis data calculated (currently mock data).');
+
+    // --- Step 9b: Send Response ---
+    // Send the result object (containing `styleAnalysis` array and `portfolioTotals` object) back to the client.
     res.json(styleAnalysisData);
+
   } catch (error) {
-    console.error('Error calculating style analysis:', error);
-    res.status(500).json({ error: 'Failed to calculate style analysis' });
+    // --- Step 9c: Handle Errors ---
+    // Catch any errors that occurred, likely during the database fetch in the helper function.
+    console.error('[API /style-analysis] Error calculating style analysis:', error);
+    // Send a 500 Internal Server Error response.
+    res.status(500).json({ error: 'Failed to calculate style analysis', details: error.message });
   }
 });
 
 /**
- * Calculate Active Return by Asset for different time periods
- * @returns {Promise<Object>} Object with active return by asset for different time periods
+ * Helper Function: calculateActiveReturnByAsset
+ * Generates MOCK (placeholder) data for the active return of each asset in the portfolio
+ * relative to a benchmark, across various time periods.
+ * Active Return = Asset Return - Benchmark Return.
+ * !!! IMPORTANT: This function currently uses hardcoded benchmark returns and generates RANDOM asset returns.
+ * !!! A real implementation would require fetching historical price data for each asset and the benchmark,
+ * !!! calculating returns for each period, and then finding the difference.
+ * @returns {Promise<Object>} A promise resolving to { activeReturns (array) } or rejecting on DB error.
  */
 function calculateActiveReturnByAsset() {
+  console.log('[Helper calculateActiveReturnByAsset] Starting mock active return calculation...');
   return new Promise((resolve, reject) => {
-    // Get portfolio configuration (allocations)
-    db.all('SELECT ticker, allocation_percentage FROM portfolio_config', [], (err, allocations) => {
+    // --- Step AR-a: Get Portfolio Tickers ---
+    // Fetch the unique tickers from the user's portfolio configuration.
+    db.all('SELECT DISTINCT ticker FROM portfolio_config WHERE ticker IS NOT NULL AND ticker != \'\'', [], (err, allocations) => {
       if (err) {
+        // Handle database errors.
+        console.error('[Helper calculateActiveReturnByAsset] Error fetching portfolio config tickers:', err.message);
         return reject(err);
       }
-      
+
+      // Handle case where no configuration is saved.
       if (!allocations || allocations.length === 0) {
-        return resolve({
-          message: 'No portfolio configuration found',
-          activeReturns: []
-        });
+        console.log('[Helper calculateActiveReturnByAsset] No portfolio configuration found.');
+        return resolve({ message: 'No portfolio configuration found', activeReturns: [] });
       }
-      
-      // Get daily portfolio values
-      calculateDailyPortfolioValues()
-        .then(dailyValues => {
-          if (dailyValues.length === 0) {
-            return resolve({
-              message: 'No portfolio data available',
-              activeReturns: []
-            });
-          }
-          
-          // Define the time periods to calculate
-          const periods = [
-            { name: '1 Day', days: 1 },
-            { name: '1 Week', days: 7 },
-            { name: '1 Month', days: 30 },
-            { name: '3 Month', days: 90 },
-            { name: '6 Month', days: 180 },
-            { name: '1 Year', days: 365 },
-            { name: '3 Year', days: 3 * 365 },
-            { name: '5 Year', days: 5 * 365 },
-            { name: '10 Year', days: 10 * 365 },
-            { name: 'Full Period', days: null } // Will use all available data
-          ];
-          
-          // Get all unique tickers from portfolio configuration
-          const tickers = allocations.map(allocation => allocation.ticker);
-          
-          // Use a placeholder for benchmark returns
-          // In a real implementation, this would fetch S&P500 or another index
-          const benchmarkReturns = {
-            '1 Day': 0.05,     // 0.05% daily return
-            '1 Week': 0.2,     // 0.2% weekly return
-            '1 Month': 0.8,    // 0.8% monthly return
-            '3 Month': 2.5,    // 2.5% 3-month return
-            '6 Month': 5.0,    // 5.0% 6-month return
-            '1 Year': 10.0,    // 10.0% 1-year return
-            '3 Year': 30.0,    // 30.0% 3-year return
-            '5 Year': 50.0,    // 50.0% 5-year return
-            '10 Year': 100.0,  // 100.0% 10-year return
-            'Full Period': 150.0 // 150.0% full period return
-          };
-          
-          // Calculate active return for each ticker and period
-          const activeReturnsByAsset = tickers.map(ticker => {
-            // Get stock prices for this ticker
-            return new Promise((resolveStock, rejectStock) => {
-              db.all('SELECT date, close_price FROM stock_prices WHERE ticker = ? ORDER BY date ASC', [ticker], (err, prices) => {
-                if (err) {
-                  return rejectStock(err);
-                }
-                
-                if (!prices || prices.length === 0) {
-                  // If no prices found, return placeholder data
-                  return resolveStock({
-                    ticker,
-                    returns: periods.map(period => ({
-                      period: period.name,
-                      return: 0,
-                      benchmarkReturn: benchmarkReturns[period.name],
-                      activeReturn: -benchmarkReturns[period.name] // Underperforming benchmark
-                    }))
-                  });
-                }
-                
-                // Calculate returns for each period
-                const returns = periods.map(period => {
-                  let assetReturn;
-                  
-                  if (period.days === null) {
-                    // Full period
-                    if (prices.length > 1) {
-                      const firstPrice = prices[0].close_price;
-                      const lastPrice = prices[prices.length - 1].close_price;
-                      assetReturn = ((lastPrice - firstPrice) / firstPrice) * 100;
-                    } else {
-                      assetReturn = 0;
-                    }
-                  } else {
-                    // Specific period
-                    const today = new Date();
-                    const cutoffDate = new Date(today);
-                    cutoffDate.setDate(today.getDate() - period.days);
-                    const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
-                    
-                    // Find closest price before cutoff date
-                    let startPrice = null;
-                    for (let i = 0; i < prices.length; i++) {
-                      if (prices[i].date <= cutoffDateStr) {
-                        startPrice = prices[i].close_price;
-                      } else {
-                        break;
-                      }
-                    }
-                    
-                    // If we don't have data that far back, use the earliest price
-                    if (startPrice === null && prices.length > 0) {
-                      startPrice = prices[0].close_price;
-                    }
-                    
-                    // Get latest price
-                    const endPrice = prices[prices.length - 1].close_price;
-                    
-                    if (startPrice && endPrice) {
-                      assetReturn = ((endPrice - startPrice) / startPrice) * 100;
-                    } else {
-                      assetReturn = 0;
-                    }
-                  }
-                  
-                  const benchmarkReturn = benchmarkReturns[period.name];
-                  const activeReturn = assetReturn - benchmarkReturn;
-                  
-                  return {
-                    period: period.name,
-                    return: parseFloat(assetReturn.toFixed(2)),
-                    benchmarkReturn: parseFloat(benchmarkReturn.toFixed(2)),
-                    activeReturn: parseFloat(activeReturn.toFixed(2))
-                  };
-                });
-                
-                resolveStock({
-                  ticker,
-                  returns
-                });
-              });
-            });
+
+      // Get unique tickers from the configuration results.
+      const tickers = allocations.map(a => a.ticker);
+      console.log(`[Helper calculateActiveReturnByAsset] Found ${tickers.length} unique tickers in config.`);
+
+      // --- Step AR-b: Define Time Periods ---
+      // Specify the standard time periods for which to calculate/mock returns.
+      const periods = [
+        // { name: '1 Day', days: 1 }, // Daily calculations can be very noisy and complex to mock realistically.
+        // { name: '1 Week', days: 7 },
+        { name: '1 Month', days: 30 },
+        { name: '3 Month', days: 90 },
+        { name: '6 Month', days: 180 },
+        { name: 'YTD', days: 'YTD' }, // Special case: Year-to-Date (needs specific calculation in real version)
+        { name: '1 Year', days: 365 },
+        { name: '3 Year', days: 3 * 365 },
+        { name: '5 Year', days: 5 * 365 },
+        // { name: '10 Year', days: 10 * 365 }, // Often too long for typical user data history
+        { name: 'Full Period', days: null } // Represents the entire duration of available data
+      ];
+
+      // --- Step AR-c: Mock Benchmark Returns --- 
+      // *** These are placeholder values. Replace with actual calculations based on a benchmark like SPY. ***
+      const benchmarkReturns = {
+        '1 Month': 0.8 + (Math.random() * 1 - 0.5), // Add slight randomness
+        '3 Month': 2.5 + (Math.random() * 2 - 1), 
+        '6 Month': 5.0 + (Math.random() * 4 - 2), 
+        'YTD': 7.0 + (Math.random() * 5 - 2.5), // Example YTD
+        '1 Year': 10.0 + (Math.random() * 8 - 4), 
+        '3 Year': 30.0 + (Math.random() * 15 - 7.5),
+        '5 Year': 50.0 + (Math.random() * 20 - 10),
+        'Full Period': 60.0 + (Math.random() * 25 - 12.5) // Example full period
+      };
+
+      // --- Step AR-d: Generate Mock Active Return for Each Ticker ---
+      // Create an array of promises, one for each ticker.
+      // (Using promises here matches the structure if we were doing async price lookups).
+      const activeReturnsByAssetPromises = tickers.map(ticker => {
+        // This inner promise simulates fetching/calculating data for one ticker.
+        return new Promise((resolveTicker) => { // No reject needed for mock data
+          // For this ticker, generate mock returns for all defined periods.
+          const returns = periods.map(period => {
+            // Mock Asset Return: Benchmark return +/- some random value.
+            const benchmarkReturn = benchmarkReturns[period.name] ?? 0; // Default to 0 if period name mismatch
+            const mockAssetReturn = benchmarkReturn + (Math.random() * 10 - 5); // Benchmark +/- 5%
+            const activeReturn = mockAssetReturn - benchmarkReturn;
+
+            // Return the calculated/mocked values for this period.
+            return {
+              period: period.name, // e.g., '1 Month', '1 Year'
+              return: parseFloat(mockAssetReturn.toFixed(2)), // Asset's return %
+              benchmarkReturn: parseFloat(benchmarkReturn.toFixed(2)), // Benchmark's return %
+              activeReturn: parseFloat(activeReturn.toFixed(2)) // Difference %
+            };
           });
-          
-          Promise.all(activeReturnsByAsset)
-            .then(results => {
-              resolve({
-                activeReturns: results
-              });
-            })
-            .catch(reject);
-        })
-        .catch(reject);
-    });
-  });
+          // Resolve the promise for this ticker with its array of period returns.
+          resolveTicker({ ticker, returns });
+        });
+      });
+
+      // --- Step AR-e: Wait for All Tickers and Resolve ---
+      // `Promise.all` waits for all the inner promises (one per ticker) to resolve.
+      Promise.all(activeReturnsByAssetPromises)
+        .then(results => {
+          // `results` is an array of { ticker, returns } objects.
+          console.log('[Helper calculateActiveReturnByAsset] Mock active returns generated.');
+          resolve({ activeReturns: results }); // Resolve the main promise with the final array.
+        });
+        // No .catch needed here as the inner promises in this mock setup don't reject.
+    }); // End db.all callback
+  }); // End main promise
 }
 
-// GET route for active return by asset
+// --- Route 10: GET /active-return ---
+// Retrieves the (currently mock) active return data, showing how each asset
+// performed compared to the benchmark over various time periods.
 app.get('/active-return', (req, res) => {
+  console.log('[API /active-return] Request received.');
+  // Call the helper function `calculateActiveReturnByAsset`.
   calculateActiveReturnByAsset()
     .then(data => {
-      res.json(data);
+      // If the helper function resolves successfully...
+      console.log('[API /active-return] Active return data calculated (currently mock data).');
+      res.json(data); // Send the resulting data object { activeReturns: [...] }
     })
     .catch(err => {
-      console.error('Error calculating active return by asset:', err.message);
-      res.status(500).json({ error: 'Error calculating active return by asset' });
+      // If the helper function rejects (e.g., database error fetching tickers)...
+      console.error('[API /active-return] Error calculating active return by asset:', err.message);
+      // Send a 500 Internal Server Error response.
+      res.status(500).json({ error: 'Error calculating active return by asset', details: err.message });
     });
 });
 
 /**
- * Calculate Up vs. Down Market Performance metrics
- * @returns {Promise<Object>} Object with market performance metrics
+ * Helper Function: calculateUpDownMarketPerformance
+ * Calculates and compares portfolio performance against a benchmark during distinct
+ * up-market periods (when the benchmark had positive returns) and down-market periods
+ * (when the benchmark had negative returns), typically on a monthly basis.
+ * This requires aligned monthly return data for both the portfolio and the benchmark.
+ * @returns {Promise<Object>} A promise resolving to { marketPerformance: [...] } or rejecting on error.
  */
 function calculateUpDownMarketPerformance() {
+  console.log('[Helper calculateUpDownMarketPerformance] Starting calculation...');
   return new Promise((resolve, reject) => {
-    // Get daily portfolio values
+    // --- Step UD-a: Get Portfolio Daily Values ---
+    // Need daily values as a starting point to align with benchmark data.
     calculateDailyPortfolioValues()
-      .then(portfolioValues => {
-        if (!portfolioValues || portfolioValues.length === 0) {
-          return resolve({
-            message: 'No portfolio data available',
-            marketPerformance: []
-          });
+      .then(async portfolioDailyValues => { // Mark inner callback as async to use await inside
+        // Need at least 2 days of data to calculate even one return period.
+        if (!portfolioDailyValues || portfolioDailyValues.length < 2) {
+          console.log('[Helper calculateUpDownMarketPerformance] Insufficient portfolio data (less than 2 days).');
+          // Resolve with empty data, not an error, as it's a data limitation.
+          return resolve({ message: 'Insufficient portfolio data (need at least 2 days)', marketPerformance: [] });
+        }
+        console.log(`[Helper calculateUpDownMarketPerformance] Using ${portfolioDailyValues.length} portfolio daily values.`);
+
+        // --- Step UD-b: Fetch and Align Benchmark Data (Monthly) ---
+        const benchmarkTicker = 'SPY'; // Default benchmark ticker.
+        let benchmarkMonthlyValues; // Will store the aligned benchmark monthly values.
+        try {
+           // Use the dedicated helper function to get benchmark monthly values aligned with the portfolio.
+           benchmarkMonthlyValues = await getAlignedBenchmarkMonthlyValues(benchmarkTicker, portfolioDailyValues);
+           // Check if alignment and monthly calculation were successful.
+           if (!benchmarkMonthlyValues || benchmarkMonthlyValues.length < 2) {
+             console.warn(`[Helper calculateUpDownMarketPerformance] Insufficient aligned benchmark monthly data for ${benchmarkTicker}. Cannot calculate market performance.`);
+             // Resolve with empty data if benchmark alignment fails.
+             return resolve({ message: `Insufficient benchmark data for ${benchmarkTicker}`, marketPerformance: [] });
+           }
+           console.log(`[Helper calculateUpDownMarketPerformance] Using ${benchmarkMonthlyValues.length} aligned benchmark monthly values.`);
+        } catch (benchErr) {
+           // Handle errors during benchmark fetching/alignment.
+           console.error(`[Helper calculateUpDownMarketPerformance] Error getting aligned benchmark data for ${benchmarkTicker}:`, benchErr);
+           return reject(benchErr); // Reject the main promise if benchmark data fails critically.
         }
 
-        // Fetch actual benchmark data from stock_prices table using SPY as default
-        const benchmarkTicker = 'SPY';
-        getStockPrices(benchmarkTicker)
-          .then(benchmarkPriceData => {
-            if (!benchmarkPriceData || !benchmarkPriceData['Time Series (Daily)']) {
-              console.log(`No benchmark data available for ${benchmarkTicker}`);
-              return resolve({
-                message: `No benchmark data available for ${benchmarkTicker}`,
-                marketPerformance: []
-              });
-            }
+        // --- Step UD-c: Calculate Aligned Monthly Returns ---
+        // Calculate portfolio monthly values from its daily values.
+        const portfolioMonthlyValues = calculateMonthlyPortfolioValues(portfolioDailyValues);
 
-            // Create benchmark values with same starting value as portfolio
-            const initialPortfolioValue = portfolioValues[0].value;
-            const initialBenchmarkDate = portfolioValues[0].date;
-            const initialBenchmarkPrice = getPriceForDate(benchmarkPriceData, initialBenchmarkDate);
-            
-            if (!initialBenchmarkPrice) {
-              console.log(`No benchmark price available for initial date (${initialBenchmarkDate})`);
-              return resolve({
-                message: `No benchmark price available for initial date (${initialBenchmarkDate})`,
-                marketPerformance: []
-              });
+        // Helper function to convert an array of { year_month, value } to a map of { year_month: monthly_return }
+        function getReturnsMap(monthlyVals) {
+            const returnsMap = {};
+            for (let i = 1; i < monthlyVals.length; i++) {
+                const prev = monthlyVals[i - 1];
+                const curr = monthlyVals[i];
+                // Calculate return, handling potential division by zero.
+                const monthlyReturn = prev.value === 0 ? 0 : (curr.value / prev.value) - 1;
+                returnsMap[curr.year_month] = monthlyReturn;
             }
-            
-            // Calculate benchmark values for each portfolio date
-            const benchmarkValues = portfolioValues.map(dayValue => {
-              const benchmarkPrice = getPriceForDate(benchmarkPriceData, dayValue.date);
-              if (!benchmarkPrice) return null;
-              
-              return {
-                date: dayValue.date,
-                value: initialPortfolioValue * (benchmarkPrice / initialBenchmarkPrice)
-              };
-            }).filter(item => item !== null);
-            
-            if (benchmarkValues.length < 2) {
-              console.log('Not enough benchmark data points after matching with portfolio dates');
-              return resolve({
-                message: 'Not enough benchmark data points after matching with portfolio dates',
-                marketPerformance: []
-              });
-            }
+            return returnsMap;
+        }
 
-            // Get matching portfolio values (dates that exist in both datasets)
-            const matchedDates = new Set(benchmarkValues.map(item => item.date));
-            const matchedPortfolioValues = portfolioValues.filter(item => matchedDates.has(item.date));
-            
-            // Sort both arrays by date
-            matchedPortfolioValues.sort((a, b) => new Date(a.date) - new Date(b.date));
-            benchmarkValues.sort((a, b) => new Date(a.date) - new Date(b.date));
-            
-            // Calculate daily returns for portfolio and benchmark
-            const returns = [];
-            for (let i = 1; i < matchedPortfolioValues.length; i++) {
-              const portfolioPrevValue = matchedPortfolioValues[i - 1].value;
-              const portfolioCurrentValue = matchedPortfolioValues[i].value;
-              const portfolioReturn = ((portfolioCurrentValue - portfolioPrevValue) / portfolioPrevValue) * 100;
-              
-              const benchmarkPrevValue = benchmarkValues[i - 1].value;
-              const benchmarkCurrentValue = benchmarkValues[i].value;
-              const benchmarkReturn = ((benchmarkCurrentValue - benchmarkPrevValue) / benchmarkPrevValue) * 100;
-              
-              const activeReturn = portfolioReturn - benchmarkReturn;
-              
-              returns.push({
-                date: matchedPortfolioValues[i].date,
-                portfolioReturn,
-                benchmarkReturn,
-                activeReturn,
-                isUpMarket: benchmarkReturn > 0
-              });
-            }
+        // Get return maps for both portfolio and benchmark.
+        const portfolioReturnsMap = getReturnsMap(portfolioMonthlyValues);
+        const benchmarkReturnsMap = getReturnsMap(benchmarkMonthlyValues);
 
-            // Rest of the function remains the same (calculating up/down market metrics)
-            const upMarketDays = returns.filter(day => day.isUpMarket);
-            const downMarketDays = returns.filter(day => !day.isUpMarket);
-            
-            // Calculate metrics for up market
-            const upMarketOccurrences = upMarketDays.length;
-            const upMarketAboveBenchmark = upMarketDays.filter(day => day.activeReturn > 0).length;
-            const upMarketPercentageAboveBenchmark = upMarketOccurrences > 0 
-              ? (upMarketAboveBenchmark / upMarketOccurrences) * 100 
-              : 0;
-            
-            const upMarketAverageActiveReturn = upMarketOccurrences > 0
-              ? upMarketDays.reduce((sum, day) => sum + day.activeReturn, 0) / upMarketOccurrences
-              : 0;
-            
-            // Calculate metrics for down market
-            const downMarketOccurrences = downMarketDays.length;
-            const downMarketAboveBenchmark = downMarketDays.filter(day => day.activeReturn > 0).length;
-            const downMarketPercentageAboveBenchmark = downMarketOccurrences > 0 
-              ? (downMarketAboveBenchmark / downMarketOccurrences) * 100 
-              : 0;
-            
-            const downMarketAverageActiveReturn = downMarketOccurrences > 0
-              ? downMarketDays.reduce((sum, day) => sum + day.activeReturn, 0) / downMarketOccurrences
-              : 0;
-            
-            // Calculate total metrics
-            const totalOccurrences = returns.length;
-            const totalAboveBenchmark = returns.filter(day => day.activeReturn > 0).length;
-            const totalPercentageAboveBenchmark = totalOccurrences > 0 
-              ? (totalAboveBenchmark / totalOccurrences) * 100 
-              : 0;
-            
-            const totalAverageActiveReturn = totalOccurrences > 0
-              ? returns.reduce((sum, day) => sum + day.activeReturn, 0) / totalOccurrences
-              : 0;
-            
-            // Format the results
-            const marketPerformance = [
-              {
-                marketType: 'Up Market',
-                occurrences: upMarketOccurrences,
-                percentageAboveBenchmark: parseFloat(upMarketPercentageAboveBenchmark.toFixed(2)),
-                averageActiveReturnAboveBenchmark: parseFloat((upMarketDays.filter(day => day.activeReturn > 0).reduce((sum, day) => sum + day.activeReturn, 0) / (upMarketAboveBenchmark || 1)).toFixed(2)),
-                averageActiveReturnBelowBenchmark: parseFloat((upMarketDays.filter(day => day.activeReturn <= 0).reduce((sum, day) => sum + day.activeReturn, 0) / ((upMarketOccurrences - upMarketAboveBenchmark) || 1)).toFixed(2)),
-                totalAverageActiveReturn: parseFloat(upMarketAverageActiveReturn.toFixed(2))
-              },
-              {
-                marketType: 'Down Market',
-                occurrences: downMarketOccurrences,
-                percentageAboveBenchmark: parseFloat(downMarketPercentageAboveBenchmark.toFixed(2)),
-                averageActiveReturnAboveBenchmark: parseFloat((downMarketDays.filter(day => day.activeReturn > 0).reduce((sum, day) => sum + day.activeReturn, 0) / (downMarketAboveBenchmark || 1)).toFixed(2)),
-                averageActiveReturnBelowBenchmark: parseFloat((downMarketDays.filter(day => day.activeReturn <= 0).reduce((sum, day) => sum + day.activeReturn, 0) / ((downMarketOccurrences - downMarketAboveBenchmark) || 1)).toFixed(2)),
-                totalAverageActiveReturn: parseFloat(downMarketAverageActiveReturn.toFixed(2))
-              },
-              {
-                marketType: 'Total',
-                occurrences: totalOccurrences,
-                percentageAboveBenchmark: parseFloat(totalPercentageAboveBenchmark.toFixed(2)),
-                averageActiveReturnAboveBenchmark: parseFloat((returns.filter(day => day.activeReturn > 0).reduce((sum, day) => sum + day.activeReturn, 0) / (totalAboveBenchmark || 1)).toFixed(2)),
-                averageActiveReturnBelowBenchmark: parseFloat((returns.filter(day => day.activeReturn <= 0).reduce((sum, day) => sum + day.activeReturn, 0) / ((totalOccurrences - totalAboveBenchmark) || 1)).toFixed(2)),
-                totalAverageActiveReturn: parseFloat(totalAverageActiveReturn.toFixed(2))
-              }
-            ];
-            
-            resolve({
-              marketPerformance
+        // Create an array of aligned return objects for months where both have data.
+        const alignedReturns = [];
+        // Find common months between the two return maps.
+        const commonMonths = Object.keys(portfolioReturnsMap).filter(month => benchmarkReturnsMap.hasOwnProperty(month));
+
+        // Check if there are any common months to compare.
+        if (commonMonths.length === 0) {
+           console.warn("[Helper calculateUpDownMarketPerformance] No common months found between portfolio and benchmark returns.");
+           return resolve({ message: 'No common months found between portfolio and benchmark returns', marketPerformance: [] });
+        }
+
+        // Populate the alignedReturns array.
+        commonMonths.forEach(month => {
+            const portfolioReturn = portfolioReturnsMap[month];
+            const benchmarkReturn = benchmarkReturnsMap[month];
+            alignedReturns.push({
+                year_month: month,
+                portfolioReturn: portfolioReturn,       // Portfolio's return for the month (decimal)
+                benchmarkReturn: benchmarkReturn,       // Benchmark's return for the month (decimal)
+                activeReturn: portfolioReturn - benchmarkReturn, // Portfolio Return - Benchmark Return (decimal)
+                isUpMarket: benchmarkReturn > 0,        // True if benchmark return was positive
+                isDownMarket: benchmarkReturn < 0      // True if benchmark return was negative
             });
-          })
-          .catch(error => {
-            console.error('Error getting benchmark data:', error);
-            reject(error);
-          });
-      })
-      .catch(reject);
-  });
+        });
+        console.log(`[Helper calculateUpDownMarketPerformance] Calculated ${alignedReturns.length} aligned monthly return periods.`);
+
+        // --- Step UD-d: Separate Returns by Market Condition ---
+        // Filter the aligned returns into two groups based on benchmark performance.
+        const upMarketMonths = alignedReturns.filter(m => m.isUpMarket);
+        const downMarketMonths = alignedReturns.filter(m => m.isDownMarket);
+        console.log(`[Helper calculateUpDownMarketPerformance] Up Market Months: ${upMarketMonths.length}, Down Market Months: ${downMarketMonths.length}`);
+
+        // --- Step UD-e: Calculate Metrics for Each Condition ---
+
+        // Helper: Calculate average of a specific field in an array of objects.
+        const calculateAverage = (arr, field) => {
+           if (!arr || arr.length === 0) return 0;
+           return arr.reduce((sum, item) => sum + (item[field] || 0), 0) / arr.length;
+        }
+        // Helper: Calculate percentage of months where portfolio beat the benchmark (activeReturn > 0).
+        const calculatePercentAbove = (arr) => {
+           if (!arr || arr.length === 0) return 0;
+           return (arr.filter(item => item.activeReturn > 0).length / arr.length) * 100;
+        }
+        // Helper: Calculate average active return ONLY for months where portfolio beat benchmark.
+        const calculateAvgPositiveActiveReturn = (arr) => {
+            const positiveReturns = arr.filter(item => item.activeReturn > 0);
+            return calculateAverage(positiveReturns, 'activeReturn'); // Returns decimal average
+        };
+        // Helper: Calculate average active return ONLY for months where portfolio did NOT beat benchmark.
+        const calculateAvgNegativeActiveReturn = (arr) => {
+            const negativeReturns = arr.filter(item => item.activeReturn <= 0);
+            return calculateAverage(negativeReturns, 'activeReturn'); // Returns decimal average
+        };
+
+        // --- Calculate Up Market Metrics ---
+        const upMarketMetrics = {
+            marketType: 'Up Market',
+            occurrences: upMarketMonths.length, // Number of months benchmark was up
+            percentageAboveBenchmark: parseFloat(calculatePercentAbove(upMarketMonths).toFixed(2)), // % of up months portfolio beat benchmark
+            // Average active return ONLY in the up months where portfolio outperformed:
+            averageActiveReturnAboveBenchmark: parseFloat((calculateAvgPositiveActiveReturn(upMarketMonths) * 100).toFixed(2)), // %
+            // Average active return ONLY in the up months where portfolio underperformed:
+            averageActiveReturnBelowBenchmark: parseFloat((calculateAvgNegativeActiveReturn(upMarketMonths) * 100).toFixed(2)), // %
+            // Overall average active return across ALL up market months:
+            totalAverageActiveReturn: parseFloat((calculateAverage(upMarketMonths, 'activeReturn') * 100).toFixed(2)) // %
+        };
+
+        // --- Calculate Down Market Metrics ---
+        const downMarketMetrics = {
+            marketType: 'Down Market',
+            occurrences: downMarketMonths.length, // Number of months benchmark was down
+            percentageAboveBenchmark: parseFloat(calculatePercentAbove(downMarketMonths).toFixed(2)), // % of down months portfolio beat benchmark
+            // Average active return ONLY in the down months where portfolio outperformed:
+            averageActiveReturnAboveBenchmark: parseFloat((calculateAvgPositiveActiveReturn(downMarketMonths) * 100).toFixed(2)), // %
+            // Average active return ONLY in the down months where portfolio underperformed:
+            averageActiveReturnBelowBenchmark: parseFloat((calculateAvgNegativeActiveReturn(downMarketMonths) * 100).toFixed(2)), // %
+            // Overall average active return across ALL down market months:
+            totalAverageActiveReturn: parseFloat((calculateAverage(downMarketMonths, 'activeReturn') * 100).toFixed(2)) // %
+        };
+
+        // --- Calculate Total Market Metrics (for comparison) ---
+        const totalMarketMetrics = {
+            marketType: 'Total',
+            occurrences: alignedReturns.length, // Total number of comparable months
+            percentageAboveBenchmark: parseFloat(calculatePercentAbove(alignedReturns).toFixed(2)), // Overall % portfolio beat benchmark
+            // Average active return ONLY in months portfolio outperformed:
+            averageActiveReturnAboveBenchmark: parseFloat((calculateAvgPositiveActiveReturn(alignedReturns) * 100).toFixed(2)), // %
+            // Average active return ONLY in months portfolio underperformed:
+            averageActiveReturnBelowBenchmark: parseFloat((calculateAvgNegativeActiveReturn(alignedReturns) * 100).toFixed(2)), // %
+            // Overall average active return across ALL comparable months:
+            totalAverageActiveReturn: parseFloat((calculateAverage(alignedReturns, 'activeReturn') * 100).toFixed(2)) // %
+        };
+
+        console.log('[Helper calculateUpDownMarketPerformance] Market performance metrics calculated.');
+        // --- Step UD-f: Resolve Promise ---
+        // Resolve with an object containing an array of the three metric sets.
+        resolve({
+            marketPerformance: [upMarketMetrics, downMarketMetrics, totalMarketMetrics]
+        });
+
+      }) // End calculateDailyPortfolioValues .then() callback
+      .catch(reject); // Catch errors from calculateDailyPortfolioValues or benchmark fetching
+  }); // End main promise
 }
 
-// GET route for market performance
+// --- Route 11: GET /market-performance ---
+// Retrieves the calculated up vs. down market performance analysis.
+// Calls the `calculateUpDownMarketPerformance` helper function.
 app.get('/market-performance', (req, res) => {
+  console.log('[API /market-performance] Request received.');
+  // Call the helper function.
   calculateUpDownMarketPerformance()
     .then(data => {
+      // On success, send the resulting data (object containing `marketPerformance` array).
+      console.log('[API /market-performance] Market performance data calculated.');
       res.json(data);
     })
     .catch(err => {
-      console.error('Error calculating market performance:', err.message);
-      res.status(500).json({ error: 'Error calculating market performance' });
+      // On failure (e.g., error fetching data in helper), send an error response.
+      console.error('[API /market-performance] Error calculating market performance:', err.message);
+      res.status(500).json({ error: 'Error calculating market performance', details: err.message });
     });
 });
 
-// GET route to return the fundamentals data date
+// --- Route 12: GET /fundamentals-date ---
+// Returns a placeholder date representing when underlying 'fundamentals' data
+// (like P/E ratios, sector weights, etc. used in style analysis) was last updated.
+// !!! IMPORTANT: In this implementation, it simply returns the CURRENT server date.
+// !!! A real application would return the actual date associated with the financial data source.
 app.get('/fundamentals-date', (req, res) => {
-  // For simplicity, we'll use the current date as the fundamentals data date
+  console.log('[API /fundamentals-date] Request received.');
+  // Get the current date on the server.
   const currentDate = new Date();
-  const formattedDate = currentDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
-  
+  // Format the date into YYYY-MM-DD format.
+  const formattedDate = currentDate.toISOString().split('T')[0];
+  console.log(`[API /fundamentals-date] Sending current date as fundamentals date: ${formattedDate}`);
+  // Send the formatted date back in a JSON object.
   res.json({
     fundamentalsDate: formattedDate
   });
@@ -1699,18 +2131,49 @@ function calculateArithmeticMean(values) {
 }
 
 /**
- * Calculate Geometric Mean
- * @param {Array} values - Array of returns (as decimals, e.g., 0.05 for 5%)
- * @returns {number} Geometric mean
+ * Helper Function: calculateGeometricMean
+ * Calculates the geometric mean, which represents the average compounded return over a period.
+ * It's often considered a more accurate measure of investment performance than the simple arithmetic mean
+ * because it accounts for the effect of compounding.
+ * Formula involves multiplying all (1 + return) factors together and taking the Nth root.
+ * @param {Array<number>} values - Array of returns (as decimals, e.g., 0.05 for 5%, -0.02 for -2%).
+ * @returns {number} Geometric mean return (as a decimal).
  */
 function calculateGeometricMean(values) {
-  if (values.length === 0) return 0;
-  // Convert returns to growth factors (1 + r)
+  // Check for empty or invalid input.
+  if (!values || values.length === 0) return 0;
+
+  // Step 1: Convert returns to growth factors.
+  // A return of 0.05 (5%) becomes a growth factor of 1.05.
+  // A return of -0.02 (-2%) becomes a growth factor of 0.98.
   const growthFactors = values.map(r => 1 + r);
-  // Calculate product of all growth factors
+
+  // Step 2: Calculate the product of all growth factors.
+  // Multiply all the growth factors together.
   const product = growthFactors.reduce((prod, factor) => prod * factor, 1);
-  // Take the nth root (where n is the number of periods)
-  return Math.pow(product, 1 / values.length) - 1;
+
+  // --- Handle Edge Cases --- 
+  // If the product is negative and we have an even number of periods, the result is mathematically complex (involves imaginary numbers).
+  // This usually indicates very large losses. We return -1 (representing -100% return) as a practical indicator.
+  if (product < 0 && values.length % 2 === 0) {
+       console.warn("[Helper calculateGeometricMean] Even root of negative product encountered. Returning -100%.");
+       return -1; // Indicate total loss or mathematical impossibility
+  }
+  // If the product is exactly zero, it means the value went to zero at some point.
+  if (product === 0) return -1; // Indicate total loss
+
+  // Step 3: Calculate the Nth root of the product.
+  // N is the number of return periods (which is the length of the input `values` array).
+  // Use Math.pow(base, exponent). The exponent is (1 / N).
+  // Use Math.abs(product) in case the product is negative (with an odd number of periods).
+  const nthRoot = Math.pow(Math.abs(product), 1 / values.length);
+
+  // Step 4: Convert the result back to an average return.
+  // Subtract 1 from the Nth root.
+  // Re-apply the negative sign if the original product was negative (for odd number of periods).
+  const geometricMeanReturn = (product < 0 ? -nthRoot : nthRoot) - 1;
+
+  return geometricMeanReturn;
 }
 
 /**
@@ -1747,16 +2210,39 @@ function calculateBeta(portfolioReturns, benchmarkReturns) {
 }
 
 /**
- * Calculate Alpha (excess return of portfolio over benchmark, adjusted for risk)
- * @param {number} portfolioReturn - Annualized portfolio return (as decimal)
- * @param {number} riskFreeRate - Risk-free rate (as decimal)
- * @param {number} beta - Portfolio beta relative to benchmark
- * @param {number} benchmarkReturn - Annualized benchmark return (as decimal)
- * @returns {number} Alpha value as a percentage
+ * Helper Function: calculateAlpha
+ * Calculates the Alpha of a portfolio.
+ * Alpha represents the excess return of the portfolio compared to its expected return, given its Beta (market risk) and the benchmark's performance.
+ * It's often considered a measure of the value added (or subtracted) by active management (e.g., stock selection).
+ * - Positive Alpha: Portfolio performed better than expected for the risk taken.
+ * - Negative Alpha: Portfolio performed worse than expected.
+ * - Alpha = 0: Portfolio performed as expected.
+ * Formula uses the Capital Asset Pricing Model (CAPM): Alpha = PortfolioReturn - (RiskFreeRate + Beta * (BenchmarkReturn - RiskFreeRate))
+ * @param {number} portfolioAnnualizedReturn - Portfolio's annualized return (as decimal, e.g., 0.10 for 10%).
+ * @param {number} riskFreeRateDecimal - Annual risk-free rate (as decimal, e.g., 0.015 for 1.5%).
+ * @param {number|null} beta - Portfolio's Beta relative to the benchmark (result from `calculateBeta`).
+ * @param {number} benchmarkAnnualizedReturn - Benchmark's annualized return (as decimal).
+ * @returns {number|null} Alpha value (as a percentage), or null if Beta is missing.
  */
-function calculateAlpha(portfolioReturn, riskFreeRate, beta, benchmarkReturn) {
-  // Alpha = Portfolio Return - [Risk Free Rate + Beta * (Benchmark Return - Risk Free Rate)]
-  return (portfolioReturn - (riskFreeRate + beta * (benchmarkReturn - riskFreeRate))) * 100;
+function calculateAlpha(portfolioAnnualizedReturn, riskFreeRateDecimal, beta, benchmarkAnnualizedReturn) {
+   // --- Input Validation ---
+   // Alpha calculation requires a valid Beta value.
+   if (beta === null) {
+      console.warn("[Helper calculateAlpha] Beta is null. Cannot calculate Alpha.");
+      return null; // Cannot calculate Alpha without Beta.
+   }
+
+   // --- Calculate Expected Return (based on CAPM) ---
+   // Expected Return = RiskFreeRate + Beta * (Market Risk Premium)
+   // Market Risk Premium = Benchmark Return - Risk Free Rate
+   const expectedReturn = riskFreeRateDecimal + beta * (benchmarkAnnualizedReturn - riskFreeRateDecimal);
+
+   // --- Calculate Alpha ---
+   // Alpha = Actual Portfolio Return - Expected Return
+   const alpha = portfolioAnnualizedReturn - expectedReturn;
+
+   // Return Alpha as a percentage.
+   return alpha * 100;
 }
 
 /**
@@ -1779,7 +2265,7 @@ function calculateRSquared(portfolioReturns, benchmarkReturns) {
  * Calculate Treynor Ratio (return earned in excess of risk-free rate per unit of market risk)
  * @param {number} portfolioReturn - Annualized portfolio return (as decimal)
  * @param {number} riskFreeRate - Risk-free rate (as decimal)
- * @param {number} beta - Portfolio beta
+ * @param {number} beta - Portfolio beta relative to benchmark
  * @returns {number} Treynor Ratio
  */
 function calculateTreynorRatio(portfolioReturn, riskFreeRate, beta) {
@@ -2313,7 +2799,7 @@ app.get('/portfolio-growth', async (req, res) => {
     const portfolioValues = await calculateDailyPortfolioValues();
     
     if (!portfolioValues || portfolioValues.length === 0) {
-      console.log('No portfolio data available, returning fallback data');
+      console.log('No portfolio data available');
       // Return fallback data instead of 404
       const startDate = new Date('2023-01-01');
       const endDate = new Date();
@@ -2337,7 +2823,7 @@ app.get('/portfolio-growth', async (req, res) => {
     const benchmarkPrices = await getStockPrices(benchmarkTicker);
     
     if (!benchmarkPrices || !benchmarkPrices['Time Series (Daily)']) {
-      console.log(`No benchmark data available for ${benchmarkTicker}, returning fallback data`);
+      console.log(`No benchmark data available for ${benchmarkTicker}`);
       // Return fallback data instead of 404
       const fallbackData = portfolioValues.map(item => {
         return {
@@ -2356,7 +2842,7 @@ app.get('/portfolio-growth', async (req, res) => {
     const initialBenchmarkPrice = getPriceForDate(benchmarkPrices, initialBenchmarkDate);
     
     if (!initialBenchmarkPrice) {
-      console.log(`No benchmark price available for initial date (${initialBenchmarkDate}), returning fallback data`);
+      console.log(`No benchmark price available for initial date (${initialBenchmarkDate})`);
       // Return fallback data instead of 404
       const fallbackData = portfolioValues.map(item => {
         return {
@@ -2635,18 +3121,21 @@ async function getAlignedBenchmarkMonthlyValues(benchmarkTicker, portfolioDailyV
         }
 
         // Create benchmark daily values aligned with portfolio dates and scaled
-        const benchmarkDailyValues = portfolioDailyValues.map(item => {
-            const benchmarkPrice = getPriceForDate(benchmarkPrices, item.date);
+        const benchmarkDailyValues = [];
+        
+        for (const mv of portfolioDailyValues) {
+            const benchmarkPrice = getPriceForDate(benchmarkPrices, mv.date);
             if (benchmarkPrice !== null) {
-                return {
-                    date: item.date,
+                benchmarkDailyValues.push({
+                    date: mv.date,
                     value: initialPortfolioValue * (benchmarkPrice / initialBenchmarkPrice)
-                };
+                });
             }
-            return null;
-        }).filter(item => item !== null);
-
-        if (benchmarkDailyValues.length < 2) {
+            // Skip dates where benchmark price is missing instead of approximating
+        }
+        
+        // Handle the case where we couldn't get enough benchmark prices
+        if (benchmarkDailyValues.length < portfolioDailyValues.length / 2) {
             console.warn("[getAlignedBenchmarkMonthlyValues] Not enough aligned benchmark daily data points.");
             return null;
         }
@@ -2978,46 +3467,120 @@ app.get('/stock-prices', async (req, res) => {
 
 // GET /annual-returns - Fetches calculated annual returns
 app.get('/annual-returns', async (req, res) => {
-    try {
-        const benchmark = req.query.benchmark || 'SPY'; // Default to SPY, allow override
-        console.log(`[API /annual-returns] Request received. Benchmark: ${benchmark}`);
-
-        const annualData = await calculateAnnualReturns(benchmark);
-
-        if (!annualData) {
-             console.error("[API /annual-returns] Calculation returned no data.");
-             return res.status(500).json({ message: "Failed to calculate annual returns." });
-        }
-
-        console.log(`[API /annual-returns] Sending ${annualData.length} years of data.`);
-        res.json(annualData);
-
-    } catch (error) {
-        console.error(`[API /annual-returns] Error: ${error.message}`);
-        res.status(500).json({ message: "Error calculating annual returns.", error: error.message });
+  try {
+    const benchmarkTicker = req.query.benchmark || 'SPY'; // Default to SPY, allow override
+    console.log(`[API /annual-returns] Request received. Benchmark: ${benchmarkTicker}`);
+    
+    // Get daily portfolio values
+    const dailyValues = await calculateDailyPortfolioValues();
+    
+    if (!dailyValues || dailyValues.length === 0) {
+      return res.status(404).json({
+        error: 'No portfolio data available',
+        message: 'Please upload transaction data before viewing annual returns.'
+      });
     }
+    
+    // Calculate yearly values from daily values
+    const yearlyValues = calculateYearlyPortfolioValues(dailyValues);
+    
+    if (!yearlyValues || yearlyValues.length === 0) {
+      return res.status(404).json({
+        error: 'No yearly portfolio data available',
+        message: 'Could not calculate yearly data from your transactions. Please ensure your transactions span a complete year.'
+      });
+    }
+    
+    // Get benchmark price data
+    const benchmarkPrices = await getStockPrices(benchmarkTicker);
+    
+    if (!benchmarkPrices || !benchmarkPrices['Time Series (Daily)']) {
+      console.log(`No benchmark data available for ${benchmarkTicker}`);
+      return res.status(500).json({
+        error: 'Benchmark data unavailable',
+        message: `Could not retrieve data for benchmark ${benchmarkTicker}. Please try again with a different benchmark.`
+      });
+    }
+    
+    // Calculate benchmark yearly values
+    const benchmarkYearlyValues = [];
+    let prevYearValue = null;
+    
+    // Sort yearly values by year
+    yearlyValues.sort((a, b) => parseInt(a.year) - parseInt(b.year));
+    
+    for (const yearData of yearlyValues) {
+      const year = yearData.year;
+      const startDate = `${year}-01-01`;
+      const endDate = `${year}-12-31`;
+      
+      // Get benchmark price at start of year
+      const startPrice = getPriceForDate(benchmarkPrices, startDate);
+      // Get benchmark price at end of year
+      const endPrice = getPriceForDate(benchmarkPrices, endDate);
+      
+      if (startPrice && endPrice) {
+        const benchmarkReturn = ((endPrice / startPrice) - 1) * 100;
+        
+        // Calculate benchmark balance (cumulative)
+        let benchmarkBalance;
+        if (prevYearValue === null) {
+          benchmarkBalance = yearData.value; // Start at same value as portfolio for first year
+        } else {
+          benchmarkBalance = prevYearValue * (1 + (benchmarkReturn / 100));
+        }
+        prevYearValue = benchmarkBalance;
+        
+        benchmarkYearlyValues.push({
+          year,
+          return: parseFloat(benchmarkReturn.toFixed(2)),
+          value: parseFloat(benchmarkBalance.toFixed(2))
+        });
+      }
+    }
+    
+    // Combine portfolio and benchmark yearly data
+    const annualReturns = yearlyValues.map(yearData => {
+      const benchmarkData = benchmarkYearlyValues.find(b => b.year === yearData.year);
+      
+      return {
+        year: yearData.year,
+        portfolioValue: parseFloat(yearData.value.toFixed(2)),
+        benchmarkReturn: benchmarkData ? benchmarkData.return : null,
+        benchmarkValue: benchmarkData ? benchmarkData.value : null
+      };
+    });
+    
+    res.json(annualReturns);
+  } catch (error) {
+    console.error('Error calculating annual returns:', error);
+    res.status(500).json({ 
+      error: 'Error calculating annual returns',
+      message: 'An error occurred while calculating annual returns. Please try again later.'
+    });
+  }
 });
 
 // GET /monthly-returns - Fetches calculated monthly returns
 app.get('/monthly-returns', async (req, res) => {
-    try {
-        const benchmark = req.query.benchmark || 'SPY'; // Default to SPY, allow override
-        console.log(`[API /monthly-returns] Request received. Benchmark: ${benchmark}`);
+  try {
+    const benchmark = req.query.benchmark || 'SPY'; // Default to SPY, allow override
+    console.log(`[API /monthly-returns] Request received. Benchmark: ${benchmark}`);
 
-        const monthlyData = await calculateMonthlyReturns(benchmark);
+    const monthlyData = await calculateMonthlyReturns(benchmark);
 
-        if (!monthlyData) {
-             console.error("[API /monthly-returns] Calculation returned no data.");
-             return res.status(500).json({ message: "Failed to calculate monthly returns." });
-        }
-
-        console.log(`[API /monthly-returns] Sending ${monthlyData.length} months of data.`);
-        res.json(monthlyData);
-
-    } catch (error) {
-        console.error(`[API /monthly-returns] Error: ${error.message}`);
-        res.status(500).json({ message: "Error calculating monthly returns.", error: error.message });
+    if (!monthlyData) {
+       console.error("[API /monthly-returns] Calculation returned no data.");
+       return res.status(500).json({ message: "Failed to calculate monthly returns." });
     }
+
+    console.log(`[API /monthly-returns] Sending ${monthlyData.length} months of data.`);
+    res.json(monthlyData);
+
+  } catch (error) {
+    console.error(`[API /monthly-returns] Error: ${error.message}`);
+    res.status(500).json({ message: "Error calculating monthly returns.", error: error.message });
+  }
 });
 
 // --- Server Start ---
@@ -3043,7 +3606,7 @@ process.on('SIGINT', () => {
 
 /**
  * Calculate monthly returns for portfolio and benchmark
- * @param {string} benchmarkTicker - Ticker symbol for benchmark (default: 'SPY')
+ * @param {string} benchmarkTicker - The ticker symbol for the benchmark (e.g., 'SPY').
  * @returns {Promise<Array>} Array of monthly return objects
  */
 async function calculateMonthlyReturns(benchmarkTicker = 'SPY') {
@@ -3058,95 +3621,581 @@ async function calculateMonthlyReturns(benchmarkTicker = 'SPY') {
         
         // Fetch benchmark prices
         const benchmarkPrices = await getStockPrices(benchmarkTicker);
+
+        if (!benchmarkPrices || !benchmarkPrices['Time Series (Daily)']) {
+            console.warn("[calculateMonthlyReturns] No benchmark price data available for " + benchmarkTicker);
+            return null; // Cannot calculate benchmark metrics
+        }
+
+        // Align benchmark data with portfolio start date and value
+        const initialPortfolioValue = dailyValues[0].value;
+        const initialBenchmarkDate = dailyValues[0].date;
+        const initialBenchmarkPrice = getPriceForDate(benchmarkPrices, initialBenchmarkDate);
+
+        if (initialBenchmarkPrice === null || initialBenchmarkPrice <= 0) {
+            console.warn("[calculateMonthlyReturns] Could not find valid benchmark price for " + benchmarkTicker + " on initial date " + initialBenchmarkDate);
+            return null; // Cannot proceed without starting price
+        }
+
+        // Create benchmark daily values aligned with portfolio dates and scaled
+        const benchmarkDailyValues = [];
         
-        // Fetch all asset prices
-        for (const ticker of uniqueTickers) {
-            const prices = await getStockPrices(ticker);
-            if (prices) {
-                assetPricesMap.set(ticker, prices);
+        for (const mv of monthlyValues) {
+            const benchmarkPrice = getPriceForDate(benchmarkPrices, mv.date);
+            if (benchmarkPrice !== null) {
+                benchmarkDailyValues.push({
+                    date: mv.date,
+                    value: initialPortfolioValue * (benchmarkPrice / initialBenchmarkPrice)
+                });
             }
+            // Skip dates where benchmark price is missing instead of approximating
         }
         
-        while (currentMonth <= endDate) {
-            // Calculate month-specific variables
-            const yearMonthStr = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}`;
-            // Additional calculations...
-            
-            // --- Benchmark Calculation ---
-            let benchmarkStartValue = null;
-            let benchmarkEndValue = null;
-            let benchmarkReturn = null;
-            let benchmarkEndBalance = null; // Cumulative growth factor
+        // Handle the case where we couldn't get enough benchmark prices
+        if (benchmarkDailyValues.length < monthlyValues.length / 2) {
+            console.warn("[calculateMonthlyReturns] Not enough aligned benchmark daily data points.");
+            return null;
+        }
 
-            if (benchmarkPrices) {
-                // Get price at the START of the period (end of previous month or actual start)
-                 benchmarkStartValue = getPriceForDate(benchmarkPrices, portfolioLookupStartDate); // Use same lookup date as portfolio start
+        // Calculate benchmark monthly values from the aligned daily values
+        const benchmarkMonthlyValues = calculateMonthlyPortfolioValues(benchmarkDailyValues);
+        console.log("[calculateMonthlyReturns] Calculated " + benchmarkMonthlyValues.length + " benchmark monthly values.");
+        return benchmarkMonthlyValues;
 
-                 // Get price at the END of the period
-                 benchmarkEndValue = getPriceForDate(benchmarkPrices, actualPeriodEndDate);
-
-                if (benchmarkStartValue !== null && benchmarkEndValue !== null && benchmarkStartValue !== 0) {
-                    benchmarkReturn = (benchmarkEndValue / benchmarkStartValue) - 1;
-                    // Update cumulative factor only if return is calculable
-                    cumulativeBenchmarkFactor *= (1 + benchmarkReturn);
-                    benchmarkEndBalance = cumulativeBenchmarkFactor;
-                    console.log(`[calculateMonthlyReturns] Month ${yearMonthStr} Benchmark (${benchmarkTicker}): Start=${benchmarkStartValue?.toFixed(2)}, End=${benchmarkEndValue?.toFixed(2)}, Return=${(benchmarkReturn * 100)?.toFixed(2)}%`);
-                } else {
-                     console.warn(`[calculateMonthlyReturns] Month ${yearMonthStr} Benchmark (${benchmarkTicker}): Insufficient price data (Start: ${benchmarkStartValue}, End: ${benchmarkEndValue})`);
-                     // Keep cumulative factor unchanged if return cannot be calculated
-                     benchmarkEndBalance = cumulativeBenchmarkFactor;
-                }
-            } else {
-                 // If no benchmark data at all, keep cumulative factor at 1
-                 benchmarkEndBalance = cumulativeBenchmarkFactor;
-            }
-
-
-            // --- Individual Asset Returns Calculation ---
-            const individualAssetReturns = {};
-            for (const ticker of uniqueTickers) {
-                const assetPrices = assetPricesMap.get(ticker);
-                if (assetPrices) {
-                    // Use same date logic as benchmark/portfolio
-                    const assetStartPrice = getPriceForDate(assetPrices, portfolioLookupStartDate);
-                    const assetEndPrice = getPriceForDate(assetPrices, actualPeriodEndDate);
-
-                    if (assetStartPrice !== null && assetEndPrice !== null && assetStartPrice !== 0) {
-                        individualAssetReturns[ticker] = (assetEndPrice / assetStartPrice) - 1;
-                    } else {
-                        individualAssetReturns[ticker] = null; // Not enough data for this month/asset
-                    }
-                } else {
-                    individualAssetReturns[ticker] = null; // Price data unavailable
-                }
-            }
-
-            monthlyReturns.push({
-                yearMonth: yearMonthStr,
-                portfolioReturn: portfolioReturn !== null ? parseFloat((portfolioReturn * 100).toFixed(2)) : null, // Store as percentage
-                portfolioBalance: portfolioEndBalance !== null ? parseFloat(portfolioEndBalance.toFixed(2)) : null,
-                benchmarkReturn: benchmarkReturn !== null ? parseFloat((benchmarkReturn * 100).toFixed(2)) : null, // Store as percentage
-                benchmarkBalance: benchmarkEndBalance !== null ? parseFloat(benchmarkEndBalance.toFixed(4)) : null, // Store cumulative factor
-                individualAssetReturns: Object.fromEntries(
-                    Object.entries(individualAssetReturns).map(([ticker, ret]) => [
-                        ticker,
-                        ret !== null ? parseFloat((ret * 100).toFixed(2)) : null // Store as percentage
-                    ])
-                ),
-            });
-
-            // Move to the next month
-            currentMonth.setMonth(currentMonth.getMonth() + 1);
-        } // End of while loop
-        
-        console.log(`[calculateMonthlyReturns] Finished calculation. Generated ${monthlyReturns.length} months of data.`);
-        return monthlyReturns;
-        
     } catch (error) {
-        console.error("[calculateMonthlyReturns] Unexpected error:", error);
-        throw error; // Re-throw the error to be caught by the route handler
+        console.error("[calculateMonthlyReturns] Error processing benchmark data for " + benchmarkTicker + ":", error);
+        return null; // Return null on error
     }
-} // End of calculateMonthlyReturns function
+}
+
+// ... existing calculateCAGR, calculateAnnualizedStdDev, etc. ...
+
+/**
+ * Calculate benchmark correlation using Pearson correlation coefficient.
+ * @param {Array} portfolioMonthlyValues - Array of portfolio monthly values { year_month, value }.
+ * @param {Array} benchmarkMonthlyValues - Array of benchmark monthly values { year_month, value }.
+ * @returns {number|null} Correlation coefficient or null if calculation is not possible.
+ */
+function calculateBenchmarkCorrelation(portfolioMonthlyValues, benchmarkMonthlyValues) {
+  // Return null if insufficient data
+  if (!portfolioMonthlyValues || portfolioMonthlyValues.length < 2 || !benchmarkMonthlyValues || benchmarkMonthlyValues.length < 2) {
+    return null;
+  }
+
+  // Helper to get monthly returns with year_month
+  function getReturns(monthlyValues) {
+    const returns = {};
+    for (let i = 1; i < monthlyValues.length; i++) {
+      const prev = monthlyValues[i - 1];
+      const curr = monthlyValues[i];
+      if (prev.value !== 0) { // Avoid division by zero
+        returns[curr.year_month] = (curr.value / prev.value) - 1;
+      }
+    }
+    return returns;
+  }
+
+  const portfolioReturnsMap = getReturns(portfolioMonthlyValues);
+  const benchmarkReturnsMap = getReturns(benchmarkMonthlyValues);
+
+  // Align returns by year_month
+  const portfolioReturns = [];
+  const benchmarkReturns = [];
+  const commonMonths = Object.keys(portfolioReturnsMap).filter(month => benchmarkReturnsMap.hasOwnProperty(month));
+
+  if (commonMonths.length < 2) { // Need at least 2 common data points for correlation
+      console.warn("[calculateBenchmarkCorrelation] Less than 2 common months for correlation.");
+      return null;
+  }
+
+  commonMonths.forEach(month => {
+      portfolioReturns.push(portfolioReturnsMap[month]);
+      benchmarkReturns.push(benchmarkReturnsMap[month]);
+  });
+
+  const n = portfolioReturns.length;
+  if (n === 0) return null;
+
+  const sumX = portfolioReturns.reduce((s, v) => s + v, 0);
+  const sumY = benchmarkReturns.reduce((s, v) => s + v, 0);
+  const sumXY = portfolioReturns.reduce((s, v, i) => s + v * benchmarkReturns[i], 0);
+  const sumX2 = portfolioReturns.reduce((s, v) => s + v * v, 0);
+  const sumY2 = benchmarkReturns.reduce((s, v) => s + v * v, 0);
+
+  const numerator = n * sumXY - sumX * sumY;
+  const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+
+  if (denominator === 0) {
+    console.warn("[calculateBenchmarkCorrelation] Denominator is zero, cannot calculate correlation.");
+    return null; // Avoid division by zero; correlation is undefined
+  }
+
+  const correlation = numerator / denominator;
+  return correlation; // Return as a coefficient (e.g., 0.85)
+}
+
+/**
+ * Calculate upside/downside capture ratio.
+ * @param {Array} portfolioMonthlyValues - Array of portfolio monthly values { year_month, value }.
+ * @param {Array} benchmarkMonthlyValues - Array of benchmark monthly values { year_month, value }.
+ * @returns {Object|null} Object with upside/downside ratios (as percentages) or null if calculation not possible.
+ */
+function calculateCaptureRatios(portfolioMonthlyValues, benchmarkMonthlyValues) {
+  // Return null if insufficient data
+  if (!portfolioMonthlyValues || portfolioMonthlyValues.length < 2 || !benchmarkMonthlyValues || benchmarkMonthlyValues.length < 2) {
+    return null;
+  }
+
+  // Helper to get monthly returns with year_month
+  function getReturns(monthlyValues) {
+    const returns = {};
+    for (let i = 1; i < monthlyValues.length; i++) {
+      const prev = monthlyValues[i - 1];
+      const curr = monthlyValues[i];
+      if (prev.value !== 0) { // Avoid division by zero
+        returns[curr.year_month] = (curr.value / prev.value) - 1;
+      }
+    }
+    return returns;
+  }
+
+  const portfolioReturnsMap = getReturns(portfolioMonthlyValues);
+  const benchmarkReturnsMap = getReturns(benchmarkMonthlyValues);
+
+  // Align returns by year_month
+  const portfolioUpReturns = [];
+  const benchmarkUpReturns = [];
+  const portfolioDownReturns = [];
+  const benchmarkDownReturns = [];
+
+  const commonMonths = Object.keys(portfolioReturnsMap).filter(month => benchmarkReturnsMap.hasOwnProperty(month));
+
+  if (commonMonths.length === 0) {
+    console.warn("[calculateCaptureRatios] No common months found.");
+    return null;
+  }
+
+  commonMonths.forEach(month => {
+    const portfolioReturn = portfolioReturnsMap[month];
+    const benchmarkReturn = benchmarkReturnsMap[month];
+
+    if (benchmarkReturn > 0) {
+      portfolioUpReturns.push(1 + portfolioReturn);
+      benchmarkUpReturns.push(1 + benchmarkReturn);
+    } else if (benchmarkReturn < 0) {
+      portfolioDownReturns.push(1 + portfolioReturn);
+      benchmarkDownReturns.push(1 + benchmarkReturn);
+    }
+    // Ignore months where benchmark return is exactly 0
+  });
+
+  // Helper to calculate geometric mean from (1 + return) values
+  function geometricMean(returnsPlusOne) {
+    if (returnsPlusOne.length === 0) return null;
+    const product = returnsPlusOne.reduce((prod, val) => prod * val, 1);
+    // Use Math.abs for the base in case product is negative (can happen with odd number of negative returns)
+    // and handle potential complex numbers by checking sign before powering
+    if (product < 0 && returnsPlusOne.length % 2 === 0) {
+         console.warn("[geometricMean] Even root of negative number encountered. Returning null.");
+         return null; // Or handle appropriately
+    }
+    const mean = Math.pow(Math.abs(product), 1 / returnsPlusOne.length);
+    return product < 0 ? -mean : mean; // Re-apply sign if needed
+  }
+
+  const geoMeanPortfolioUp = geometricMean(portfolioUpReturns);
+  const geoMeanBenchmarkUp = geometricMean(benchmarkUpReturns);
+  const geoMeanPortfolioDown = geometricMean(portfolioDownReturns);
+  const geoMeanBenchmarkDown = geometricMean(benchmarkDownReturns);
+
+  let upsideRatio = null;
+  if (geoMeanBenchmarkUp !== null && geoMeanBenchmarkUp !== 1) { // Check against 1 (0% return)
+      const compoundedPortfolioUp = geoMeanPortfolioUp !== null ? Math.pow(geoMeanPortfolioUp, portfolioUpReturns.length) : 1;
+      const compoundedBenchmarkUp = Math.pow(geoMeanBenchmarkUp, benchmarkUpReturns.length);
+      // Ratio of compounded returns
+      upsideRatio = compoundedBenchmarkUp !== 0 ? (compoundedPortfolioUp / compoundedBenchmarkUp) * 100 : null;
+  } else {
+      console.warn("[calculateCaptureRatios] No benchmark up-market returns or compounded benchmark return is 1 (0%).");
+  }
+
+  let downsideRatio = null;
+  if (geoMeanBenchmarkDown !== null && geoMeanBenchmarkDown !== 1) { // Check against 1 (0% return)
+      const compoundedPortfolioDown = geoMeanPortfolioDown !== null ? Math.pow(geoMeanPortfolioDown, portfolioDownReturns.length) : 1;
+      const compoundedBenchmarkDown = Math.pow(geoMeanBenchmarkDown, benchmarkDownReturns.length);
+      // Ratio of compounded returns
+      downsideRatio = compoundedBenchmarkDown !== 0 ? (compoundedPortfolioDown / compoundedBenchmarkDown) * 100 : null;
+  } else {
+       console.warn("[calculateCaptureRatios] No benchmark down-market returns or compounded benchmark return is 1 (0%).");
+  }
+
+  return {
+    upside_capture_ratio: upsideRatio !== null ? parseFloat(upsideRatio.toFixed(2)) : null,
+    downside_capture_ratio: downsideRatio !== null ? parseFloat(downsideRatio.toFixed(2)) : null
+  };
+}
+
+// GET /risk-return endpoint to calculate and return portfolio risk and return metrics
+app.get('/risk-return', async (req, res) => {
+  try {
+    const benchmarkTicker = req.query.benchmark || 'SPY';
+    console.log(`Calculating risk-return metrics with benchmark: ${benchmarkTicker}`);
+    
+    // Get daily portfolio values
+    const dailyValues = await calculateDailyPortfolioValues();
+    
+    if (!dailyValues || dailyValues.length === 0) {
+      return res.status(404).json({ 
+        error: 'No portfolio data available',
+        message: 'Please upload transaction data before viewing risk-return metrics.'
+      });
+    }
+    
+    // Calculate monthly values from daily values
+    const monthlyValues = calculateMonthlyPortfolioValues(dailyValues);
+    
+    if (!monthlyValues || monthlyValues.length < 2) {
+      return res.status(404).json({ 
+        error: 'Insufficient portfolio data',
+        message: 'Risk-return metrics require at least 2 months of data. Please upload more transactions.'
+      });
+    }
+    
+    // Get time period in years
+    const firstDate = new Date(dailyValues[0].date);
+    const lastDate = new Date(dailyValues[dailyValues.length - 1].date);
+    const yearDiff = (lastDate - firstDate) / (365.25 * 24 * 60 * 60 * 1000);
+    
+    // Calculate start and end values
+    const startValue = dailyValues[0].value;
+    const endValue = dailyValues[dailyValues.length - 1].value;
+    
+    // Calculate key metrics
+    const metrics = {
+      // Time period
+      start_date: dailyValues[0].date,
+      end_date: dailyValues[dailyValues.length - 1].date,
+      time_period_years: parseFloat(yearDiff.toFixed(2)),
+      
+      // Portfolio values
+      start_balance: parseFloat(startValue.toFixed(2)),
+      end_balance: parseFloat(endValue.toFixed(2)),
+      
+      // Return metrics
+      annualized_return: calculateCAGR(startValue, endValue, yearDiff),
+      cumulative_return: calculateCumulativeReturn(startValue, endValue),
+      
+      // Risk metrics
+      annualized_std_dev: calculateAnnualizedStdDev(monthlyValues),
+      sharpe_ratio: calculateSharpeRatio(
+        calculateCAGR(startValue, endValue, yearDiff),
+        calculateAnnualizedStdDev(monthlyValues)
+      ),
+      
+      // Drawdown metrics
+      max_drawdown: calculateMaxDrawdown(dailyValues).maxDrawdownPercentage,
+      
+      // Monthly metrics
+      positive_months: calculatePositiveMonths(monthlyValues)
+    };
+    
+    // Send response with calculated metrics
+    res.json({ metrics });
+    
+  } catch (error) {
+    console.error('[API /risk-return] Error calculating metrics:', error);
+    res.status(500).json({ 
+      error: 'Error calculating risk-return metrics',
+      message: 'An error occurred while calculating risk-return metrics. Please try again later.'
+    });
+  }
+});
+
+// ... existing code ...
 
 
-// --- API Routes ---
+// ... existing routes like /, /test-keys, /upload, /portfolio-config, /portfolio-composition, /portfolio-summary, /style-analysis, /active-return, /market-performance, /fundamentals-date, /risk-return ...
+
+
+// GET /stock-prices - Fetches historical prices (useful for debugging)
+app.get('/stock-prices', async (req, res) => {
+    const ticker = req.query.ticker;
+    if (!ticker) {
+        return res.status(400).json({ message: 'Ticker query parameter is required' });
+    }
+    try {
+        const prices = await getStockPrices(ticker);
+        if (prices) {
+            res.json(prices);
+        } else {
+            // More specific message if possible (e.g., rate limit vs not found)
+            res.status(404).json({ message: `Could not find or fetch price data for ${ticker}. Check API key, ticker symbol, and rate limits.` });
+        }
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching stock prices', error: error.message });
+    }
+});
+
+
+// GET /annual-returns - Fetches calculated annual returns
+app.get('/annual-returns', async (req, res) => {
+  try {
+    const benchmarkTicker = req.query.benchmark || 'SPY'; // Default to SPY, allow override
+    console.log(`[API /annual-returns] Request received. Benchmark: ${benchmarkTicker}`);
+    
+    // Get daily portfolio values
+    const dailyValues = await calculateDailyPortfolioValues();
+    
+    if (!dailyValues || dailyValues.length === 0) {
+      return res.status(404).json({
+        error: 'No portfolio data available',
+        message: 'Please upload transaction data before viewing annual returns.'
+      });
+    }
+    
+    // Calculate yearly values from daily values
+    const yearlyValues = calculateYearlyPortfolioValues(dailyValues);
+    
+    if (!yearlyValues || yearlyValues.length === 0) {
+      return res.status(404).json({
+        error: 'No yearly portfolio data available',
+        message: 'Could not calculate yearly data from your transactions. Please ensure your transactions span a complete year.'
+      });
+    }
+    
+    // Get benchmark price data
+    const benchmarkPrices = await getStockPrices(benchmarkTicker);
+    
+    if (!benchmarkPrices || !benchmarkPrices['Time Series (Daily)']) {
+      console.log(`No benchmark data available for ${benchmarkTicker}`);
+      return res.status(500).json({
+        error: 'Benchmark data unavailable',
+        message: `Could not retrieve data for benchmark ${benchmarkTicker}. Please try again with a different benchmark.`
+      });
+    }
+    
+    // Calculate benchmark yearly values
+    const benchmarkYearlyValues = [];
+    let prevYearValue = null;
+    
+    // Sort yearly values by year
+    yearlyValues.sort((a, b) => parseInt(a.year) - parseInt(b.year));
+    
+    for (const yearData of yearlyValues) {
+      const year = yearData.year;
+      const startDate = `${year}-01-01`;
+      const endDate = `${year}-12-31`;
+      
+      // Get benchmark price at start of year
+      const startPrice = getPriceForDate(benchmarkPrices, startDate);
+      // Get benchmark price at end of year
+      const endPrice = getPriceForDate(benchmarkPrices, endDate);
+      
+      if (startPrice && endPrice) {
+        const benchmarkReturn = ((endPrice / startPrice) - 1) * 100;
+        
+        // Calculate benchmark balance (cumulative)
+        let benchmarkBalance;
+        if (prevYearValue === null) {
+          benchmarkBalance = yearData.value; // Start at same value as portfolio for first year
+        } else {
+          benchmarkBalance = prevYearValue * (1 + (benchmarkReturn / 100));
+        }
+        prevYearValue = benchmarkBalance;
+        
+        benchmarkYearlyValues.push({
+          year,
+          return: parseFloat(benchmarkReturn.toFixed(2)),
+          value: parseFloat(benchmarkBalance.toFixed(2))
+        });
+      }
+    }
+    
+    // Combine portfolio and benchmark yearly data
+    const annualReturns = yearlyValues.map(yearData => {
+      const benchmarkData = benchmarkYearlyValues.find(b => b.year === yearData.year);
+      
+      return {
+        year: yearData.year,
+        portfolioValue: parseFloat(yearData.value.toFixed(2)),
+        benchmarkReturn: benchmarkData ? benchmarkData.return : null,
+        benchmarkValue: benchmarkData ? benchmarkData.value : null
+      };
+    });
+    
+    res.json(annualReturns);
+  } catch (error) {
+    console.error('Error calculating annual returns:', error);
+    res.status(500).json({ 
+      error: 'Error calculating annual returns',
+      message: 'An error occurred while calculating annual returns. Please try again later.'
+    });
+  }
+});
+
+// GET /monthly-returns - Fetches calculated monthly returns
+app.get('/monthly-returns', async (req, res) => {
+  try {
+    const benchmark = req.query.benchmark || 'SPY'; // Default to SPY, allow override
+    console.log(`[API /monthly-returns] Request received. Benchmark: ${benchmark}`);
+
+    const monthlyData = await calculateMonthlyReturns(benchmark);
+
+    if (!monthlyData) {
+       console.error("[API /monthly-returns] Calculation returned no data.");
+       return res.status(500).json({ message: "Failed to calculate monthly returns." });
+    }
+
+    console.log(`[API /monthly-returns] Sending ${monthlyData.length} months of data.`);
+    res.json(monthlyData);
+
+  } catch (error) {
+    console.error(`[API /monthly-returns] Error: ${error.message}`);
+    res.status(500).json({ message: "Error calculating monthly returns.", error: error.message });
+  }
+});
+
+// --- Route 8: GET /portfolio-summary ---
+// Calculates and returns a comprehensive set of portfolio summary metrics.
+// This endpoint relies heavily on the `calculatePortfolioSummaryMetrics` helper function (defined above).
+// It serves as the main endpoint for fetching overall performance statistics.
+app.get('/portfolio-summary', async (req, res) => { // Route handler is async because it calls an async helper
+  console.log('[API /portfolio-summary] Request received.');
+  try {
+    // --- Step 8a: Calculate Metrics ---
+    // Call the main helper function `calculatePortfolioSummaryMetrics`.
+    // This function performs all the complex calculations (CAGR, StdDev, Drawdown, Sharpe, etc.)
+    // by utilizing other helper functions and the data from the database.
+    // `await` pauses execution here until the calculations are complete.
+    const metrics = await calculatePortfolioSummaryMetrics();
+    console.log('[API /portfolio-summary] Summary metrics calculated successfully.');
+
+    // --- Step 8b: Send Response ---
+    // If the helper function completes successfully and returns the metrics object,
+    // send it back to the client as a JSON response.
+    res.json(metrics);
+
+  } catch (err) {
+    // --- Step 8c: Handle Errors ---
+    // Catch any errors that might have been thrown by `calculatePortfolioSummaryMetrics` or other issues.
+    console.error('[API /portfolio-summary] Error calculating portfolio summary metrics:', err.message);
+    // Check if the error is the specific one indicating no transaction data exists.
+    if (err.message === 'No portfolio data available') {
+        // If so, return a 404 Not Found status with a user-friendly message.
+        res.status(404).json({ error: 'No portfolio data available', message: 'Upload transaction data first.' });
+    } else {
+        // For any other errors, return a generic 500 Internal Server Error.
+        // Include the error message for debugging purposes.
+        res.status(500).json({ error: 'Error calculating portfolio summary metrics', message: err.message });
+    }
+  }
+});
+
+/**
+ * Helper Function: calculateRSquared (R²)
+ * Calculates R-Squared, which is the square of the correlation coefficient between portfolio and benchmark returns.
+ * It represents the proportion of the portfolio's variance (risk) that can be explained by the benchmark's variance.
+ * - R² ranges from 0 to 1 (or 0% to 100%).
+ * - R² = 1: Benchmark movements perfectly explain portfolio movements.
+ * - R² = 0.5: 50% of portfolio variance is explained by the benchmark.
+ * - R² = 0: Benchmark movements have no correlation with portfolio movements.
+ * High R² (e.g., > 0.85) suggests Beta and Alpha are more reliable indicators for that portfolio/benchmark pair.
+ * Low R² suggests the portfolio's performance is driven by factors other than the benchmark market movements.
+ * @param {number|null} correlation - The Pearson correlation coefficient (result from `calculateBenchmarkCorrelation`).
+ * @returns {number|null} R-Squared value (0 to 1), or null if correlation is missing.
+ */
+function calculateRSquared(correlation) {
+  // --- Input Validation ---
+  // R-Squared requires a valid correlation coefficient.
+  if (correlation === null) {
+     console.warn("[Helper calculateRSquared] Correlation is null. Cannot calculate R-Squared.");
+     return null;
+  }
+  // R-Squared is simply the correlation squared.
+  return Math.pow(correlation, 2);
+}
+
+/**
+ * Helper Function: calculateTreynorRatio
+ * Calculates the Treynor Ratio, which measures the portfolio's excess return (above the risk-free rate)
+ * per unit of systematic market risk (Beta).
+ * Similar to Sharpe Ratio, but uses Beta instead of total standard deviation as the risk measure.
+ * It's useful for evaluating performance when the portfolio is part of a larger diversified investment strategy.
+ * Higher Treynor Ratio is generally better, indicating more return for the market risk taken.
+ * Formula: (Portfolio Return - Risk-Free Rate) / Portfolio Beta
+ * @param {number} portfolioAnnualizedReturn - Portfolio's annualized return (as decimal).
+ * @param {number} riskFreeRateDecimal - Annual risk-free rate (as decimal).
+ * @param {number|null} beta - Portfolio's Beta (result from `calculateBeta`).
+ * @returns {number|null} Treynor Ratio, or null if Beta is missing or zero.
+ */
+function calculateTreynorRatio(portfolioAnnualizedReturn, riskFreeRateDecimal, beta) {
+   // --- Input Validation ---
+   // Requires a valid Beta value that is not zero (or extremely close to zero) to avoid division by zero.
+   if (beta === null || Math.abs(beta) < 0.0001) {
+      console.warn(`[Helper calculateTreynorRatio] Beta is null or close to zero (${beta}). Cannot calculate Treynor Ratio.`);
+      return null; // Return null if Beta is invalid for the calculation.
+   }
+   // Calculate the Treynor Ratio.
+   return (portfolioAnnualizedReturn - riskFreeRateDecimal) / beta;
+}
+
+/**
+ * Helper Function: calculateCalmarRatio
+ * Calculates the Calmar Ratio, which measures the portfolio's annualized return relative to its maximum drawdown.
+ * It focuses on return generated compared to the largest loss experienced during the period.
+ * Higher Calmar Ratio is generally preferred, indicating better performance relative to the worst experienced loss.
+ * Formula: Annualized Return / Maximum Drawdown (as a positive decimal)
+ * @param {number} annualizedReturnDecimal - Portfolio's annualized return (as decimal).
+ * @param {number} maxDrawdownDecimal - Portfolio's maximum drawdown (as a positive decimal, e.g., 0.20 for 20%).
+ * @returns {number|null} Calmar Ratio, or null if max drawdown is zero or negative.
+ */
+function calculateCalmarRatio(annualizedReturnDecimal, maxDrawdownDecimal) {
+  // --- Input Validation ---
+  // Maximum drawdown must be positive for the ratio to be meaningful.
+  // A drawdown of 0 means no losses occurred.
+  if (maxDrawdownDecimal <= 0) {
+     // If no drawdown, the ratio is technically infinite or undefined.
+     // Returning null is a safe way to indicate this.
+     console.warn(`[Helper calculateCalmarRatio] Max drawdown is zero or negative (${maxDrawdownDecimal}). Cannot calculate Calmar Ratio.`);
+     return null;
+  }
+  // Calculate the Calmar Ratio.
+  return annualizedReturnDecimal / maxDrawdownDecimal;
+}
+
+/**
+ * Helper Function: calculateModiglianiMeasure (M²)
+ * Calculates the Modigliani-Modigliani (M²) measure.
+ * This metric adjusts the portfolio's return to match the volatility (standard deviation) of the benchmark.
+ * It essentially answers: "What would the portfolio's return have been if it had the same total risk as the benchmark?"
+ * This allows for a direct comparison of risk-adjusted returns between the portfolio and the benchmark.
+ * A higher M² value (in percentage terms) is better.
+ * Formula: M² = RiskFreeRate + SharpeRatio * BenchmarkStdDev
+ *          M² = RiskFreeRate + [(PortfolioReturn - RiskFreeRate) / PortfolioStdDev] * BenchmarkStdDev
+ * @param {number} portfolioAnnualizedReturn - Portfolio's annualized return (as decimal).
+ * @param {number} riskFreeRateDecimal - Annual risk-free rate (as decimal).
+ * @param {number} portfolioAnnualizedStdDev - Portfolio's annualized standard deviation (as decimal).
+ * @param {number} benchmarkAnnualizedStdDev - Benchmark's annualized standard deviation (as decimal).
+ * @returns {number|null} M² value (as a percentage), or null if standard deviations are invalid.
+ */
+function calculateModiglianiMeasure(portfolioAnnualizedReturn, riskFreeRateDecimal, portfolioAnnualizedStdDev, benchmarkAnnualizedStdDev) {
+  // --- Input Validation ---
+  // Requires valid (positive) standard deviations for both portfolio and benchmark.
+  if (portfolioAnnualizedStdDev <= 0 || benchmarkAnnualizedStdDev <= 0) {
+      console.warn(`[Helper calculateModiglianiMeasure] Portfolio or Benchmark Std Dev is zero or negative. Cannot calculate M². P:${portfolioAnnualizedStdDev}, B:${benchmarkAnnualizedStdDev}`);
+      return null;
+  }
+
+  // --- Calculate Portfolio's Sharpe Ratio ---
+  // (Portfolio Return - Risk Free Rate) / Portfolio Standard Deviation
+  const sharpeRatio = (portfolioAnnualizedReturn - riskFreeRateDecimal) / portfolioAnnualizedStdDev;
+
+  // --- Calculate M² ---
+  // M² = RiskFreeRate + (Portfolio Sharpe Ratio * Benchmark Standard Deviation)
+  // This scales the portfolio's excess return (Sharpe) by the benchmark's risk level.
+  const mSquared = riskFreeRateDecimal + sharpeRatio * benchmarkAnnualizedStdDev;
+
+  // Return the M² value as a percentage.
+  return mSquared * 100;
+}
+
+//rewritten file

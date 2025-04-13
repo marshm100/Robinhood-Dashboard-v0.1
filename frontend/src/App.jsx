@@ -147,41 +147,72 @@ const cyberpunkPieColors = [
 ];
 
 function App() {
+  // --- State Variables using useState hook ---
+  // These variables hold data that can change and cause the component to re-render.
+  
+  // Holds the file object selected by the user for upload.
+  // Initial value is null (no file selected).
   const [file, setFile] = useState(null);
+  
+  // Stores messages to show the user about the upload process (e.g., "Success!", "Error: ...").
+  // Initial value is null (no status message).
   const [uploadStatus, setUploadStatus] = useState(null);
+  
+  // Tracks whether a file upload or initial data loading is happening.
+  // Used to show loading indicators (like spinners).
+  // Initial value is false (not loading).
   const [isLoading, setIsLoading] = useState(false);
   
-  // Comment out unused state variables related to portfolio configuration
-  // const [totalInvestment, setTotalInvestment] = useState('');
-  // const [allocations, setAllocations] = useState([{ ticker: '', allocation_percentage: '' }]);
-  // const [configStatus, setConfigStatus] = useState(null);
-  // const [configLoading, setConfigLoading] = useState(false);
-  
+  // -- State for fetched data --
+  // These states hold the data fetched from the backend API endpoints.
+  // Each has a corresponding loading state (e.g., isLoadingXYZ) and potentially an error state (e.g., errorXYZ).
+
+  // Stores the list of assets in the portfolio (e.g., [{ ticker: 'AAPL', name: 'Apple Inc.', allocation_percentage: 50 }]).
   const [portfolioComposition, setPortfolioComposition] = useState([]);
-  const [loadingComposition, setLoadingComposition] = useState(false);
+  const [loadingComposition, setLoadingComposition] = useState(false); // Tracks loading for composition data.
+  
+  // Stores data for style analysis (e.g., sector weights, P/E ratio) and portfolio totals.
   const [styleAnalysis, setStyleAnalysis] = useState({ styleAnalysis: [], portfolioTotals: {} });
-  const [loadingStyleAnalysis, setLoadingStyleAnalysis] = useState(false);
+  const [loadingStyleAnalysis, setLoadingStyleAnalysis] = useState(false); // Tracks loading for style analysis.
+  
+  // Stores the date associated with the fundamentals data used.
   const [fundamentalsDate, setFundamentalsDate] = useState('');
-  const [loadingFundamentalsDate, setLoadingFundamentalsDate] = useState(false);
+  const [loadingFundamentalsDate, setLoadingFundamentalsDate] = useState(false); // Tracks loading.
+  
+  // Stores data comparing portfolio returns to benchmark returns (active return).
   const [activeReturns, setActiveReturns] = useState({ activeReturns: [] });
-  const [loadingActiveReturns, setLoadingActiveReturns] = useState(false);
+  const [loadingActiveReturns, setLoadingActiveReturns] = useState(false); // Tracks loading.
+  
+  // Stores data on how the portfolio performed during market up vs. down periods.
   const [marketPerformance, setMarketPerformance] = useState({ marketPerformance: [] });
-  const [loadingMarketPerformance, setLoadingMarketPerformance] = useState(false);
+  const [loadingMarketPerformance, setLoadingMarketPerformance] = useState(false); // Tracks loading.
+  
+  // Stores calculated risk and return metrics (Sharpe Ratio, Volatility, etc.).
   const [riskReturnMetrics, setRiskReturnMetrics] = useState(null);
-  const [loadingRiskReturn, setLoadingRiskReturn] = useState(false);
+  const [loadingRiskReturn, setLoadingRiskReturn] = useState(false); // Tracks loading.
+  
+  // Stores data for the annual returns chart.
   const [annualReturnsData, setAnnualReturnsData] = useState(null);
-  const [isLoadingAnnualReturns, setIsLoadingAnnualReturns] = useState(true);
-  const [errorAnnualReturns, setErrorAnnualReturns] = useState(null);
+  const [isLoadingAnnualReturns, setIsLoadingAnnualReturns] = useState(true); // Tracks loading.
+  const [errorAnnualReturns, setErrorAnnualReturns] = useState(null); // Stores error message if fetching fails.
+  
+  // Stores data for the monthly returns chart.
   const [monthlyReturnsData, setMonthlyReturnsData] = useState(null);
-  const [isLoadingMonthlyReturns, setIsLoadingMonthlyReturns] = useState(true);
-  const [errorMonthlyReturns, setErrorMonthlyReturns] = useState(null);
+  const [isLoadingMonthlyReturns, setIsLoadingMonthlyReturns] = useState(true); // Tracks loading.
+  const [errorMonthlyReturns, setErrorMonthlyReturns] = useState(null); // Stores error message.
+  
+  // Stores data for the portfolio growth chart (value over time vs. benchmark).
   const [portfolioGrowthData, setPortfolioGrowthData] = useState(null);
-  const [isLoadingPortfolioGrowth, setIsLoadingPortfolioGrowth] = useState(true);
-  const [errorPortfolioGrowth, setErrorPortfolioGrowth] = useState(null);
-  const [selectedBenchmark, setSelectedBenchmark] = useState('SPY'); // Default benchmark
+  const [isLoadingPortfolioGrowth, setIsLoadingPortfolioGrowth] = useState(true); // Tracks loading.
+  const [errorPortfolioGrowth, setErrorPortfolioGrowth] = useState(null); // Stores error message.
+  
+  // Stores the ticker symbol of the benchmark selected by the user (e.g., 'SPY').
+  const [selectedBenchmark, setSelectedBenchmark] = useState('SPY'); // Default is SPY index.
+  
+  // Stores data for the drawdown chart (percentage drop from peak value over time).
   const [drawdownData, setDrawdownData] = useState(null);
-  const [isLoadingDrawdown, setIsLoadingDrawdown] = useState(true);
-  const [errorDrawdown, setErrorDrawdown] = useState(null);
+  const [isLoadingDrawdown, setIsLoadingDrawdown] = useState(true); // Tracks loading.
+  const [errorDrawdown, setErrorDrawdown] = useState(null); // Stores error message.
 
   const handleFileChange = (event) => {
     setFile(event.target.files[0]);
@@ -266,57 +297,83 @@ function App() {
 
   // --- Fetch Functions (wrapped in useCallback) ---
 
+  // Step 30: Define a function to fetch annual returns data from the backend.
+  // useCallback memoizes the function so it's not recreated on every render, 
+  // unless its dependencies (selectedBenchmark) change.
   const fetchAnnualReturns = useCallback(async () => {
+    // Step 31: Set loading state to true before fetching.
     setIsLoadingAnnualReturns(true);
+    // Step 32: Clear any previous errors.
     setErrorAnnualReturns(null);
     try {
+      // Step 33: Fetch data from the backend API, including the selected benchmark.
       const response = await fetch(`http://localhost:3002/annual-returns?benchmark=${selectedBenchmark}`);
+      // Step 34: Check if the fetch was successful.
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      // Step 35: Parse the JSON response data.
       const data = await response.json();
+      // Step 36: Update the state with the fetched data.
       setAnnualReturnsData(data);
     } catch (error) {
+      // Step 37: Handle any errors during fetching.
       console.error("Error fetching annual returns:", error);
+      // Step 38: Set the error state.
       setErrorAnnualReturns(error.message);
+      // Step 39: Clear the data state on error.
       setAnnualReturnsData(null);
     } finally {
+      // Step 40: Set loading state to false after fetch completes (success or error).
       setIsLoadingAnnualReturns(false);
     }
-  }, [selectedBenchmark]); // Dependency: selectedBenchmark
+  }, [selectedBenchmark]); // Dependency array: function re-runs if selectedBenchmark changes.
 
+  // Step 41: Define a function to fetch monthly returns data (similar logic to annual returns).
   const fetchMonthlyReturns = useCallback(async () => {
+    // Step 42: Set loading state and clear errors.
     setIsLoadingMonthlyReturns(true);
     setErrorMonthlyReturns(null);
     try {
+      // Step 43: Fetch data from the backend, including the benchmark.
       const response = await fetch(`http://localhost:3002/monthly-returns?benchmark=${selectedBenchmark}`);
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
+      // Step 44: Update state with fetched data.
       setMonthlyReturnsData(data);
     } catch (error) {
+      // Step 45: Handle fetch errors.
       console.error("Error fetching monthly returns:", error);
       setErrorMonthlyReturns(error.message);
       setMonthlyReturnsData(null);
     } finally {
+      // Step 46: Set loading state to false.
       setIsLoadingMonthlyReturns(false);
     }
-  }, [selectedBenchmark]); // Dependency: selectedBenchmark
+  }, [selectedBenchmark]); // Dependency: selectedBenchmark.
 
+  // Step 47: Define a function to fetch portfolio growth data.
   const fetchPortfolioGrowth = useCallback(async () => {
+    // Step 48: Set loading state and clear errors.
     setIsLoadingPortfolioGrowth(true);
     setErrorPortfolioGrowth(null);
     console.log(`Fetching portfolio growth data with benchmark: ${selectedBenchmark}`);
     try {
+      // Step 49: Fetch data from the backend, including the benchmark.
       const response = await fetch(`http://localhost:3002/portfolio-growth?benchmark=${selectedBenchmark}`);
+      // Step 50: Handle non-OK responses (e.g., 404 if no transactions uploaded).
       if (!response.ok) {
-        // Show proper error message instead of using fallback data
-        console.error(`Error fetching portfolio growth data: ${response.status}`);
-        setErrorPortfolioGrowth('Failed to fetch portfolio data. Please upload transactions first.');
-        setPortfolioGrowthData(null);
-        return;
+        const errorData = await response.json(); // Try to get error message from backend
+        console.error(`Error fetching portfolio growth data: ${response.status}`, errorData);
+        // Step 51: Set a user-friendly error message.
+        setErrorPortfolioGrowth(errorData.message || 'Failed to fetch portfolio data. Please upload transactions first.');
+        setPortfolioGrowthData(null); // Clear data state.
+        return; // Stop execution.
       }
       
+      // Step 52: Parse the successful JSON response.
       const data = await response.json();
       console.log("Fetched Portfolio Growth Data:", data);
       
+      // Step 53: Validate the fetched data structure.
       if (!Array.isArray(data) || data.length === 0) {
         console.warn("Fetched portfolio growth data is empty or not an array");
         setErrorPortfolioGrowth('No portfolio data available. Please upload transactions first.');
@@ -324,109 +381,107 @@ function App() {
         return;
       }
       
-      if (!Object.hasOwn(data[0], 'portfolioValue') || !Object.hasOwn(data[0], 'benchmarkValue')) {
-        console.warn("Fetched portfolio growth data is not in the expected format");
-        // Parse or transform the data to the expected format
+      // Step 54: Check if data format needs transformation (optional, based on backend consistency).
+      // This block tries to handle cases where the backend might return data in a slightly different shape.
+      if (data[0] && (!Object.hasOwn(data[0], 'portfolioValue') || !Object.hasOwn(data[0], 'benchmarkValue'))) {
+        console.warn("Fetched portfolio growth data is not in the expected {date, portfolioValue, benchmarkValue} format. Attempting transformation.");
+        // Step 55: Transform the data into the expected format.
         const transformedData = data.map(item => ({
-          date: item.date || new Date().toISOString().split('T')[0],
-          portfolioValue: item.portfolioValue || item.value || 0,
-          benchmarkValue: item.benchmarkValue || 0
+          date: item.date || new Date().toISOString().split('T')[0], // Fallback date
+          portfolioValue: item.portfolioValue || item.value || 0, // Try different possible value keys
+          benchmarkValue: item.benchmarkValue || 0 // Fallback benchmark value
         }));
-        
-        setPortfolioGrowthData(transformedData);
+        setPortfolioGrowthData(transformedData); // Update state with transformed data.
       } else {
+        // Step 56: If data is already in the correct format, update state directly.
         setPortfolioGrowthData(data);
       }
     } catch (error) {
+      // Step 57: Handle any unexpected errors during fetch or processing.
       console.error("Error fetching portfolio growth:", error);
       setErrorPortfolioGrowth(error.message);
       setPortfolioGrowthData(null);
     } finally {
+      // Step 58: Set loading state to false.
       setIsLoadingPortfolioGrowth(false);
     }
-  }, [selectedBenchmark]); // Dependency: selectedBenchmark
+  }, [selectedBenchmark]); // Dependency: selectedBenchmark.
 
+  // Step 59: Define a function to fetch risk and return metrics.
   const fetchRiskReturnMetrics = useCallback(async () => {
+    // Step 60: Set loading state.
     setLoadingRiskReturn(true);
     try {
+      // Step 61: Fetch data from the backend, including the benchmark.
       const response = await fetch(`http://localhost:3002/risk-return?benchmark=${selectedBenchmark}`);
       
+      // Step 62: Handle non-OK responses.
       if (!response.ok) {
-        console.error(`Error fetching risk-return metrics: ${response.status}`);
+        const errorData = await response.json();
+        console.error(`Error fetching risk-return metrics: ${response.status}`, errorData);
         setRiskReturnMetrics(null);
+        // Optionally set an error state here if one exists for risk/return.
         return;
       }
       
+      // Step 63: Parse the successful JSON response.
       const data = await response.json();
 
+      // Step 64: Check the structure of the response and update state.
       if (data && data.metrics) {
-        setRiskReturnMetrics(data.metrics);
+        setRiskReturnMetrics(data.metrics); // Update state with the metrics object.
       } else if (data && data.error) {
+        // Handle cases where the backend explicitly returned an error message.
         console.error('Error from risk-return endpoint:', data.error);
         setRiskReturnMetrics(null);
       } else {
+        // Handle unexpected response formats.
         console.error('Unexpected response format from risk-return endpoint');
         setRiskReturnMetrics(null);
       }
     } catch (error) {
+      // Step 65: Handle fetch or processing errors.
       console.error('Failed to fetch risk and return metrics:', error);
       setRiskReturnMetrics(null);
     } finally {
+      // Step 66: Set loading state to false.
       setLoadingRiskReturn(false);
     }
-  }, [selectedBenchmark]);
+  }, [selectedBenchmark]); // Dependency: selectedBenchmark.
 
+  // Step 67: Define a function to fetch portfolio drawdown data.
   const fetchDrawdownData = useCallback(async () => {
+    // Step 68: Set loading state and clear errors.
     setIsLoadingDrawdown(true);
     setErrorDrawdown(null);
     console.log("Fetching portfolio drawdown data...");
     try {
+      // Step 69: Fetch data from the backend endpoint.
       const response = await fetch(`http://localhost:3002/portfolio-drawdown`);
+      // Step 70: Handle non-OK responses.
       if (!response.ok) {
-        console.error(`Error fetching portfolio drawdown data: ${response.status}`);
-        setErrorDrawdown('Failed to fetch drawdown data. Please upload transactions first.');
-        setDrawdownData(null);
+        const errorData = await response.json();
+        console.error(`Error fetching portfolio drawdown data: ${response.status}`, errorData);
+        // Step 71: Set user-friendly error message.
+        setErrorDrawdown(errorData.message || 'Failed to fetch drawdown data. Please upload transactions first.');
+        setDrawdownData(null); // Clear data state.
         return;
       }
-      
+      // Step 72: Parse the successful JSON response.
       const data = await response.json();
       console.log("Fetched Drawdown Data:", data);
-      
-      if (!Array.isArray(data) || data.length === 0) {
-        console.warn("Fetched drawdown data is empty or not an array");
-        setErrorDrawdown('No drawdown data available. Please upload transactions first.');
-        setDrawdownData(null);
-        return;
-      }
-      
-      if (!Object.hasOwn(data[0], 'drawdownPercentage')) {
-        console.warn("Fetched drawdown data is not in the expected format");
-        
-        // Try to transform the data to the expected format
-        const transformedData = data.map(item => {
-          const value = item.value || 0;
-          const peak = item.peak || value;
-          
-          return {
-            date: item.date || new Date().toISOString().split('T')[0],
-            value: value,
-            peak: peak,
-            drawdownPercentage: peak > 0 ? ((peak - value) / peak) * 100 : 0
-          };
-        });
-        
-        setDrawdownData(transformedData);
-      } else {
-        setDrawdownData(data);
-      }
+      // Step 73: Update state with fetched data.
+      setDrawdownData(data);
     } catch (error) {
-      console.error("Error fetching drawdown data:", error);
+      // Step 74: Handle fetch or processing errors.
+      console.error("Error fetching portfolio drawdown:", error);
       setErrorDrawdown(error.message);
       setDrawdownData(null);
     } finally {
+      // Step 75: Set loading state to false.
       setIsLoadingDrawdown(false);
     }
-  }, []); // No dependencies
+  }, []); // No dependencies, this fetch doesn't depend on the benchmark.
 
   const fetchPortfolioComposition = useCallback(async () => {
     setLoadingComposition(true);
@@ -554,92 +609,6 @@ function App() {
       fetchStyleAnalysis,
       fetchFundamentalsDate
     ]); // Runs once on mount, dependencies are stable
-
-  // Comment out the unused portfolio configuration functions
-  /*
-  // Submit portfolio configuration
-  const handlePortfolioConfigSubmit = async (e) => {
-    e.preventDefault();
-    
-    // Validate inputs
-    if (!totalInvestment || isNaN(parseFloat(totalInvestment)) || parseFloat(totalInvestment) <= 0) {
-      setConfigStatus({
-        type: 'error',
-        message: 'Please enter a valid total investment amount.'
-      });
-      return;
-    }
-    
-    // Filter out incomplete allocations
-    const validAllocations = allocations.filter(
-      alloc => alloc.ticker && alloc.allocation_percentage && !isNaN(parseFloat(alloc.allocation_percentage))
-    );
-    
-    if (validAllocations.length === 0) {
-      setConfigStatus({
-        type: 'error',
-        message: 'Please add at least one valid allocation.'
-      });
-      return;
-    }
-    
-    // Check if allocations sum to 100%
-    const totalPercentage = validAllocations.reduce(
-      (sum, alloc) => sum + parseFloat(alloc.allocation_percentage), 0
-    );
-    
-    if (Math.abs(totalPercentage - 100) > 0.01) { // Allow for small floating point errors
-      setConfigStatus({
-        type: 'error',
-        message: `Allocation percentages must add up to 100%. Current total: ${totalPercentage.toFixed(2)}%`
-      });
-      return;
-    }
-    
-    setConfigLoading(true);
-    setConfigStatus(null);
-    
-    try {
-      const response = await fetch('http://localhost:3002/portfolio-config', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          total_investment: parseFloat(totalInvestment),
-          allocations: validAllocations.map(alloc => ({
-            ticker: alloc.ticker.toUpperCase(),
-            allocation_percentage: parseFloat(alloc.allocation_percentage)
-          }))
-        }),
-      });
-      
-      const result = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to save portfolio configuration');
-      }
-      
-      setConfigStatus({
-        type: 'success',
-        message: 'Portfolio configuration saved successfully!'
-      });
-      
-      // Fetch updated portfolio composition and style analysis
-      fetchPortfolioComposition();
-      fetchStyleAnalysis();
-      fetchRiskReturnMetrics();
-    } catch (error) {
-      console.error('Error saving portfolio configuration:', error);
-      setConfigStatus({
-        type: 'error',
-        message: `Error: ${error.message}`
-      });
-    } finally {
-      setConfigLoading(false);
-    }
-  };
-  */
 
   // --- Prepare Annual Returns Chart Data ---
   const annualReturnsChartData = {
@@ -1086,190 +1055,368 @@ function App() {
     // No scales needed for Pie charts
   };
 
+  // --- JSX Rendering --- 
+  // This is the structure of the web page displayed to the user.
+
+  // Step 87: Render the main application UI.
   return (
-    <div className="min-h-screen bg-black text-[#00ffcc] font-mono p-4 md:p-8 overflow-x-hidden">
-      <header className="mb-8 text-center">
-        <h1 className="text-3xl md:text-5xl font-bold text-[#ff00ff] mb-4" style={{ textShadow: '0 0 5px #ff00ff, 0 0 10px #ff00ff' }}>
-          Robinhood Dashboard
-        </h1>
-
-        <div className="max-w-xs mx-auto mb-6">
-            <label htmlFor="benchmark-select" className="block text-sm font-medium text-[#00ffcc] mb-1">Select Benchmark:</label>
-            <select
-                id="benchmark-select"
-                value={selectedBenchmark}
-                onChange={(e) => setSelectedBenchmark(e.target.value)}
-                className="w-full p-2 bg-gray-800 border border-[#00ffcc] rounded-md text-[#00ffcc] focus:outline-none focus:ring-2 focus:ring-[#ff00ff] appearance-none text-center font-mono"
-                style={{
-                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2300ffcc' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
-                    backgroundPosition: 'right 0.5rem center',
-                    backgroundRepeat: 'no-repeat',
-                    backgroundSize: '1.5em 1.5em',
-                    paddingRight: '2.5rem' // Make space for the arrow
-                }}
-            >
-                <option value="SPY">S&P 500 (SPY)</option>
-                <option value="QQQ">Nasdaq 100 (QQQ)</option>
-                <option value="VT">Total World Stock (VT)</option>
-                <option value="AGG">US Aggregate Bond (AGG)</option>
-                {/* Add more benchmarks as needed */}
-            </select>
-        </div>
-
-        <div className="bg-gray-900 p-4 rounded-lg shadow-[0_0_10px_rgba(0,255,204,0.4)] border border-[#00ffcc] max-w-md mx-auto mb-8">
-             <h2 className="text-lg text-[#00ffcc] mb-2">Upload Transactions</h2>
-             <input type="file" accept=".csv" onChange={handleFileChange} className="text-sm mb-2 file:bg-[#00ffcc] file:border-0 file:text-black file:font-mono file:p-1 file:rounded" />
-             <button onClick={handleUpload} disabled={!file || isLoading} className="bg-[#ff00ff] text-black font-bold py-1 px-3 rounded hover:bg-opacity-80 disabled:opacity-50 font-mono">
-                 {isLoading ? 'Uploading...' : 'Upload'}
-             </button>
-             {uploadStatus && <p className={`mt-2 text-xs ${uploadStatus.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>{uploadStatus.message || ''}</p>}
-         </div>
-
+    // Main container div: sets background, text color, font, padding, and centers content.
+    <div className="min-h-screen bg-black text-neon-green font-mono p-4 md:p-8 flex flex-col items-center">
+      
+      {/* Header Section */}
+      // Contains the main title and subtitle.
+      <header className="w-full max-w-7xl mb-8">
+        {/* Main title with large text, bold, specific color, margin, and glow effect. */}
+        <h1 className="text-4xl md:text-5xl font-bold text-neon-pink mb-4 text-center glow-pink">Robinhood Dashboard</h1>
+        {/* Subtitle with specific color and size. */}
+        <p className="text-center text-neon-cyan text-lg">Upload your Robinhood CSV to visualize your portfolio performance.</p>
       </header>
 
-      <main className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      {/* Upload Section */}
+      // Contains the file input and upload button.
+      <section className="w-full max-w-2xl bg-gray-900 p-6 rounded-lg shadow-lg border border-neon-cyan mb-8 glow-border-cyan">
+        {/* Section title. */}
+        <h2 className="text-2xl font-semibold text-neon-magenta mb-4 text-center">Upload Transactions</h2>
+        {/* Flex container for input and button, arranges them in a row on larger screens. */}
+        <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4">
+          {/* File input element. */}
+          <input 
+            type="file" // Specifies this is a file input.
+            accept=".csv" // Restricts accepted file types to CSV.
+            onChange={handleFileChange} // Calls handleFileChange when a file is selected.
+            // Styling for the file input button and text.
+            className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-neon-pink file:text-black hover:file:bg-neon-magenta cursor-pointer text-neon-cyan" 
+          />
+          {/* Upload button. */}
+          <button 
+            onClick={handleUpload} // Calls handleUpload when clicked.
+            disabled={isLoading || !file} // Button is disabled if loading or no file is selected.
+            // Dynamic styling based on disabled state (grayed out) or active state (neon cyan with hover effect).
+            className={`py-2 px-6 rounded-full font-semibold text-black transition duration-300 ease-in-out ${isLoading || !file ? 'bg-gray-600 cursor-not-allowed' : 'bg-neon-cyan hover:bg-cyan-300 shadow-md glow-button-cyan'}`}
+          >
+            {/* Button text changes based on loading state. */}
+            {isLoading ? 'Uploading...' : 'Upload CSV'}
+          </button>
+        </div>
+        {/* Display Upload Status Message */}
+        // Conditionally render the status message if uploadStatus is not null.
+        {uploadStatus && (
+          // Paragraph styling changes color based on status type (error=red, warning=yellow, success=green).
+          <p className={`mt-4 text-center font-semibold ${uploadStatus.type === 'error' ? 'text-red-500' : (uploadStatus.type === 'warning' ? 'text-yellow-500' : 'text-green-500')}`}>
+            {uploadStatus.message} {/* Display the message from the uploadStatus state. */}
+          </p>
+        )}
+      </section>
 
-        <section className="bg-gray-900 p-4 rounded-lg shadow-[0_0_15px_rgba(255,0,255,0.5)] border border-[#ff00ff]">
-          <h2 className="text-xl text-[#ff00ff] mb-4 text-center">Portfolio Growth</h2>
-          <div className="relative h-72 md:h-96">
-            {isLoadingPortfolioGrowth && <p className="text-center text-lg animate-pulse">Loading Growth Data...</p>}
-            {errorPortfolioGrowth && <p className="text-center text-red-500">Error: {errorPortfolioGrowth}</p>}
-            {!isLoadingPortfolioGrowth && !errorPortfolioGrowth && portfolioGrowthData && portfolioGrowthData.length > 0 && (
+      {/* Benchmark Selection Dropdown */}
+      // Allows the user to choose a benchmark index for comparison.
+      <section className="w-full max-w-md bg-gray-900 p-4 rounded-lg shadow-lg border border-neon-orange mb-8 glow-border-orange">
+          {/* Label for the dropdown. */}
+          <label htmlFor="benchmark-select" className="block text-neon-orange font-semibold mb-2 text-center">Select Benchmark:</label>
+          {/* Dropdown select element. */}
+          <select 
+              id="benchmark-select" 
+              value={selectedBenchmark} // The current value is bound to the selectedBenchmark state.
+              onChange={(e) => setSelectedBenchmark(e.target.value)} // Update state when selection changes, triggering data refetches via useEffect.
+              // Styling for the dropdown.
+              className="w-full p-2 rounded bg-gray-800 border border-neon-orange text-neon-cyan focus:outline-none focus:ring-2 focus:ring-neon-orange font-mono"
+          >
+              {/* Benchmark options. */}
+              <option value="SPY">SPY (S&P 500 ETF)</option>
+              <option value="QQQ">QQQ (Nasdaq 100 ETF)</option>
+              <option value="DIA">DIA (Dow Jones ETF)</option>
+              <option value="VT">VT (Vanguard Total World Stock ETF)</option>
+          </select>
+      </section>
+
+      {/* Main Content Area - Display Charts and Data */}
+      // Uses a CSS grid layout to arrange the different data visualization components.
+      <main className="w-full max-w-7xl grid grid-cols-1 md:grid-cols-2 gap-8">
+        
+        {/* Portfolio Growth Chart Section */}
+        // Takes full width on medium screens and above (md:col-span-2).
+        // Sets a fixed height (h-96) for the chart container.
+        <div className="bg-gray-900 p-4 rounded-lg shadow-lg border border-neon-cyan glow-border-cyan md:col-span-2 h-96">
+          {/* Chart title. */}
+          <h3 className="text-xl font-semibold text-neon-magenta mb-2 text-center">Portfolio Growth</h3>
+          {/* Conditional rendering based on loading/error/data state for this chart. */}
+          {isLoadingPortfolioGrowth ? (
+            <p className="text-center text-neon-cyan">Loading growth data...</p> // Show loading message.
+          ) : errorPortfolioGrowth ? (
+            <p className="text-center text-red-500">Error: {errorPortfolioGrowth}</p> // Show error message.
+          ) : portfolioGrowthData ? (
+            // If data exists, render the chart container.
+            // pb-8 adds padding at the bottom to prevent axis labels from being cut off.
+            <div className="h-full pb-8">
+              {/* Render the Line chart component with its options and data. */}
               <Line options={portfolioGrowthChartOptions} data={portfolioGrowthChartData} />
-            )}
-            {!isLoadingPortfolioGrowth && !errorPortfolioGrowth && (!portfolioGrowthData || portfolioGrowthData.length === 0) && (
-              <p className="text-center text-gray-500">No portfolio growth data available. Upload transactions first.</p>
-            )}
-          </div>
-        </section>
+            </div>
+          ) : (
+            <p className="text-center text-gray-500">Upload CSV to see portfolio growth.</p> // Default message if no data.
+          )}
+        </div>
 
-        <section className="bg-gray-900 p-4 rounded-lg shadow-[0_0_15px_rgba(255,69,0,0.5)] border border-[#ff4500]">
-          <h2 className="text-xl text-[#ff4500] mb-4 text-center">Portfolio Drawdown</h2>
-          <div className="relative h-72 md:h-96">
-            {isLoadingDrawdown && <p className="text-center text-lg animate-pulse">Loading Drawdown Data...</p>}
-            {errorDrawdown && <p className="text-center text-red-500">Error: {errorDrawdown}</p>}
-            {!isLoadingDrawdown && !errorDrawdown && drawdownData && drawdownData.length > 0 && (
+        {/* Annual Returns Chart Section */}
+        // Sets a fixed height (h-80).
+        <div className="bg-gray-900 p-4 rounded-lg shadow-lg border border-neon-orange glow-border-orange h-80">
+          <h3 className="text-xl font-semibold text-neon-magenta mb-2 text-center">Annual Returns</h3>
+          {/* Conditional rendering for loading/error/data states. */}
+          {isLoadingAnnualReturns ? (
+            <p className="text-center text-neon-cyan">Loading annual returns...</p>
+          ) : errorAnnualReturns ? (
+            <p className="text-center text-red-500">Error: {errorAnnualReturns}</p>
+          ) : annualReturnsData ? (
+            <div className="h-full pb-8">
+              {/* Render the Bar chart component. */}
+               <Bar options={annualReturnsChartOptions} data={annualReturnsChartData} />
+            </div>
+           ) : (
+            <p className="text-center text-gray-500">Upload CSV to see annual returns.</p>
+          )}
+        </div>
+        
+        {/* Drawdown Chart Section */}
+        // Sets a fixed height (h-80).
+        <div className="bg-gray-900 p-4 rounded-lg shadow-lg border border-red-600 glow-border-red h-80">
+           <h3 className="text-xl font-semibold text-neon-magenta mb-2 text-center">Portfolio Drawdown</h3>
+           {/* Conditional rendering for loading/error/data states. */}
+           {isLoadingDrawdown ? (
+            <p className="text-center text-neon-cyan">Loading drawdown data...</p>
+          ) : errorDrawdown ? (
+            <p className="text-center text-red-500">Error: {errorDrawdown}</p>
+          ) : drawdownData ? (
+            <div className="h-full pb-8">
+              {/* Render the Line chart component for drawdown. */}
               <Line options={drawdownChartOptions} data={drawdownChartData} />
-            )}
-            {!isLoadingDrawdown && !errorDrawdown && (!drawdownData || drawdownData.length === 0) && (
-              <p className="text-center text-gray-500">No drawdown data available. Upload transactions first.</p>
-            )}
-          </div>
-        </section>
+            </div>
+          ) : (
+            <p className="text-center text-gray-500">Upload CSV to see drawdown.</p>
+          )}
+        </div>
 
-        <section className="bg-gray-900 p-4 rounded-lg shadow-[0_0_15px_rgba(255,255,0,0.5)] border border-[#ffff00]">
-          <h2 className="text-xl text-[#ffff00] mb-4 text-center">Asset Allocation</h2>
-          <div className="relative h-72 md:h-96 flex justify-center items-center">
-            {loadingComposition && <p className="text-center text-lg animate-pulse">Loading Allocation Data...</p>}
-            {!loadingComposition && portfolioComposition && portfolioComposition.length > 0 && (
-              <Pie options={assetAllocationChartOptions} data={assetAllocationChartData} />
+        {/* Risk/Return Metrics Table Section */}
+        // Takes full width on medium screens and above.
+        <div className="bg-gray-900 p-4 rounded-lg shadow-lg border border-neon-yellow glow-border-yellow md:col-span-2">
+           <h3 className="text-xl font-semibold text-neon-magenta mb-2 text-center">Risk & Return Metrics</h3>
+           {/* Conditional rendering for loading/data state. */}
+            {loadingRiskReturn ? (
+              <p className="text-center text-neon-cyan">Loading metrics...</p>
+            ) : riskReturnMetrics ? (
+              // Container to allow horizontal scrolling on small screens if table is wide.
+              <div className="overflow-x-auto">
+                 {/* Table for displaying metrics. */}
+                 <table className="w-full text-left border-collapse">
+                    <thead>
+                      {/* Table header row. */}
+                      <tr className="border-b border-neon-yellow">
+                        <th className="p-2 text-neon-yellow">Metric</th>
+                        <th className="p-2 text-neon-yellow">Portfolio</th>
+                        <th className="p-2 text-neon-yellow">Benchmark ({selectedBenchmark})</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {/* Map through the key-value pairs in the riskReturnMetrics object. */}
+                      {Object.entries(riskReturnMetrics).map(([key, values]) => (
+                         // Create a table row for each metric.
+                         <tr key={key} className="border-b border-gray-700 hover:bg-gray-800">
+                           {/* Metric name (replace underscores with spaces, capitalize). */}
+                           <td className="p-2 text-neon-cyan capitalize">{key.replace(/_/g, ' ')}</td>
+                           {/* Portfolio value (format as number if possible). */}
+                           <td className="p-2">{typeof values.portfolio === 'number' ? values.portfolio.toFixed(2) : values.portfolio}</td>
+                           {/* Benchmark value (format as number if possible). */}
+                           <td className="p-2">{typeof values.benchmark === 'number' ? values.benchmark.toFixed(2) : values.benchmark}</td>
+                         </tr>
+                      ))}
+                    </tbody>
+                 </table>
+               </div>
+            ) : (
+              <p className="text-center text-gray-500">Upload CSV to see metrics.</p> // Default message.
             )}
-            {!loadingComposition && (!portfolioComposition || portfolioComposition.length === 0) && (
-              <p className="text-center text-gray-500">No allocation data available. Configure portfolio first.</p>
-            )}
-          </div>
-        </section>
+        </div>
+        
+         {/* Asset Allocation Pie Chart Section */}
+         // Sets a fixed height (h-80).
+         <div className="bg-gray-900 p-4 rounded-lg shadow-lg border border-purple-500 glow-border-purple h-80">
+           <h3 className="text-xl font-semibold text-neon-magenta mb-2 text-center">Asset Allocation</h3>
+           {/* Conditional rendering. Note: portfolioComposition data fetching is missing/commented out. */}
+           {loadingComposition ? (
+             <p className="text-center text-neon-cyan">Loading allocation...</p>
+           ) : portfolioComposition.length > 0 ? (
+             // If data existed, the Pie chart would render here.
+             <div className="h-full pb-8">
+               <Pie options={assetAllocationChartOptions} data={assetAllocationChartData} />
+             </div>
+           ) : (
+             // Default message shown because data fetching isn't implemented yet.
+             <p className="text-center text-gray-500">Portfolio composition data unavailable.</p>
+           )}
+         </div>
 
-        <section className="bg-gray-900 p-4 rounded-lg shadow-[0_0_15px_rgba(0,255,204,0.5)] border border-[#00ffcc]">
-          <h2 className="text-xl text-[#00ffcc] mb-4 text-center">Annual Returns Analysis</h2>
-          <div className="relative h-72 md:h-96">
-            {isLoadingAnnualReturns && <p className="text-center animate-pulse">Loading Annual Returns...</p>}
-            {errorAnnualReturns && <p className="text-center text-red-500">Error: {errorAnnualReturns}</p>}
-            {!isLoadingAnnualReturns && !errorAnnualReturns && annualReturnsData && annualReturnsData.length > 0 && (
-              <Bar options={annualReturnsChartOptions} data={annualReturnsChartData} />
-            )}
-            {!isLoadingAnnualReturns && !errorAnnualReturns && (!annualReturnsData || annualReturnsData.length === 0) && (
-              <p className="text-center text-gray-500">No annual return data available.</p>
-            )}
-          </div>
-        </section>
+        {/* Holdings Based Style Analysis Table Section */}
+        <div className="bg-gray-900 p-4 rounded-lg shadow-lg border border-green-500 glow-border-green md:col-span-2">
+          <h3 className="text-xl font-semibold text-neon-magenta mb-4 text-center">Holdings Based Style Analysis</h3>
+          {loadingStyleAnalysis ? (
+            <p className="text-center text-neon-cyan">Loading style analysis...</p>
+          ) : styleAnalysis?.styleAnalysis?.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm mb-6">
+                <thead>
+                  <tr className="border-b border-green-500">
+                    <th className="p-2 text-green-400">Ticker</th>
+                    <th className="p-2 text-green-400">Category</th>
+                    <th className="p-2 text-green-400 text-right">Weight (%)</th>
+                    <th className="p-2 text-green-400 text-right">Yield (SEC)</th>
+                    <th className="p-2 text-green-400 text-right">Yield (TTM)</th>
+                    <th className="p-2 text-green-400 text-right">Expense (Net)</th>
+                    <th className="p-2 text-green-400 text-right">Expense (Gross)</th>
+                    <th className="p-2 text-green-400 text-right">P/E</th>
+                    <th className="p-2 text-green-400 text-right">Duration</th>
+                    <th className="p-2 text-green-400 text-right">Contrib. Return (%)</th>
+                    <th className="p-2 text-green-400 text-right">Contrib. Risk (%)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {styleAnalysis.styleAnalysis.map((item, index) => (
+                    <tr key={index} className="border-b border-gray-700 hover:bg-gray-800">
+                      <td className="p-2 font-semibold text-neon-cyan">{item.ticker}</td>
+                      <td className="p-2">{item.category}</td>
+                      <td className="p-2 text-right">{item.weight}</td>
+                      <td className="p-2 text-right">{item.secYield}</td>
+                      <td className="p-2 text-right">{item.ttmYield}</td>
+                      <td className="p-2 text-right">{item.netExpenseRatio}</td>
+                      <td className="p-2 text-right">{item.grossExpenseRatio}</td>
+                      <td className="p-2 text-right">{item.peRatio}</td>
+                      <td className="p-2 text-right">{item.duration}</td>
+                      <td className="p-2 text-right">{item.contributionToReturn}</td>
+                      <td className="p-2 text-right">{item.contributionToRisk}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              
+              {/* Display Portfolio Totals */}
+              {styleAnalysis.portfolioTotals && (
+                <div>
+                   <h4 className="text-lg font-semibold text-neon-yellow mb-2">Portfolio Totals</h4>
+                   <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 text-sm">
+                      <span className="text-neon-cyan">Total SEC Yield:</span><span>{styleAnalysis.portfolioTotals.totalSecYield}%</span>
+                      <span className="text-neon-cyan">Total TTM Yield:</span><span>{styleAnalysis.portfolioTotals.totalTtmYield}%</span>
+                      <span className="text-neon-cyan">Total Net Expense Ratio:</span><span>{styleAnalysis.portfolioTotals.totalNetExpenseRatio}%</span>
+                      <span className="text-neon-cyan">Total Gross Expense Ratio:</span><span>{styleAnalysis.portfolioTotals.totalGrossExpenseRatio}%</span>
+                      <span className="text-neon-cyan">Total P/E:</span><span>{styleAnalysis.portfolioTotals.totalPeRatio}</span>
+                      <span className="text-neon-cyan">Total Duration:</span><span>{styleAnalysis.portfolioTotals.totalDuration}</span>
+                      <span className="text-neon-cyan">Total Contribution to Return:</span><span>{styleAnalysis.portfolioTotals.totalContributionToReturn}%</span>
+                   </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-center text-gray-500">Style analysis data unavailable. (May require portfolio configuration)</p>
+          )}
+        </div>
 
-        <section className="bg-gray-900 p-4 rounded-lg shadow-[0_0_15px_rgba(255,165,0,0.5)] border border-[#ffa500]">
-          <h2 className="text-xl text-[#ffa500] mb-4 text-center">Monthly Returns Analysis</h2>
-          <div className="relative h-72 md:h-96">
-            {isLoadingMonthlyReturns && <p className="text-center animate-pulse">Loading Monthly Returns...</p>}
-            {errorMonthlyReturns && <p className="text-center text-red-500">Error: {errorMonthlyReturns}</p>}
-            {!isLoadingMonthlyReturns && !errorMonthlyReturns && monthlyReturnsData && monthlyReturnsData.length > 0 && (
+        {/* Active Return Contribution Table Section */}
+        <div className="bg-gray-900 p-4 rounded-lg shadow-lg border border-blue-500 glow-border-blue md:col-span-2">
+          <h3 className="text-xl font-semibold text-neon-magenta mb-4 text-center">Active Return Contribution</h3>
+          {loadingActiveReturns ? (
+            <p className="text-center text-neon-cyan">Loading active returns...</p>
+          ) : activeReturns?.activeReturns?.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-blue-500">
+                    <th className="p-2 text-blue-400">Ticker</th>
+                    {activeReturns.activeReturns[0].returns.map(periodData => (
+                      <th key={periodData.period} className="p-2 text-blue-400 text-right">{periodData.period} (%)</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeReturns.activeReturns.map((assetData, index) => (
+                    <tr key={index} className="border-b border-gray-700 hover:bg-gray-800">
+                      <td className="p-2 font-semibold text-neon-cyan">{assetData.ticker}</td>
+                      {assetData.returns.map(periodData => (
+                        <td key={periodData.period} className="p-2 text-right">{periodData.activeReturn}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-center text-gray-500">Active return data unavailable.</p>
+          )}
+        </div>
+
+        {/* Up vs. Down Market Performance Table Section */}
+        <div className="bg-gray-900 p-4 rounded-lg shadow-lg border border-yellow-500 glow-border-yellow md:col-span-2">
+          <h3 className="text-xl font-semibold text-neon-magenta mb-4 text-center">Up vs. Down Market Performance vs. {selectedBenchmark}</h3>
+          {loadingMarketPerformance ? (
+            <p className="text-center text-neon-cyan">Loading market performance...</p>
+          ) : marketPerformance?.marketPerformance?.length > 0 ? (
+             <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-yellow-500">
+                    <th className="p-2 text-yellow-400">Market Type</th>
+                    <th className="p-2 text-yellow-400 text-right">Occurrences</th>
+                    <th className="p-2 text-yellow-400 text-right">% Above Benchmark</th>
+                    <th className="p-2 text-yellow-400 text-right">Avg Active Return Above Benchmark (%)</th>
+                    <th className="p-2 text-yellow-400 text-right">Avg Active Return Below Benchmark (%)</th>
+                    <th className="p-2 text-yellow-400 text-right">Total Avg Active Return (%)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {marketPerformance.marketPerformance.map((item, index) => (
+                    <tr key={index} className="border-b border-gray-700 hover:bg-gray-800">
+                      <td className="p-2 font-semibold text-neon-cyan">{item.marketType}</td>
+                      <td className="p-2 text-right">{item.occurrences}</td>
+                      <td className="p-2 text-right">{item.percentageAboveBenchmark}</td>
+                      <td className="p-2 text-right">{item.averageActiveReturnAboveBenchmark}</td>
+                      <td className="p-2 text-right">{item.averageActiveReturnBelowBenchmark}</td>
+                      <td className="p-2 text-right">{item.totalAverageActiveReturn}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-center text-gray-500">Market performance data unavailable.</p>
+          )}
+        </div>
+
+        {/* Monthly Returns Chart Section */}
+        <div className="bg-gray-900 p-4 rounded-lg shadow-lg border border-teal-500 glow-border-teal md:col-span-2 h-96">
+           <h3 className="text-xl font-semibold text-neon-magenta mb-2 text-center">Monthly Returns</h3>
+           {isLoadingMonthlyReturns ? (
+            <p className="text-center text-neon-cyan">Loading monthly returns...</p>
+          ) : errorMonthlyReturns ? (
+            <p className="text-center text-red-500">Error: {errorMonthlyReturns}</p>
+          ) : monthlyReturnsData ? (
+            <div className="h-full pb-8">
               <Line options={monthlyReturnsChartOptions} data={monthlyReturnsChartData} />
-            )}
-            {!isLoadingMonthlyReturns && !errorMonthlyReturns && (!monthlyReturnsData || monthlyReturnsData.length === 0) && (
-              <p className="text-center text-gray-500">No monthly return data available.</p>
-            )}
-          </div>
-        </section>
-
-        <section className="bg-gray-900 p-4 rounded-lg shadow-[0_0_15px_rgba(0,255,255,0.5)] border border-[#00ffff]">
-          <h2 className="text-xl text-[#00ffff] mb-4 text-center">Risk & Return Metrics</h2>
-          <div className="relative h-72 md:h-96 overflow-auto text-xs p-2">
-            {loadingRiskReturn && <p className="text-center animate-pulse">Loading Risk/Return Metrics...</p>}
-            {!loadingRiskReturn && riskReturnMetrics && (
-              <pre>{JSON.stringify(riskReturnMetrics, null, 2)}</pre>
-            )}
-            {!loadingRiskReturn && !riskReturnMetrics && (
-              <p className="text-center text-gray-500">No risk/return metrics available.</p>
-            )}
-          </div>
-        </section>
-
-        <section className="bg-gray-900 p-4 rounded-lg shadow-[0_0_15px_rgba(0,255,0,0.5)] border border-[#00ff00]">
-          <h2 className="text-xl text-[#00ff00] mb-4 text-center">Style Analysis</h2>
-          <div className="relative h-72 md:h-96 overflow-auto text-xs p-2">
-            {loadingStyleAnalysis && <p className="text-center animate-pulse">Loading Style Analysis...</p>}
-            {!loadingStyleAnalysis && styleAnalysis && styleAnalysis.styleAnalysis?.length > 0 && (
-              <pre>{JSON.stringify(styleAnalysis, null, 2)}</pre>
-            )}
-            {!loadingStyleAnalysis && (!styleAnalysis || !styleAnalysis.styleAnalysis || styleAnalysis.styleAnalysis.length === 0) && (
-              <p className="text-center text-gray-500">No style analysis data available.</p>
-            )}
-          </div>
-        </section>
-
-        <section className="bg-gray-900 p-4 rounded-lg shadow-[0_0_15px_rgba(255,0,255,0.5)] border border-[#ff00ff]">
-          <h2 className="text-xl text-[#ff00ff] mb-4 text-center">Active Return Contribution</h2>
-          <div className="relative h-72 md:h-96 overflow-auto text-xs p-2">
-            {loadingActiveReturns && <p className="text-center animate-pulse">Loading Active Returns...</p>}
-            {!loadingActiveReturns && activeReturns && activeReturns.activeReturns?.length > 0 && (
-              <pre>{JSON.stringify(activeReturns, null, 2)}</pre>
-            )}
-            {!loadingActiveReturns && (!activeReturns || !activeReturns.activeReturns || activeReturns.activeReturns.length === 0) && (
-              <p className="text-center text-gray-500">No active return data available.</p>
-            )}
-          </div>
-        </section>
-
-        <section className="bg-gray-900 p-4 rounded-lg shadow-[0_0_15px_rgba(0,255,204,0.5)] border border-[#00ffcc]">
-          <h2 className="text-xl text-[#00ffcc] mb-4 text-center">Market Performance (Up/Down)</h2>
-          <div className="relative h-72 md:h-96 overflow-auto text-xs p-2">
-            {loadingMarketPerformance && <p className="text-center animate-pulse">Loading Market Performance...</p>}
-            {!loadingMarketPerformance && marketPerformance && marketPerformance.marketPerformance?.length > 0 && (
-              <pre>{JSON.stringify(marketPerformance, null, 2)}</pre>
-            )}
-            {!loadingMarketPerformance && (!marketPerformance || !marketPerformance.marketPerformance || marketPerformance.marketPerformance.length === 0) && (
-              <p className="text-center text-gray-500">No market performance data available.</p>
-            )}
-          </div>
-        </section>
-
-        <section className="bg-gray-900 p-4 rounded-lg shadow-[0_0_15px_rgba(255,255,0,0.5)] border border-[#ffff00] lg:col-span-2">
-          <h2 className="text-xl text-[#ffff00] mb-2 text-center">Fundamentals Data Date</h2>
-          <div className="relative text-center p-2">
-            {loadingFundamentalsDate && <p className="animate-pulse">Loading Date...</p>}
-            {!loadingFundamentalsDate && fundamentalsDate && (
-              <p>Data as of: <span className="font-bold">{fundamentalsDate}</span></p>
-            )}
-            {!loadingFundamentalsDate && !fundamentalsDate && (
-              <p className="text-gray-500">Fundamentals date not available.</p>
-            )}
-          </div>
-        </section>
+            </div>
+          ) : (
+            <p className="text-center text-gray-500">Upload CSV to see monthly returns.</p>
+          )}
+        </div>
 
       </main>
 
-      <footer className="mt-12 text-center text-sm text-gray-500">
-        Data sources: User-uploaded CSV, Alpha Vantage (via backend cache). All values approximate.
+      {/* Footer Section */}
+      <footer className="w-full max-w-7xl mt-12 pt-4 border-t border-gray-700 text-center text-gray-500 text-sm">
+        <p>Robinhood Dashboard | Data for informational purposes only.</p>
+        {loadingFundamentalsDate ? (
+            <p>Loading data date...</p>
+        ) : fundamentalsDate && (
+             <p>Fundamentals Data Date: {fundamentalsDate}</p>
+        )}
+        <p>Stock data provided by Alpha Vantage. Use responsibly.</p>
       </footer>
     </div>
   );
 }
 
+// Step 88: Export the App component to be used in main.jsx.
 export default App;
