@@ -18,6 +18,7 @@ import {
 import { Bar, Scatter, Line, Pie } from 'react-chartjs-2';
 import 'chartjs-adapter-date-fns';
 import { parse } from 'date-fns';
+import RawDataPage from './RawDataPage';
 
 // Register Chart.js components
 ChartJS.register(
@@ -184,12 +185,13 @@ function App() {
   const [loadingActiveReturns, setLoadingActiveReturns] = useState(false); // Tracks loading.
   
   // Stores data on how the portfolio performed during market up vs. down periods.
-  const [marketPerformance, setMarketPerformance] = useState({ marketPerformance: [] });
+  const [marketPerformance, setMarketPerformance] = useState({ upMarket: {}, downMarket: {}, total: {}, error: null });
   const [loadingMarketPerformance, setLoadingMarketPerformance] = useState(false); // Tracks loading.
   
   // Stores calculated risk and return metrics (Sharpe Ratio, Volatility, etc.).
   const [riskReturnMetrics, setRiskReturnMetrics] = useState(null);
   const [loadingRiskReturn, setLoadingRiskReturn] = useState(false); // Tracks loading.
+  const [errorRiskReturnMetrics, setErrorRiskReturnMetrics] = useState(null); // Stores error message.
   
   // Stores data for the annual returns chart.
   const [annualReturnsData, setAnnualReturnsData] = useState(null);
@@ -213,6 +215,9 @@ function App() {
   const [drawdownData, setDrawdownData] = useState(null);
   const [isLoadingDrawdown, setIsLoadingDrawdown] = useState(true); // Tracks loading.
   const [errorDrawdown, setErrorDrawdown] = useState(null); // Stores error message.
+
+  // --- Additional State Variables ---
+  const [showRawDataPage, setShowRawDataPage] = useState(false);
 
   const handleFileChange = (event) => {
     setFile(event.target.files[0]);
@@ -335,20 +340,57 @@ function App() {
     try {
       // Step 43: Fetch data from the backend, including the benchmark.
       const response = await fetch(`http://localhost:3002/monthly-returns?benchmark=${selectedBenchmark}`);
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const data = await response.json();
-      // Step 44: Update state with fetched data.
-      setMonthlyReturnsData(data);
+      if (!response.ok) {
+        if (response.status === 501) {
+          console.info(`[App] Feature not implemented yet: ${response.url}`);
+          // Do not update state, keep previous data
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          const errorMsg = errorData.error || `HTTP error! status: ${response.status}`;
+          setErrorMonthlyReturns(errorMsg);
+          setMonthlyReturnsData(null); // Set to null or keep previous? Setting null for now.
+          throw new Error(errorMsg);
+        }
+      } else {
+        const data = await response.json();
+
+        // Basic validation - ensure data is an array
+        if (!Array.isArray(data)) {
+          throw new Error('Invalid data format received for monthly returns.');
+        }
+
+        // Format for Chart.js Bar chart
+        const labels = data.map(item => `${item.year}-${String(item.month).padStart(2, '0')}`);
+        setMonthlyReturnsData({
+          labels,
+          datasets: [
+            {
+              label: 'Portfolio',
+              data: data.map(item => item.portfolioReturn),
+              backgroundColor: 'rgba(75, 192, 192, 0.6)',
+              borderColor: 'rgba(75, 192, 192, 1)',
+              borderWidth: 1,
+            },
+            {
+              label: selectedBenchmark,
+              data: data.map(item => item.benchmarkReturn),
+              backgroundColor: 'rgba(255, 99, 132, 0.6)',
+              borderColor: 'rgba(255, 99, 132, 1)',
+              borderWidth: 1,
+            },
+          ],
+        });
+      }
     } catch (error) {
-      // Step 45: Handle fetch errors.
-      console.error("Error fetching monthly returns:", error);
-      setErrorMonthlyReturns(error.message);
-      setMonthlyReturnsData(null);
+      console.error('Error during fetchMonthlyReturns execution:', error);
+      if (!errorMonthlyReturns) {
+          setErrorMonthlyReturns(error.message || 'An unexpected error occurred.');
+          setMonthlyReturnsData({ labels: [], datasets: [] });
+      }
     } finally {
-      // Step 46: Set loading state to false.
       setIsLoadingMonthlyReturns(false);
     }
-  }, [selectedBenchmark]); // Dependency: selectedBenchmark.
+  }, [selectedBenchmark, errorMonthlyReturns]);
 
   // Step 47: Define a function to fetch portfolio growth data.
   const fetchPortfolioGrowth = useCallback(async () => {
@@ -359,95 +401,111 @@ function App() {
     try {
       // Step 49: Fetch data from the backend, including the benchmark.
       const response = await fetch(`http://localhost:3002/portfolio-growth?benchmark=${selectedBenchmark}`);
-      // Step 50: Handle non-OK responses (e.g., 404 if no transactions uploaded).
       if (!response.ok) {
-        const errorData = await response.json(); // Try to get error message from backend
-        console.error(`Error fetching portfolio growth data: ${response.status}`, errorData);
-        // Step 51: Set a user-friendly error message.
-        setErrorPortfolioGrowth(errorData.message || 'Failed to fetch portfolio data. Please upload transactions first.');
-        setPortfolioGrowthData(null); // Clear data state.
-        return; // Stop execution.
-      }
-      
-      // Step 52: Parse the successful JSON response.
-      const data = await response.json();
-      console.log("Fetched Portfolio Growth Data:", data);
-      
-      // Step 53: Validate the fetched data structure.
-      if (!Array.isArray(data) || data.length === 0) {
-        console.warn("Fetched portfolio growth data is empty or not an array");
-        setErrorPortfolioGrowth('No portfolio data available. Please upload transactions first.');
-        setPortfolioGrowthData(null);
-        return;
-      }
-      
-      // Step 54: Check if data format needs transformation (optional, based on backend consistency).
-      // This block tries to handle cases where the backend might return data in a slightly different shape.
-      if (data[0] && (!Object.hasOwn(data[0], 'portfolioValue') || !Object.hasOwn(data[0], 'benchmarkValue'))) {
-        console.warn("Fetched portfolio growth data is not in the expected {date, portfolioValue, benchmarkValue} format. Attempting transformation.");
-        // Step 55: Transform the data into the expected format.
-        const transformedData = data.map(item => ({
-          date: item.date || new Date().toISOString().split('T')[0], // Fallback date
-          portfolioValue: item.portfolioValue || item.value || 0, // Try different possible value keys
-          benchmarkValue: item.benchmarkValue || 0 // Fallback benchmark value
-        }));
-        setPortfolioGrowthData(transformedData); // Update state with transformed data.
+        if (response.status === 501) {
+          console.info(`[App] Feature not implemented yet: ${response.url}`);
+          // Do not update state, keep previous data
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          const errorMsg = errorData.error || `Failed with status: ${response.status}`;
+          console.error(`Error fetching portfolio growth data: ${errorMsg}`);
+          setErrorPortfolioGrowth(errorMsg);
+          setPortfolioGrowthData(null); // Set to null or keep previous? Setting null for now.
+          throw new Error(errorMsg);
+        }
       } else {
-        // Step 56: If data is already in the correct format, update state directly.
-        setPortfolioGrowthData(data);
+        const data = await response.json();
+        console.log("Fetched Portfolio Growth Data:", data);
+        
+        if (data && Array.isArray(data.labels) && Array.isArray(data.datasets)) {
+            setPortfolioGrowthData(data);
+        // Check if data is an array (even empty) from the new backend response
+        } else if (Array.isArray(data)) {
+            if (data.length === 0) {
+                console.log("[App] Received empty portfolio growth data array. Setting empty chart.");
+                setPortfolioGrowthData({ labels: [], datasets: [] }); // Set empty chart data
+            } else if (data[0].date && data[0].portfolioValue !== undefined) {
+                 console.log("[App] Transforming portfolio growth data points to Chart.js format.");
+                 const labels = data.map(item => item.date); // Assuming date is 'YYYY-MM-DD'
+                 setPortfolioGrowthData({
+                    labels,
+                    datasets: [
+                        {
+                            label: 'Portfolio Value',
+                            data: data.map(item => ({ x: parse(item.date, 'yyyy-MM-dd', new Date()), y: item.portfolioValue })),
+                            borderColor: '#ff00ff', backgroundColor: 'rgba(255, 0, 255, 0.1)', tension: 0.1, pointRadius: 0, fill: true, borderWidth: 2,
+                        },
+                        {
+                            label: `${selectedBenchmark} (Normalized)`,
+                            data: data.map(item => ({ x: parse(item.date, 'yyyy-MM-dd', new Date()), y: item.benchmarkValue })),
+                            borderColor: '#00ffcc', backgroundColor: 'rgba(0, 255, 204, 0.1)', tension: 0.1, pointRadius: 0, fill: true, borderWidth: 2,
+                        }
+                    ]
+                });
+            } else {
+                // Handle array format but unexpected structure within the array
+                console.warn("[App] Unexpected data structure within portfolio growth array.");
+                setErrorPortfolioGrowth('Invalid data structure in growth data.');
+                setPortfolioGrowthData({ labels: [], datasets: [] });
+            }
+        } else {
+            console.warn("[App] Unexpected data format received for portfolio growth (not Chart.js object or array).");
+            setErrorPortfolioGrowth('Invalid data format received.');
+            setPortfolioGrowthData({ labels: [], datasets: [] });
+        }
       }
     } catch (error) {
-      // Step 57: Handle any unexpected errors during fetch or processing.
-      console.error("Error fetching portfolio growth:", error);
-      setErrorPortfolioGrowth(error.message);
-      setPortfolioGrowthData(null);
+      console.error("Error during fetchPortfolioGrowth execution:", error);
+      if (!errorPortfolioGrowth) {
+          setErrorPortfolioGrowth(error.message || 'An unexpected error occurred.');
+          setPortfolioGrowthData({ labels: [], datasets: [] });
+      }
     } finally {
-      // Step 58: Set loading state to false.
       setIsLoadingPortfolioGrowth(false);
     }
-  }, [selectedBenchmark]); // Dependency: selectedBenchmark.
+  }, [selectedBenchmark, errorPortfolioGrowth]);
 
   // Step 59: Define a function to fetch risk and return metrics.
   const fetchRiskReturnMetrics = useCallback(async () => {
-    // Step 60: Set loading state.
+    // Step 60: Set loading state and clear errors.
     setLoadingRiskReturn(true);
+    setErrorRiskReturnMetrics(null);
     try {
       // Step 61: Fetch data from the backend, including the benchmark.
-      const response = await fetch(`http://localhost:3002/risk-return?benchmark=${selectedBenchmark}`);
-      
-      // Step 62: Handle non-OK responses.
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error(`Error fetching risk-return metrics: ${response.status}`, errorData);
-        setRiskReturnMetrics(null);
-        // Optionally set an error state here if one exists for risk/return.
-        return;
-      }
-      
-      // Step 63: Parse the successful JSON response.
-      const data = await response.json();
+      const response = await fetch(`http://localhost:3002/risk-return-metrics?benchmark=${selectedBenchmark}`);
 
-      // Step 64: Check the structure of the response and update state.
-      if (data && data.metrics) {
-        setRiskReturnMetrics(data.metrics); // Update state with the metrics object.
-      } else if (data && data.error) {
-        // Handle cases where the backend explicitly returned an error message.
-        console.error('Error from risk-return endpoint:', data.error);
-        setRiskReturnMetrics(null);
+      if (!response.ok) {
+        if (response.status === 501) {
+          console.info(`[App] Feature not implemented yet: ${response.url}`);
+          // Do not update state, keep previous data
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          const errorMsg = errorData.error || `Failed with status: ${response.status}`;
+          console.error(`Error fetching risk-return metrics: ${response.status}`, errorMsg);
+          setErrorRiskReturnMetrics(errorMsg);
+          setRiskReturnMetrics(null); // Set to null or keep previous? Setting null for now.
+          throw new Error(errorMsg);
+        }
       } else {
-        // Handle unexpected response formats.
-        console.error('Unexpected response format from risk-return endpoint');
-        setRiskReturnMetrics(null);
+        const data = await response.json();
+        if (data && data.portfolio && data.benchmark) {
+          setRiskReturnMetrics(data);
+        } else {
+          console.error('Unexpected response format from risk-return-metrics endpoint');
+          setErrorRiskReturnMetrics('Received unexpected data format.');
+          setRiskReturnMetrics(null); // Set to null or keep previous? Setting null for now.
+        }
       }
     } catch (error) {
-      // Step 65: Handle fetch or processing errors.
-      console.error('Failed to fetch risk and return metrics:', error);
-      setRiskReturnMetrics(null);
+      console.error('Error during fetchRiskReturnMetrics execution:', error);
+      if (!errorRiskReturnMetrics) {
+          setErrorRiskReturnMetrics(error.message || 'An unexpected error occurred.');
+          setRiskReturnMetrics(null); // Set to null or keep previous? Setting null for now.
+      }
     } finally {
-      // Step 66: Set loading state to false.
       setLoadingRiskReturn(false);
     }
-  }, [selectedBenchmark]); // Dependency: selectedBenchmark.
+  }, [selectedBenchmark, errorRiskReturnMetrics]);
 
   // Step 67: Define a function to fetch portfolio drawdown data.
   const fetchDrawdownData = useCallback(async () => {
@@ -506,35 +564,59 @@ function App() {
 
   const fetchStyleAnalysis = useCallback(async () => {
     setLoadingStyleAnalysis(true);
+    setStyleAnalysis({ styleAnalysis: [], portfolioTotals: {}, error: null });
     try {
       const response = await fetch('http://localhost:3002/style-analysis');
-      const data = await response.json();
-
-      if (response.ok) {
-        setStyleAnalysis(data);
+      if (!response.ok) {
+         if (response.status === 501) {
+              console.info(`[App] Feature not implemented yet: ${response.url}`);
+              // Do not update state, keep previous data
+          } else {
+              const errorData = await response.json().catch(() => ({}));
+              const errorMsg = errorData.error || `Failed to fetch style analysis (${response.status})`;
+              // Keep previous styleAnalysis data but set error
+              setStyleAnalysis(prev => ({ ...prev, error: errorMsg }));
+              throw new Error(errorMsg);
+          }
       } else {
-        console.error('Error fetching style analysis:', data.error);
+          const data = await response.json();
+          if (data && Array.isArray(data.styleAnalysis) && data.portfolioTotals) {
+             setStyleAnalysis({ ...data, error: null });
+          } else {
+             console.warn("[App] Unexpected data format received for style analysis.");
+             setStyleAnalysis({ styleAnalysis: [], portfolioTotals: {}, error: 'Invalid data format received.' });
+          }
       }
     } catch (error) {
-      console.error('Failed to fetch style analysis:', error);
+      console.error('Error during fetchStyleAnalysis execution:', error);
+      if (!styleAnalysis.error) { 
+         setStyleAnalysis({ styleAnalysis: [], portfolioTotals: {}, error: error.message || 'Network error or invalid response.' });
+      }
     } finally {
       setLoadingStyleAnalysis(false);
     }
-  }, []); // No dependencies
+  }, [styleAnalysis.error]);
 
   const fetchFundamentalsDate = useCallback(async () => {
     setLoadingFundamentalsDate(true);
+    setFundamentalsDate(''); // Reset date on fetch
     try {
       const response = await fetch('http://localhost:3002/fundamentals-date');
-      const data = await response.json();
-
-      if (response.ok) {
-        setFundamentalsDate(data.fundamentalsDate || '');
-      } else {
-        console.error('Error fetching fundamentals date:', data.error);
+      // Check if response is OK *before* trying to parse JSON
+      if (!response.ok) {
+        // Try to get text error for non-JSON responses (like HTML 404 pages)
+        const errorText = await response.text();
+        throw new Error(errorText || `HTTP error! status: ${response.status}`);
       }
+
+      const data = await response.json(); // Parse JSON only if response is OK
+
+      // Removed redundant OK check here
+      setFundamentalsDate(data.fundamentalsDate || 'N/A'); // Use N/A as fallback
+
     } catch (error) {
-      console.error('Failed to fetch fundamentals date:', error);
+      console.error('Failed to fetch fundamentals date:', error.message);
+      setFundamentalsDate('Error'); // Indicate error in the state
     } finally {
       setLoadingFundamentalsDate(false);
     }
@@ -544,33 +626,56 @@ function App() {
     setLoadingActiveReturns(true);
     try {
       const response = await fetch('http://localhost:3002/active-return');
-      const data = await response.json();
-
-      if (response.ok) {
+      if (response.status === 501) {
+        console.info(`[App] Feature not implemented yet: ${response.url}`);
+        // Do not update state, keep previous data
+      } else if (response.ok) {
+        const data = await response.json();
         setActiveReturns(data);
       } else {
-        console.error('Error fetching active returns:', data.error);
+        // Keep previous activeReturns data but set error
+        setActiveReturns(prev => ({ ...(prev || { activeReturns: [] }), error: 'Failed to fetch active return.' }));
       }
-    } catch (error) {
-      console.error('Failed to fetch active returns:', error);
+    } catch {
+      // Keep previous activeReturns data but set error
+      setActiveReturns(prev => ({ ...(prev || { activeReturns: [] }), error: 'Failed to fetch active return.' }));
     } finally {
       setLoadingActiveReturns(false);
     }
-  }, []); // No dependencies
+  }, []);
 
   const fetchMarketPerformance = useCallback(async () => {
     setLoadingMarketPerformance(true);
+    // Reset error state on new fetch attempt
+    setMarketPerformance({ upMarket: {}, downMarket: {}, total: {}, error: null });
     try {
       const response = await fetch('http://localhost:3002/market-performance');
-      const data = await response.json();
+      // Try parsing JSON regardless of status first, as 501 might still have a JSON body like {"error": "..."}
+      let data = {};
+      try {
+          data = await response.json();
+      } catch (e) {
+          // Ignore JSON parse error if response wasn't OK anyway
+          if (response.ok) throw e; // Re-throw if response was OK but JSON invalid
+      }
 
       if (response.ok) {
-        setMarketPerformance(data);
+        setMarketPerformance({ ...data, error: null }); // Set data and clear error on success
+      } else if (response.status === 501) {
+          console.info(`[App] Feature not implemented yet: ${response.url}`);
+           // Do not update state, keep previous data
       } else {
-        console.error('Error fetching market performance:', data.error);
+        // Handle other non-OK responses (like 400, 500)
+        const errorMsg = data.error || `Failed with status: ${response.status}`;
+        console.error('Error fetching market performance:', errorMsg);
+        // Keep previous marketPerformance data but set error
+        setMarketPerformance(prev => ({ ...(prev || { upMarket: {}, downMarket: {}, total: {} }), error: errorMsg }));
       }
     } catch (error) {
+      // Handle network errors or actual JSON parsing failures on OK responses
       console.error('Failed to fetch market performance:', error);
+       // Keep previous marketPerformance data but set error
+       setMarketPerformance(prev => ({ ...(prev || { upMarket: {}, downMarket: {}, total: {} }), error: 'Network error or invalid response.' }));
     } finally {
       setLoadingMarketPerformance(false);
     }
@@ -681,10 +786,12 @@ function App() {
     datasets: [
       {
         label: 'Portfolio Monthly Return (%)',
-        data: monthlyReturnsData?.map(item => ({
-          x: parse(item.yearMonth, 'yyyy-MM', new Date()),
-          y: item.portfolioReturn
-        })) || [],
+        data: Array.isArray(monthlyReturnsData) && monthlyReturnsData.length > 0
+          ? monthlyReturnsData.map(item => ({
+              x: parse(item.yearMonth, 'yyyy-MM', new Date()),
+              y: item.portfolioReturn
+            }))
+          : [],
         borderColor: '#ff00ff',
         backgroundColor: 'rgba(255, 0, 255, 0.3)',
         tension: 0.1,
@@ -695,10 +802,12 @@ function App() {
       },
       {
         label: `${selectedBenchmark} Monthly Return (%)`,
-        data: monthlyReturnsData?.map(item => ({
-          x: parse(item.yearMonth, 'yyyy-MM', new Date()),
-          y: item.benchmarkReturn
-        })) || [],
+        data: Array.isArray(monthlyReturnsData) && monthlyReturnsData.length > 0
+          ? monthlyReturnsData.map(item => ({
+              x: parse(item.yearMonth, 'yyyy-MM', new Date()),
+              y: item.benchmarkReturn
+            }))
+          : [],
         borderColor: '#00ffcc',
         backgroundColor: 'rgba(0, 255, 204, 0.3)',
         tension: 0.1,
@@ -775,37 +884,12 @@ function App() {
   };
 
   // --- Prepare Portfolio Growth Chart Data ---
+  // Use the data structure directly from the state, which is already formatted
   const portfolioGrowthChartData = {
-    datasets: [
-      {
-        label: 'Portfolio Value',
-        data: portfolioGrowthData?.map(item => ({
-          x: parse(item.date, 'yyyy-MM-dd', new Date()),
-          y: item.portfolioValue
-        })) || [],
-        borderColor: '#ff00ff',
-        backgroundColor: 'rgba(255, 0, 255, 0.1)',
-        tension: 0.1,
-        pointRadius: 0,
-        pointHoverRadius: 5,
-        fill: true,
-        borderWidth: 2,
-      },
-      {
-        label: `${selectedBenchmark} (Normalized)`,
-        data: portfolioGrowthData?.map(item => ({
-          x: parse(item.date, 'yyyy-MM-dd', new Date()),
-          y: item.benchmarkValue
-        })) || [],
-        borderColor: '#00ffcc',
-        backgroundColor: 'rgba(0, 255, 204, 0.1)',
-        tension: 0.1,
-        pointRadius: 0,
-        pointHoverRadius: 5,
-        fill: true,
-        borderWidth: 2,
-      },
-    ],
+    // Ensure labels exist, default to empty array
+    labels: portfolioGrowthData?.labels || [], 
+    // Ensure datasets exist, default to empty array
+    datasets: portfolioGrowthData?.datasets || [] 
   };
 
   // Specific options for the Portfolio Growth chart
@@ -862,27 +946,42 @@ function App() {
       },
       y: {
         ...cyberpunkChartOptions.scales.y,
+        type: 'linear', // Explicitly set the type
+        min: 0, // Explicitly set min
+        max: 16000, // Explicitly set max (multiple of stepSize)
         title: {
             ...cyberpunkChartOptions.scales.y.title,
             text: 'Value (USD)',
         },
         ticks: {
           ...cyberpunkChartOptions.scales.y.ticks,
+          autoSkip: false, // Prevent Chart.js from skipping ticks
+          stepSize: 2000, // Set the desired step
+          font: { // Explicitly set font properties
+             size: 12, // Fixed font size
+             family: "'Courier New', Courier, monospace" 
+          },
           callback: function(value) {
             return new Intl.NumberFormat('en-US', {
                 style: 'currency',
                 currency: 'USD',
-                notation: 'compact',
                 maximumFractionDigits: 0,
                 minimumFractionDigits: 0
              }).format(value);
-          }
+          },
+          min: 0, // Redundant min: 0 here, keep the one at the scale level
         }
-      }
+      },
+    },
+    layout: { // Add layout padding
+        padding: {
+            bottom: 20 // Add space below the chart for x-axis labels
+        }
     }
   };
 
-  // --- Prepare Drawdown Chart Data ---
+  // --- Prepare Drawdown Chart Data --- DELETED - Prepared inline now
+  /*
   const drawdownChartData = {
     datasets: [
       {
@@ -902,6 +1001,7 @@ function App() {
       },
     ],
   };
+  */
 
   // Specific options for the Drawdown chart
   const drawdownChartOptions = {
@@ -1058,7 +1158,13 @@ function App() {
   // --- JSX Rendering --- 
   // This is the structure of the web page displayed to the user.
 
-  // Step 87: Render the main application UI.
+  // --- Conditional Rendering Logic ---
+  // If showRawDataPage is true, render only the RawDataPage component
+  if (showRawDataPage) {
+    return <RawDataPage onBack={() => setShowRawDataPage(false)} />;
+  }
+
+  // Otherwise, render the main dashboard
   return (
     // Main container div: sets background, text color, font, padding, and centers content.
     <div className="min-h-screen bg-black text-neon-green font-mono p-4 md:p-8 flex flex-col items-center">
@@ -1135,29 +1241,28 @@ function App() {
         
         {/* Portfolio Growth Chart Section */}
         // Takes full width on medium screens and above (md:col-span-2).
-        // Sets a fixed height (h-96) for the chart container.
-        <div className="bg-gray-900 p-4 rounded-lg shadow-lg border border-neon-cyan glow-border-cyan md:col-span-2 h-96">
-          {/* Chart title. */}
+        // Apply flex flex-col to stack title and chart, maintain h-[40rem]
+        <div className="flex flex-col h-[40rem] bg-gray-900 p-4 rounded-lg shadow-lg border border-neon-cyan glow-border-cyan md:col-span-2">
+          {/* Chart title - remains as the first flex item */}
           <h3 className="text-xl font-semibold text-neon-magenta mb-2 text-center">Portfolio Growth</h3>
-          {/* Conditional rendering based on loading/error/data state for this chart. */}
-          {isLoadingPortfolioGrowth ? (
-            <p className="text-center text-neon-cyan">Loading growth data...</p> // Show loading message.
-          ) : errorPortfolioGrowth ? (
-            <p className="text-center text-red-500">Error: {errorPortfolioGrowth}</p> // Show error message.
-          ) : portfolioGrowthData ? (
-            // If data exists, render the chart container.
-            // pb-8 adds padding at the bottom to prevent axis labels from being cut off.
-            <div className="h-full pb-8">
-              {/* Render the Line chart component with its options and data. */}
+          
+          {/* New container for chart and conditional logic: takes remaining space */}
+          <div className="flex-grow relative">
+            {/* Conditional rendering moved inside the flex-grow container */}
+            {isLoadingPortfolioGrowth ? (
+              <p className="text-center text-neon-cyan">Loading growth data...</p> // Show loading message.
+            ) : errorPortfolioGrowth ? (
+              <p className="text-center text-red-500">Error: {errorPortfolioGrowth}</p> // Show error message.
+            ) : portfolioGrowthData ? (
+              // The Line chart is now directly inside the flex-grow container
               <Line options={portfolioGrowthChartOptions} data={portfolioGrowthChartData} />
-            </div>
-          ) : (
-            <p className="text-center text-gray-500">Upload CSV to see portfolio growth.</p> // Default message if no data.
-          )}
+            ) : (
+              <p className="text-center text-gray-500">Upload CSV to see portfolio growth.</p> // Default message if no data.
+            )}
+          </div>
         </div>
 
         {/* Annual Returns Chart Section */}
-        // Sets a fixed height (h-80).
         <div className="bg-gray-900 p-4 rounded-lg shadow-lg border border-neon-orange glow-border-orange h-80">
           <h3 className="text-xl font-semibold text-neon-magenta mb-2 text-center">Annual Returns</h3>
           {/* Conditional rendering for loading/error/data states. */}
@@ -1176,7 +1281,6 @@ function App() {
         </div>
         
         {/* Drawdown Chart Section */}
-        // Sets a fixed height (h-80).
         <div className="bg-gray-900 p-4 rounded-lg shadow-lg border border-red-600 glow-border-red h-80">
            <h3 className="text-xl font-semibold text-neon-magenta mb-2 text-center">Portfolio Drawdown</h3>
            {/* Conditional rendering for loading/error/data states. */}
@@ -1185,10 +1289,38 @@ function App() {
           ) : errorDrawdown ? (
             <p className="text-center text-red-500">Error: {errorDrawdown}</p>
           ) : drawdownData ? (
-            <div className="h-full pb-8">
-              {/* Render the Line chart component for drawdown. */}
-              <Line options={drawdownChartOptions} data={drawdownChartData} />
-            </div>
+            // If data exists, render the chart container.
+            // ADD CONSOLE LOGS HERE
+            (() => { // Use IIFE to allow statements before return
+              console.log('[DrawdownChart Render] drawdownData:', drawdownData); 
+              // Prepare chart data *inside* the condition to ensure drawdownData is defined
+              const preparedChartData = {
+                datasets: [
+                  {
+                    label: 'Portfolio Drawdown (%)',
+                    data: drawdownData?.map(item => ({
+                      x: parse(item.date, 'yyyy-MM-dd', new Date()),
+                      y: item.drawdownPercentage
+                    })) || [],
+                    borderColor: '#ff4500', 
+                    backgroundColor: 'rgba(255, 69, 0, 0.2)',
+                    tension: 0.1,
+                    pointRadius: 0, 
+                    pointHoverRadius: 5,
+                    fill: true, 
+                    borderWidth: 2,
+                    stepped: false, 
+                  },
+                ],
+              };
+              console.log('[DrawdownChart Render] preparedChartData:', preparedChartData);
+              return (
+                <div className="h-full pb-8">
+                  {/* Render the Line chart component for drawdown. */}
+                  <Line options={drawdownChartOptions} data={preparedChartData} />
+                </div>
+              );
+            })() // Immediately invoke the function
           ) : (
             <p className="text-center text-gray-500">Upload CSV to see drawdown.</p>
           )}
@@ -1198,9 +1330,11 @@ function App() {
         // Takes full width on medium screens and above.
         <div className="bg-gray-900 p-4 rounded-lg shadow-lg border border-neon-yellow glow-border-yellow md:col-span-2">
            <h3 className="text-xl font-semibold text-neon-magenta mb-2 text-center">Risk & Return Metrics</h3>
-           {/* Conditional rendering for loading/data state. */}
+           {/* Conditional rendering for loading/error/data state. */}
             {loadingRiskReturn ? (
               <p className="text-center text-neon-cyan">Loading metrics...</p>
+            ) : errorRiskReturnMetrics ? (
+              <p className="text-center text-red-500">Error: {errorRiskReturnMetrics}</p>
             ) : riskReturnMetrics ? (
               // Container to allow horizontal scrolling on small screens if table is wide.
               <div className="overflow-x-auto">
@@ -1258,6 +1392,8 @@ function App() {
           <h3 className="text-xl font-semibold text-neon-magenta mb-4 text-center">Holdings Based Style Analysis</h3>
           {loadingStyleAnalysis ? (
             <p className="text-center text-neon-cyan">Loading style analysis...</p>
+          ) : styleAnalysis?.error ? (
+            <p className="text-center text-gray-500">{styleAnalysis.error}</p>
           ) : styleAnalysis?.styleAnalysis?.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-sm mb-6">
@@ -1321,6 +1457,8 @@ function App() {
           <h3 className="text-xl font-semibold text-neon-magenta mb-4 text-center">Active Return Contribution</h3>
           {loadingActiveReturns ? (
             <p className="text-center text-neon-cyan">Loading active returns...</p>
+          ) : activeReturns?.error ? (
+            <p className="text-center text-gray-500">{activeReturns.error}</p>
           ) : activeReturns?.activeReturns?.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
@@ -1413,6 +1551,13 @@ function App() {
              <p>Fundamentals Data Date: {fundamentalsDate}</p>
         )}
         <p>Stock data provided by Alpha Vantage. Use responsibly.</p>
+        {/* Button to navigate to the Raw Data Page */}
+        <button 
+           onClick={() => setShowRawDataPage(true)}
+           className="mt-4 py-2 px-4 rounded-full font-semibold text-black bg-neon-orange hover:bg-orange-400 shadow-md glow-button-orange transition duration-300 ease-in-out text-sm"
+        >
+           View Raw Database Data
+        </button>
       </footer>
     </div>
   );

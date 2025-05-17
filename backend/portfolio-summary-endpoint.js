@@ -23,42 +23,12 @@ const db = new sqlite3.Database(dbPath, (err) => {
   }
 });
 
-// Mock portfolio summary metrics function
-function calculatePortfolioSummaryMetrics() {
-  return new Promise((resolve, reject) => {
-    // For testing, return mock data
-    const metrics = {
-      time_period: {
-        start_date: '2023-01-01',
-        end_date: '2023-12-31',
-        years: 1.0
-      },
-      start_balance: 10000.00,
-      end_balance: 12000.00,
-      annualized_return: 20.00,
-      annualized_std_dev: 15.00,
-      best_year_return: 25.00,
-      worst_year_return: -5.00,
-      best_year: '2023',
-      worst_year: '2022',
-      max_drawdown: -8.50,
-      max_drawdown_period: {
-        start_date: '2023-02-15',
-        end_date: '2023-03-10'
-      },
-      recovery_time: 30,
-      sharpe_ratio: 1.23,
-      sortino_ratio: 1.45,
-      benchmark_correlation: 0.85,
-      cumulative_return: 20.00,
-      percentage_positive_months: 75.00,
-      upside_capture_ratio: 110.00,
-      downside_capture_ratio: 80.00
-    };
-    
-    resolve(metrics);
+// Remove mock portfolio summary metrics and return a 501 error
+module.exports = (req, res) => {
+  res.status(501).json({
+    error: 'Portfolio summary endpoint is not yet implemented. All data must come from CSV, API, or cache.'
   });
-}
+};
 
 // GET route for portfolio summary
 app.get('/portfolio-summary', (req, res) => {
