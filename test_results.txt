@@ -1,0 +1,112 @@
+﻿============================================================
+COMPREHENSIVE BROWSER FUNCTIONALITY TEST
+============================================================
+
+
+PHASE 1: Upload First CSV File
+
+============================================================
+Uploading CSV: First CSV File (workspace root)
+File: 354e8757-62f9-506c-9b30-db3ac6d907e8.csv
+============================================================
+Status Code: 200
+[PASS] CSV uploaded successfully
+Transactions processed: 381
+
+
+PHASE 2: Test All Features After First Upload
+
+============================================================
+Testing: Portfolio Overview
+URL: http://localhost:8000/api/portfolio-overview
+============================================================
+Status Code: 200
+[PASS] Portfolio Overview
+Response keys: ['has_data', 'transaction_count', 'unique_tickers', 'current_holdings_count', 'holdings', 'performance', 'performance_metrics', 'risk_assessment', 'advanced_analytics', 'stock_database']
+
+============================================================
+Testing: Portfolio History
+URL: http://localhost:8000/api/portfolio-history
+============================================================
+Status Code: 200
+[PASS] Portfolio History
+Response keys: ['history', 'total_points']
+
+============================================================
+Testing: Performance Metrics
+URL: http://localhost:8000/api/performance-metrics
+============================================================
+Status Code: 200
+[PASS] Performance Metrics
+Response keys: ['total_return', 'cagr', 'volatility', 'max_drawdown', 'sharpe_ratio', 'rolling_returns', 'start_value', 'end_value', 'period_days', 'period_years']
+
+============================================================
+Testing: Risk Assessment
+URL: http://localhost:8000/api/risk-assessment
+============================================================
+Status Code: 200
+[PASS] Risk Assessment
+Response keys: ['volatility', 'max_drawdown', 'sharpe_ratio', 'sortino_ratio', 'value_at_risk', 'beta_analysis', 'correlation_matrix']
+
+============================================================
+Testing: Advanced Analytics
+URL: http://localhost:8000/api/advanced-analytics
+============================================================
+Status Code: 200
+[PASS] Advanced Analytics
+Response keys: ['position_weights', 'diversification_metrics', 'sector_allocation', 'market_conditions', 'benchmarking', 'optimization_recommendations']
+
+
+PHASE 3: Test Web Pages
+Analysis Page: [PASS] (Status: 200)
+Comparison Page: [PASS] (Status: 200)
+
+
+PHASE 4: Upload Second CSV File (Switching)
+
+============================================================
+Uploading CSV: Second CSV File (Downloads folder)
+File: c:\Users\Marshall\Downloads\354e8757-62f9-506c-9b30-db3ac6d907e8.csv
+============================================================
+Status Code: 200
+[PASS] CSV uploaded successfully
+Transactions processed: 381
+
+
+PHASE 5: Verify Data Switched Correctly
+
+============================================================
+Testing: Portfolio Overview (After Switch)
+URL: http://localhost:8000/api/portfolio-overview
+============================================================
+Status Code: 200
+[PASS] Portfolio Overview (After Switch)
+Response keys: ['has_data', 'transaction_count', 'unique_tickers', 'current_holdings_count', 'holdings', 'performance', 'performance_metrics', 'risk_assessment', 'advanced_analytics', 'stock_database']
+Transaction count after switch: 381
+
+============================================================
+Testing: Portfolio History (After Switch)
+URL: http://localhost:8000/api/portfolio-history
+============================================================
+Status Code: 200
+[PASS] Portfolio History (After Switch)
+Response keys: ['history', 'total_points']
+
+
+============================================================
+TEST SUMMARY
+============================================================
+csv_upload_1                   [PASS]
+csv_upload_2                   [PASS]
+portfolio_overview             [PASS]
+portfolio_history              [PASS]
+performance_metrics            [PASS]
+risk_assessment                [PASS]
+advanced_analytics             [PASS]
+analysis_page                  [PASS]
+comparison_page                [PASS]
+
+Total Tests: 9
+Passed: 9
+Failed: 0
+Success Rate: 100.0%

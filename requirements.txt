@@ -1,0 +1,33 @@
+# Web Framework
+fastapi
+uvicorn[standard]
+gunicorn
+
+# Database
+sqlalchemy
+alembic
+
+# Data Processing
+pandas
+numpy
+
+# Data Visualization
+plotly
+
+# Template Rendering
+jinja2
+
+# File Handling
+python-multipart
+
+# Environment & Config
+python-dotenv
+pydantic-settings
+
+# Development & Testing
+pytest
+httpx
+
+requests
+
+tenacity

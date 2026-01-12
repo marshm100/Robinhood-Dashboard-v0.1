@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # Backup service
+  backup:
+    build: .
+    container_name: robinhood-backup
+    command: >
+      sh -c "
+        echo 'Starting backup service...' &&
+        while true; do
+          echo 'Creating scheduled backup...' &&
+          python scripts/backup.py backup --name auto-$(date +%Y%m%d_%H%M%S) &&
+          echo 'Cleaning up old backups...' &&
+          python scripts/backup.py cleanup --keep-days 30 &&
+          echo 'Backup completed. Sleeping for 24 hours...' &&
+          sleep 86400
+        done
+      "
+    volumes:
+      - portfolio_data:/app/data:ro
+      - ./backups:/app/backups
+      - ./scripts:/app/scripts:ro
+    depends_on:
+      - robinhood-dashboard
+    restart: unless-stopped
+    networks:
+      - robinhood-network
+
+  # Manual backup service
+  backup-manual:
+    build: .
+    container_name: robinhood-backup-manual
+    profiles: ["manual"]
+    command: sh -c "python scripts/backup.py backup --name manual-$(date +%Y%m%d_%H%M%S)"
+    volumes:
+      - portfolio_data:/app/data:ro
+      - ./backups:/app/backups
+      - ./scripts:/app/scripts:ro
+    depends_on:
+      - robinhood-dashboard
+    networks:
+      - robinhood-network
+
+volumes:
+  portfolio_data:
+    external: true
+
+networks:
+  robinhood-network:
+    external: true

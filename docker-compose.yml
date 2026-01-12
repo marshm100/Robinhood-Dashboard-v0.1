@@ -1,0 +1,135 @@
+version: '3.8'
+
+services:
+  # Main application service
+  robinhood-dashboard:
+    build: .
+    container_name: robinhood-dashboard
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:strongpass123@postgres:5432/robinhood_db
+      - STOCKR_DB_PATH=./data/stockr_backbone/stockr.db
+      - DEBUG=${DEBUG:-false}
+      - SECRET_KEY=${SECRET_KEY:-change-this-in-production}
+      - HOST=0.0.0.0
+      - PORT=8000
+      - UPLOAD_DIR=./data/uploads
+      - MAX_UPLOAD_SIZE=10485760
+    volumes:
+      # Persistent database storage
+      - portfolio_data:/app/data
+      # Upload directory persistence
+      - uploads_data:/app/uploads
+      # Static files
+      - static_data:/app/static
+      # Logs
+      - logs_data:/app/logs
+    depends_on:
+      - init-stockr-db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - robinhood-network
+
+  # Service to initialize stockr database
+  init-stockr-db:
+    build: .
+    container_name: init-stockr-db
+    command: >
+      sh -c "
+        echo 'Initializing stockr database...' &&
+        mkdir -p /app/data/stockr_backbone &&
+        if [ ! -f /app/data/stockr_backbone/stockr.db ]; then
+          echo 'Copying stockr database...' &&
+          cp -r /app/stockr_backbone/* /app/data/stockr_backbone/ 2>/dev/null || echo 'No existing stockr db to copy'
+        fi &&
+        echo 'Stockr database initialization complete'
+      "
+    volumes:
+      - ./stockr_backbone:/app/stockr_backbone:ro
+      - portfolio_data:/app/data
+    networks:
+      - robinhood-network
+
+  postgres:
+    image: postgres:14
+    container_name: postgres-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: strongpass123
+      POSTGRES_DB: robinhood_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - robinhood-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    container_name: redis-cache
+    ports:
+      - "6379:6379"
+    networks:
+      - robinhood-network
+    restart: unless-stopped
+
+  celery_worker:
+    build: .
+    container_name: celery-worker
+    command: celery -A celery_app worker --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:strongpass123@postgres:5432/robinhood_db
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - robinhood-network
+    restart: unless-stopped
+
+  celery_beat:
+    build: .
+    container_name: celery-beat
+    command: celery -A celery_app beat --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:strongpass123@postgres:5432/robinhood_db
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - robinhood-network
+    restart: unless-stopped
+
+  flower:
+    image: mher/flower
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+      - celery_worker
+
+volumes:
+  portfolio_data:
+    driver: local
+  uploads_data:
+    driver: local
+  static_data:
+    driver: local
+  logs_data:
+    driver: local
+  postgres_data:
+
+networks:
+  robinhood-network:
+    driver: bridge

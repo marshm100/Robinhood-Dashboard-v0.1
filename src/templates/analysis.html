@@ -1,0 +1,1557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Detailed portfolio analysis with advanced metrics">
+    <meta name="theme-color" content="#ff00ff">
+    <title>Advanced Analysis - Robinhood Portfolio Analysis</title>
+
+    <!-- External Libraries -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-3.2.0.min.js" charset="utf-8"></script>
+
+    <style>
+        /* Robinhood-Inspired Cyberpunk Theme */
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #12121e;
+            --accent-neon: #00ffff;
+            --accent-positive: #00ff88;
+            --accent-negative: #ff3366;
+            --accent-warning: #ffff00;
+            --text-primary: #e0e0e0;
+            --text-secondary: #8888aa;
+            --border-color: rgba(0, 255, 255, 0.15);
+            /* Legacy aliases */
+            --cyber-pink: #00ffff;
+            --cyber-cyan: #00ffff;
+            --cyber-green: #00ff88;
+            --cyber-red: #ff3366;
+            --cyber-yellow: #ffff00;
+        }
+
+        body {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            line-height: 1.6;
+            letter-spacing: 0.05em;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: 
+                linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .cyberpunk-card {
+            background: rgba(18, 18, 30, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            backdrop-filter: blur(12px);
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            padding: 1.5rem;
+        }
+
+        .cyberpunk-card:hover {
+            border-color: var(--accent-neon);
+            box-shadow: 0 0 12px rgba(0, 255, 255, 0.15);
+        }
+
+        .scanlines::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(
+                transparent 50%,
+                rgba(255, 255, 255, 0.015) 50%
+            );
+            background-size: 100% 4px;
+            pointer-events: none;
+            opacity: 0.6;
+        }
+
+        .cyberpunk-button {
+            background: var(--accent-neon);
+            border: none;
+            color: #000;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            padding: 0.875rem 1.75rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            min-height: 48px;
+        }
+
+        .cyberpunk-button:hover {
+            box-shadow: 0 0 16px rgba(0, 255, 255, 0.4);
+            transform: scale(1.02);
+        }
+
+        .glow-text {
+            text-shadow: 0 0 8px var(--accent-neon);
+        }
+
+        .metric-positive { color: var(--accent-positive); text-shadow: 0 0 8px var(--accent-positive); }
+        .metric-negative { color: var(--accent-negative); }
+        .metric-neutral { color: var(--accent-neon); text-shadow: 0 0 8px var(--accent-neon); }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border: 2px solid rgba(0, 255, 255, 0.1);
+            border-radius: 50%;
+            border-top-color: var(--accent-neon);
+            animation: spin 0.8s linear infinite;
+            box-shadow: 0 0 8px rgba(0, 255, 255, 0.3);
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .nav-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+
+        .nav-link:hover, .nav-link.active {
+            color: var(--cyber-cyan);
+            text-shadow: 0 0 10px var(--cyber-cyan);
+        }
+
+        .nav-link.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 20px;
+            height: 2px;
+            background: var(--cyber-cyan);
+            box-shadow: 0 0 10px var(--cyber-cyan);
+        }
+
+        /* Analysis Tab Styling - More specific to override cyberpunk-button */
+        button.analysis-tab {
+            background: rgba(255, 255, 255, 0.05) !important;
+            border: 2px solid var(--border-color) !important;
+            color: var(--text-secondary) !important;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            text-transform: none !important;
+            letter-spacing: normal !important;
+        }
+
+        button.analysis-tab:hover {
+            border-color: var(--cyber-pink) !important;
+            color: var(--text-primary) !important;
+            box-shadow: 0 0 15px rgba(255, 0, 255, 0.3) !important;
+            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.1) !important;
+        }
+
+        button.analysis-tab.active {
+            background: linear-gradient(45deg, rgba(255, 0, 255, 0.3), rgba(0, 255, 255, 0.3)) !important;
+            border: 2px solid var(--cyber-cyan) !important;
+            color: var(--cyber-cyan) !important;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.5), inset 0 0 20px rgba(255, 0, 255, 0.2) !important;
+            text-shadow: 0 0 10px var(--cyber-cyan) !important;
+            font-weight: bold !important;
+        }
+
+        button.analysis-tab.active::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        button:focus, a:focus, input:focus, select:focus {
+            outline: 2px solid var(--cyber-cyan);
+            outline-offset: 2px;
+        }
+
+        @media (max-width: 768px) {
+            .analysis-grid {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Skip to main content -->
+    <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 cyberpunk-button">
+        Skip to main content
+    </a>
+
+    <!-- Header -->
+    <header class="bg-black/50 backdrop-blur-sm border-b border-cyan-500/30">
+        <div class="container mx-auto px-4 py-4">
+            <div class="text-center md:text-left">
+                <h1 class="text-3xl md:text-4xl font-bold glow-text mb-1">
+                    Advanced Analysis
+                </h1>
+                <p class="text-lg text-gray-400">Deep dive into your portfolio performance</p>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="bg-black/30 backdrop-blur-sm" role="navigation" aria-label="Main navigation">
+        <div class="container mx-auto px-4">
+            <div class="flex flex-wrap justify-center space-x-1 md:space-x-4 py-3">
+                <a href="/dashboard" class="nav-link">
+                    <span class="hidden sm:inline">Dashboard</span>
+                    <span class="sm:hidden">📊</span>
+                </a>
+                <a href="/upload" class="nav-link">
+                    <span class="hidden sm:inline">Upload Data</span>
+                    <span class="sm:hidden">📤</span>
+                </a>
+                <a href="/analysis" class="nav-link active">
+                    <span class="hidden sm:inline">Analysis</span>
+                    <span class="sm:hidden">📈</span>
+                </a>
+                <a href="/comparison" class="nav-link">
+                    <span class="hidden sm:inline">Compare</span>
+                    <span class="sm:hidden">⚖️</span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main id="main-content" class="container mx-auto px-4 py-8" role="main">
+        <!-- Analysis Tabs -->
+        <div class="mb-8">
+            <div class="flex flex-wrap justify-center space-x-2 md:space-x-4" role="tablist">
+                <button class="analysis-tab active px-6 py-3 cyberpunk-button" data-tab="performance">
+                    Performance Analysis
+                </button>
+                <button class="analysis-tab px-6 py-3 cyberpunk-button" data-tab="risk">
+                    Risk Assessment
+                </button>
+                <button class="analysis-tab px-6 py-3 cyberpunk-button" data-tab="market">
+                    Market Analysis
+                </button>
+                <button class="analysis-tab px-6 py-3 cyberpunk-button" data-tab="allocation">
+                    Asset Allocation
+                </button>
+            </div>
+        </div>
+
+        <!-- Performance Analysis Tab -->
+        <section id="performance-tab" class="analysis-section" role="tabpanel">
+            <h2 class="text-2xl font-bold glow-text mb-6">Performance Analysis</h2>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <!-- Performance Metrics -->
+                <div class="cyberpunk-card p-6">
+                    <div class="scanlines"></div>
+                    <h3 class="text-lg font-bold mb-4 glow-text">Key Metrics</h3>
+                    <div id="performance-metrics" class="space-y-4">
+                        <div class="text-center">
+                            <div class="loading-spinner mx-auto mb-2"></div>
+                            <p class="text-gray-400">Loading metrics...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Rolling Returns Chart -->
+                <div class="cyberpunk-card p-6">
+                    <div class="scanlines"></div>
+                    <h3 class="text-lg font-bold mb-4 glow-text">Rolling Returns</h3>
+                    <div id="rolling-returns-chart" class="h-80">
+                        <div class="flex items-center justify-center h-full">
+                            <div class="loading-spinner mx-auto mb-4"></div>
+                            <p class="text-gray-400">Loading chart...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Performance Attribution -->
+            <div class="cyberpunk-card p-6">
+                <div class="scanlines"></div>
+                <h3 class="text-lg font-bold mb-4 glow-text">Performance Attribution</h3>
+                <div id="performance-attribution" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="text-center">
+                        <div class="loading-spinner mx-auto mb-2"></div>
+                        <p class="text-gray-400 text-sm">Loading...</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Risk Assessment Tab -->
+        <section id="risk-tab" class="analysis-section hidden" role="tabpanel">
+            <h2 class="text-2xl font-bold glow-text mb-6">Risk Assessment</h2>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <!-- Risk Metrics -->
+                <div class="cyberpunk-card p-6">
+                    <div class="scanlines"></div>
+                    <h3 class="text-lg font-bold mb-4 glow-text">Risk Metrics</h3>
+                    <div id="risk-metrics" class="space-y-4">
+                        <div class="text-center">
+                            <div class="loading-spinner mx-auto mb-2"></div>
+                            <p class="text-gray-400">Loading risk data...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Value at Risk Chart -->
+                <div class="cyberpunk-card p-6">
+                    <div class="scanlines"></div>
+                    <h3 class="text-lg font-bold mb-4 glow-text">Value at Risk</h3>
+                    <div id="var-chart" class="h-80">
+                        <div class="flex items-center justify-center h-full">
+                            <div class="loading-spinner mx-auto mb-4"></div>
+                            <p class="text-gray-400">Loading chart...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Drawdown Analysis -->
+            <div class="cyberpunk-card p-6">
+                <div class="scanlines"></div>
+                <h3 class="text-lg font-bold mb-4 glow-text">Drawdown Analysis</h3>
+
+                <!-- Drawdown Chart -->
+                <div class="mb-6">
+                    <h4 class="text-sm font-bold mb-2 text-cyan-400">Portfolio Drawdown Over Time</h4>
+                    <div id="drawdown-chart" class="h-64">
+                        <div class="flex items-center justify-center h-full">
+                            <div class="loading-spinner mx-auto mb-4"></div>
+                            <p class="text-gray-400">Loading drawdown chart...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Drawdown Statistics -->
+                <div id="drawdown-analysis" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="text-center">
+                        <div class="loading-spinner mx-auto mb-2"></div>
+                        <p class="text-gray-400 text-sm">Loading metrics...</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Market Analysis Tab -->
+        <section id="market-tab" class="analysis-section hidden" role="tabpanel">
+            <h2 class="text-2xl font-bold glow-text mb-6">Market Analysis</h2>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <!-- Market Conditions -->
+                <div class="cyberpunk-card p-6">
+                    <div class="scanlines"></div>
+                    <h3 class="text-lg font-bold mb-4 glow-text">Market Conditions</h3>
+                    <div id="market-conditions" class="space-y-4">
+                        <div class="text-center">
+                            <div class="loading-spinner mx-auto mb-2"></div>
+                            <p class="text-gray-400">Loading market data...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Benchmark Comparison -->
+                <div class="cyberpunk-card p-6">
+                    <div class="scanlines"></div>
+                    <h3 class="text-lg font-bold mb-4 glow-text">Benchmark Comparison</h3>
+                    <div id="benchmark-comparison" class="space-y-4">
+                        <div class="text-center">
+                            <div class="loading-spinner mx-auto mb-2"></div>
+                            <p class="text-gray-400">Loading benchmark data...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Correlation Matrix -->
+            <div class="cyberpunk-card p-6">
+                <div class="scanlines"></div>
+                <h3 class="text-lg font-bold mb-4 glow-text">Asset Correlations</h3>
+
+                <!-- Correlation Heatmap -->
+                <div class="mb-6">
+                    <h4 class="text-sm font-bold mb-2 text-cyan-400">Correlation Heatmap</h4>
+                    <div id="correlation-heatmap" class="h-80">
+                        <div class="flex items-center justify-center h-full">
+                            <div class="loading-spinner mx-auto mb-4"></div>
+                            <p class="text-gray-400">Loading correlation heatmap...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Correlation Table -->
+                <div id="correlation-matrix" class="overflow-x-auto">
+                    <div class="text-center">
+                        <div class="loading-spinner mx-auto mb-2"></div>
+                        <p class="text-gray-400">Loading correlation table...</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Asset Allocation Tab -->
+        <section id="allocation-tab" class="analysis-section hidden" role="tabpanel">
+            <h2 class="text-2xl font-bold glow-text mb-6">Asset Allocation</h2>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <!-- Current Allocation -->
+                <div class="cyberpunk-card p-6">
+                    <div class="scanlines"></div>
+                    <h3 class="text-lg font-bold mb-4 glow-text">Current Allocation</h3>
+                    <div id="current-allocation" class="h-80">
+                        <div class="flex items-center justify-center h-full">
+                            <div class="loading-spinner mx-auto mb-4"></div>
+                            <p class="text-gray-400">Loading allocation data...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Diversification Metrics -->
+                <div class="cyberpunk-card p-6">
+                    <div class="scanlines"></div>
+                    <h3 class="text-lg font-bold mb-4 glow-text">Diversification Analysis</h3>
+                    <div id="diversification-metrics" class="space-y-4">
+                        <div class="text-center">
+                            <div class="loading-spinner mx-auto mb-2"></div>
+                            <p class="text-gray-400">Loading metrics...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sector Allocation -->
+            <div class="cyberpunk-card p-6 mb-8">
+                <div class="scanlines"></div>
+                <h3 class="text-lg font-bold mb-4 glow-text">Sector Allocation</h3>
+                <div id="sector-allocation" class="h-80">
+                    <div class="flex items-center justify-center h-full">
+                        <div class="loading-spinner mx-auto mb-4"></div>
+                        <p class="text-gray-400">Loading sector data...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Optimization Recommendations -->
+            <div class="cyberpunk-card p-6">
+                <div class="scanlines"></div>
+                <h3 class="text-lg font-bold mb-4 glow-text">Optimization Recommendations</h3>
+                <div id="optimization-recommendations" class="space-y-4">
+                    <div class="text-center">
+                        <div class="loading-spinner mx-auto mb-2"></div>
+                        <p class="text-gray-400">Analyzing portfolio...</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Educational Modal -->
+    <div id="education-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="cyberpunk-card max-w-2xl w-full p-6 relative">
+                <div class="scanlines"></div>
+                <button class="absolute top-4 right-4 text-gray-400 hover:text-white" onclick="closeModal()" aria-label="Close modal">
+                    ✕
+                </button>
+                <h3 id="modal-title" class="text-xl font-bold glow-text mb-4">Analysis Guide</h3>
+                <div id="modal-content" class="space-y-4">
+                    <!-- Content will be populated by JavaScript -->
+                </div>
+                <div class="mt-6 text-right">
+                    <button class="cyberpunk-button-secondary px-4 py-2" onclick="closeModal()">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let analysisData = {
+            performance: null,
+            risk: null,
+            market: null,
+            allocation: null
+        };
+
+        // DOM Content Loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            setupEventListeners();
+            loadAnalysisData();
+        });
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Tab switching
+            const tabs = document.querySelectorAll('.analysis-tab');
+            console.log(`[TABS] Setting up event listeners for ${tabs.length} tabs`);
+            
+            tabs.forEach((tab, index) => {
+                const tabName = tab.dataset.tab;
+                console.log(`[TABS] Adding listener to tab ${index + 1}: ${tabName}`);
+                
+                tab.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const clickedTabName = this.dataset.tab;
+                    console.log(`[TABS] Tab clicked: ${clickedTabName}`);
+                    switchTab(clickedTabName);
+                });
+            });
+
+            // Keyboard navigation
+            document.addEventListener('keydown', handleKeyboardNavigation);
+            
+            console.log('[TABS] Event listeners setup complete');
+        }
+
+        // Handle keyboard navigation
+        function handleKeyboardNavigation(event) {
+            if (event.key === 'Escape') {
+                closeModal();
+            }
+        }
+
+        // Switch between analysis tabs
+        function switchTab(tabName) {
+            console.log(`[TABS] Switching to tab: ${tabName}`);
+            
+            try {
+                // Hide all sections
+                const sections = document.querySelectorAll('.analysis-section');
+                console.log(`[TABS] Found ${sections.length} sections`);
+                sections.forEach(section => {
+                    section.classList.add('hidden');
+                });
+
+                // Remove active class from all tabs
+                const tabs = document.querySelectorAll('.analysis-tab');
+                console.log(`[TABS] Found ${tabs.length} tabs`);
+                tabs.forEach(tab => {
+                    tab.classList.remove('active');
+                });
+
+                // Show selected section
+                const targetSection = document.getElementById(tabName + '-tab');
+                if (!targetSection) {
+                    console.error(`[TABS] Section not found: ${tabName}-tab`);
+                    return;
+                }
+                targetSection.classList.remove('hidden');
+                console.log(`[TABS] Showing section: ${tabName}-tab`);
+
+                // Activate tab button
+                const targetTab = document.querySelector(`[data-tab="${tabName}"]`);
+                if (!targetTab) {
+                    console.error(`[TABS] Tab button not found: [data-tab="${tabName}"]`);
+                    return;
+                }
+                targetTab.classList.add('active');
+                console.log(`[TABS] Activated tab button: ${tabName}`);
+
+                // Load data for the selected tab
+                loadTabData(tabName);
+            } catch (error) {
+                console.error(`[TABS] Error switching to tab ${tabName}:`, error);
+            }
+        }
+
+        // Enhanced fetch with retry (simplified version for analysis page)
+        async function fetchWithRetry(url, retries = 3) {
+            for (let attempt = 0; attempt <= retries; attempt++) {
+                try {
+                    if (attempt > 0) {
+                        const delay = 1000 * Math.pow(2, attempt - 1);
+                        console.log(`[RETRY] Attempt ${attempt + 1}/${retries + 1} for ${url}`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    }
+                    
+                    const response = await fetch(url, { 
+                        signal: AbortSignal.timeout(30000) // 30 second timeout
+                    });
+                    
+                    if (response.ok) {
+                        return response;
+                    } else if (attempt === retries) {
+                        return response; // Return even if not ok on last attempt
+                    }
+                } catch (error) {
+                    if (attempt === retries) {
+                        throw error;
+                    }
+                    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+                        continue; // Retry timeouts
+                    }
+                    if (!navigator.onLine) {
+                        throw new Error('No internet connection');
+                    }
+                }
+            }
+        }
+
+        // Load analysis data
+        async function loadAnalysisData() {
+            try {
+                console.log('[ANALYSIS] Loading analysis data...');
+                
+                // Load all analysis data with retry mechanism
+                const [performanceRes, riskRes, allocationRes] = await Promise.all([
+                    fetchWithRetry('/api/performance-metrics').catch(() => ({ ok: false })),
+                    fetchWithRetry('/api/risk-assessment').catch(() => ({ ok: false })),
+                    fetchWithRetry('/api/advanced-analytics').catch(() => ({ ok: false }))
+                ]);
+
+                if (performanceRes.ok) {
+                    try {
+                        analysisData.performance = await performanceRes.json();
+                        console.log('[ANALYSIS] Performance data loaded:', analysisData.performance);
+                        console.log('[ANALYSIS] Performance data keys:', Object.keys(analysisData.performance || {}));
+                    } catch (e) {
+                        console.error('[ANALYSIS] Error parsing performance data:', e);
+                        analysisData.performance = {};
+                    }
+                } else {
+                    console.warn('[ANALYSIS] Performance metrics API returned:', performanceRes.status, performanceRes.statusText);
+                    analysisData.performance = {};
+                }
+                
+                if (riskRes.ok) {
+                    try {
+                        analysisData.risk = await riskRes.json();
+                        console.log('[ANALYSIS] Risk data loaded:', analysisData.risk);
+                        console.log('[ANALYSIS] Risk data keys:', Object.keys(analysisData.risk || {}));
+                    } catch (e) {
+                        console.error('[ANALYSIS] Error parsing risk data:', e);
+                        analysisData.risk = {};
+                    }
+                } else {
+                    console.warn('[ANALYSIS] Risk assessment API returned:', riskRes.status, riskRes.statusText);
+                    analysisData.risk = {};
+                }
+                
+                if (allocationRes.ok) {
+                    try {
+                        const analytics = await allocationRes.json();
+                        analysisData.allocation = analytics;
+                        // Use advanced-analytics for market data as well
+                        analysisData.market = analytics;
+                        console.log('[ANALYSIS] Advanced analytics data loaded:', analytics);
+                        console.log('[ANALYSIS] Analytics data keys:', Object.keys(analytics || {}));
+                    } catch (e) {
+                        console.error('[ANALYSIS] Error parsing analytics data:', e);
+                        analysisData.allocation = {};
+                        analysisData.market = {};
+                    }
+                } else {
+                    console.warn('[ANALYSIS] Advanced analytics API returned:', allocationRes.status, allocationRes.statusText);
+                    analysisData.allocation = {};
+                    analysisData.market = {};
+                }
+
+                // Load initial tab (performance)
+                loadTabData('performance');
+
+            } catch (error) {
+                console.error('[ANALYSIS] Error loading analysis data:', error);
+                showErrorState('Failed to load analysis data: ' + error.message);
+            }
+        }
+
+        // Load data for specific tab
+        function loadTabData(tabName) {
+            switch (tabName) {
+                case 'performance':
+                    updatePerformanceTab();
+                    break;
+                case 'risk':
+                    updateRiskTab();
+                    break;
+                case 'market':
+                    updateMarketTab();
+                    break;
+                case 'allocation':
+                    updateAllocationTab();
+                    break;
+            }
+        }
+
+        // Update Performance Tab
+        function updatePerformanceTab() {
+            const perf = analysisData.performance || {};
+            console.log('[ANALYSIS] Updating performance tab with data:', perf);
+
+            // Update metrics
+            const metricsContainer = document.getElementById('performance-metrics');
+            if (!metricsContainer) {
+                console.error('[ANALYSIS] Performance metrics container not found');
+                return;
+            }
+
+            // Check if we have meaningful data
+            const hasData = analysisData.performance && 
+                           (Object.keys(analysisData.performance).length > 0) &&
+                           (analysisData.performance.total_return !== undefined || 
+                            analysisData.performance.cagr !== undefined ||
+                            analysisData.performance.volatility !== undefined);
+            
+            if (!hasData) {
+                metricsContainer.innerHTML = `
+                    <div class="text-center p-8 text-gray-400">
+                        <p>No performance data available. Please upload transaction data first.</p>
+                        <p class="text-sm text-gray-500 mt-2">If you have uploaded data, try refreshing the page.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            metricsContainer.innerHTML = `
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="text-center p-4 bg-gray-800/50 rounded">
+                        <div class="text-2xl font-bold metric-neutral">${(perf.total_return || 0).toFixed(2)}%</div>
+                        <div class="text-sm text-gray-400">Total Return</div>
+                    </div>
+                    <div class="text-center p-4 bg-gray-800/50 rounded">
+                        <div class="text-2xl font-bold metric-neutral">${(perf.cagr || 0).toFixed(2)}%</div>
+                        <div class="text-sm text-gray-400">CAGR</div>
+                    </div>
+                    <div class="text-center p-4 bg-gray-800/50 rounded">
+                        <div class="text-2xl font-bold metric-neutral">${(perf.volatility || 0).toFixed(2)}%</div>
+                        <div class="text-sm text-gray-400">Volatility</div>
+                    </div>
+                    <div class="text-center p-4 bg-gray-800/50 rounded">
+                        <div class="text-2xl font-bold metric-negative">${(perf.max_drawdown || 0).toFixed(2)}%</div>
+                        <div class="text-sm text-gray-400">Max Drawdown</div>
+                    </div>
+                </div>
+            `;
+
+            // Create rolling returns chart
+            if (perf.rolling_returns) {
+                createRollingReturnsChart(perf.rolling_returns);
+            } else {
+                const chartContainer = document.getElementById('rolling-returns-chart');
+                if (chartContainer) {
+                    chartContainer.innerHTML = '<p class="text-center text-gray-400">No rolling returns data available</p>';
+                }
+            }
+
+            // Update performance attribution
+            updatePerformanceAttribution();
+        }
+
+        // Create enhanced rolling returns chart
+        function createRollingReturnsChart(rollingReturns) {
+            const container = document.getElementById('rolling-returns-chart');
+
+            if (!rollingReturns || Object.keys(rollingReturns).length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-400">No rolling returns data available</p>';
+                return;
+            }
+
+            const periods = Object.keys(rollingReturns);
+            const returns = Object.values(rollingReturns);
+
+            // Create multiple traces for different visualization
+            const traces = [
+                {
+                    x: periods,
+                    y: returns,
+                    type: 'bar',
+                    name: 'Rolling Returns',
+                    marker: {
+                        color: returns.map(r => r >= 0 ? '#00ff00' : '#ff0040'),
+                        line: {
+                            color: 'rgba(255,255,255,0.3)',
+                            width: 1
+                        }
+                    },
+                    hovertemplate: '%{x}<br>%{y:.2f}%<extra></extra>'
+                },
+                {
+                    x: periods,
+                    y: returns.map(() => 0), // Zero line
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Break-even',
+                    line: {
+                        color: '#ffff00',
+                        width: 2,
+                        dash: 'dash'
+                    },
+                    showlegend: false,
+                    hoverinfo: 'skip'
+                }
+            ];
+
+            const layout = {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                font: {color: '#e0e0e0'},
+                title: {
+                    text: 'Rolling Period Returns',
+                    font: {color: '#00ffff', size: 16}
+                },
+                xaxis: {
+                    title: 'Time Period',
+                    gridcolor: 'rgba(255,255,255,0.1)'
+                },
+                yaxis: {
+                    title: 'Annualized Return (%)',
+                    gridcolor: 'rgba(255,255,255,0.1)',
+                    tickformat: '.1f'
+                },
+                margin: {t: 50, r: 10, b: 40, l: 60},
+                bargap: 0.2,
+                showlegend: false,
+                annotations: [{
+                    text: 'Green = Positive | Red = Negative',
+                    showarrow: false,
+                    x: 0.5,
+                    y: -0.15,
+                    xref: 'paper',
+                    yref: 'paper',
+                    font: {size: 10, color: '#888888'}
+                }]
+            };
+
+            const config = {
+                responsive: true,
+                displayModeBar: true,
+                modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d'],
+                displaylogo: false
+            };
+
+            Plotly.newPlot('rolling-returns-chart', traces, layout, config);
+        }
+
+        // Update performance attribution
+        async function updatePerformanceAttribution() {
+            const container = document.getElementById('performance-attribution');
+            
+            try {
+                const response = await fetch('/api/performance-attribution');
+                if (!response.ok) throw new Error('Failed to fetch attribution data');
+                
+                const data = await response.json();
+                
+                if (!data.by_asset || Object.keys(data.by_asset).length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center p-6 text-gray-400">
+                            <p>No attribution data available. Need transaction history with price data.</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Build attribution display
+                let html = '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">';
+                
+                // Sort by contribution
+                const sortedAssets = Object.entries(data.by_asset)
+                    .sort((a, b) => b[1].contribution - a[1].contribution);
+                
+                for (const [ticker, metrics] of sortedAssets) {
+                    const contributionClass = metrics.contribution >= 0 ? 'metric-positive' : 'metric-negative';
+                    const returnClass = metrics.return >= 0 ? 'text-green-400' : 'text-red-400';
+                    
+                    html += `
+                        <div class="p-4 bg-gray-800/50 rounded border border-gray-700">
+                            <div class="font-bold text-cyan-400 mb-2">${ticker}</div>
+                            <div class="space-y-1 text-sm">
+                                <div>Weight: <span class="text-gray-300">${metrics.weight}%</span></div>
+                                <div>Return: <span class="${returnClass}">${metrics.return > 0 ? '+' : ''}${metrics.return}%</span></div>
+                                <div>Contribution: <span class="${contributionClass}">${metrics.contribution > 0 ? '+' : ''}${metrics.contribution}%</span></div>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                html += '</div>';
+                
+                // Add quarterly breakdown if available
+                if (data.by_period && Object.keys(data.by_period).length > 0) {
+                    html += '<div class="mt-6"><h4 class="text-sm font-bold mb-3 text-cyan-400">Quarterly Performance</h4>';
+                    html += '<div class="grid grid-cols-2 md:grid-cols-4 gap-3">';
+                    
+                    for (const [period, metrics] of Object.entries(data.by_period)) {
+                        const returnClass = metrics.return >= 0 ? 'text-green-400' : 'text-red-400';
+                        html += `
+                            <div class="p-3 bg-gray-800/30 rounded text-center">
+                                <div class="text-xs text-gray-400">${period}</div>
+                                <div class="${returnClass} font-bold">${metrics.return > 0 ? '+' : ''}${metrics.return}%</div>
+                                <div class="text-xs text-gray-500">Top: ${metrics.top_contributor}</div>
+                            </div>
+                        `;
+                    }
+                    
+                    html += '</div></div>';
+                }
+                
+                // Add total
+                html += `
+                    <div class="mt-4 p-3 bg-cyan-900/20 rounded border border-cyan-500/30 text-center">
+                        <span class="text-gray-400">Total Portfolio Return: </span>
+                        <span class="font-bold ${data.total_return >= 0 ? 'metric-positive' : 'metric-negative'}">${data.total_return > 0 ? '+' : ''}${data.total_return}%</span>
+                    </div>
+                `;
+                
+                container.innerHTML = html;
+                
+            } catch (error) {
+                console.error('[ANALYSIS] Error loading performance attribution:', error);
+                container.innerHTML = `
+                    <div class="text-center p-6 text-gray-400">
+                        <p>Error loading attribution data: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Update Risk Tab
+        function updateRiskTab() {
+            const risk = analysisData.risk || {};
+            console.log('[ANALYSIS] Updating risk tab with data:', risk);
+
+            // Update risk metrics
+            const metricsContainer = document.getElementById('risk-metrics');
+            if (!metricsContainer) {
+                console.error('[ANALYSIS] Risk metrics container not found');
+                return;
+            }
+
+            if (!analysisData.risk || Object.keys(analysisData.risk).length === 0) {
+                metricsContainer.innerHTML = `
+                    <div class="text-center p-8 text-gray-400">
+                        <p>No risk assessment data available. Please upload transaction data first.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const var95 = risk.value_at_risk?.var_95 || 0;
+
+            metricsContainer.innerHTML = `
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="text-center p-4 bg-gray-800/50 rounded">
+                        <div class="text-2xl font-bold metric-neutral">${var95.toFixed(2)}%</div>
+                        <div class="text-sm text-gray-400">VaR (95%)</div>
+                    </div>
+                    <div class="text-center p-4 bg-gray-800/50 rounded">
+                        <div class="text-2xl font-bold metric-neutral">${(risk.sharpe_ratio || 0).toFixed(2)}</div>
+                        <div class="text-sm text-gray-400">Sharpe Ratio</div>
+                    </div>
+                    <div class="text-center p-4 bg-gray-800/50 rounded">
+                        <div class="text-2xl font-bold metric-neutral">${(risk.sortino_ratio || 0).toFixed(2)}</div>
+                        <div class="text-sm text-gray-400">Sortino Ratio</div>
+                    </div>
+                    <div class="text-center p-4 bg-gray-800/50 rounded">
+                        <div class="text-2xl font-bold metric-neutral">${(risk.volatility || 0).toFixed(2)}%</div>
+                        <div class="text-sm text-gray-400">Volatility</div>
+                    </div>
+                </div>
+            `;
+
+            // Create VaR chart
+            createVaRChart(risk.value_at_risk || {});
+
+            // Update drawdown analysis
+            updateDrawdownAnalysis();
+        }
+
+        // Create VaR chart
+        function createVaRChart(varData) {
+            const container = document.getElementById('var-chart');
+
+            const data = [{
+                type: 'indicator',
+                mode: 'number+gauge',
+                value: Math.abs(varData.var_95 || 0),
+                title: {text: 'Value at Risk (95%)', font: {color: '#e0e0e0'}},
+                gauge: {
+                    axis: {range: [0, 20]},
+                    bar: {color: '#ff0040'},
+                    bgcolor: 'rgba(0,0,0,0)',
+                    borderwidth: 0
+                }
+            }];
+
+            const layout = {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                font: {color: '#e0e0e0'},
+                margin: {t: 50, r: 50, b: 50, l: 50}
+            };
+
+            Plotly.newPlot('var-chart', data, layout, {responsive: true});
+        }
+
+        // Update drawdown analysis
+        async function updateDrawdownAnalysis() {
+            const container = document.getElementById('drawdown-analysis');
+            const chartContainer = document.getElementById('drawdown-chart');
+            
+            try {
+                const response = await fetch('/api/drawdown-analysis');
+                if (!response.ok) throw new Error('Failed to fetch drawdown data');
+                
+                const data = await response.json();
+                
+                // Update metrics display
+                const recoveryText = data.recovery_time_days 
+                    ? `${data.recovery_time_days} days` 
+                    : (data.max_drawdown < -1 ? 'Not recovered' : 'N/A');
+                
+                const drawdownPeriods = data.drawdown_periods || [];
+                const periodCount = drawdownPeriods.length;
+                
+                container.innerHTML = `
+                    <div class="text-center p-4 bg-gray-800/50 rounded border border-red-500/30">
+                        <div class="text-2xl font-bold metric-negative">${(data.max_drawdown || 0).toFixed(2)}%</div>
+                        <div class="text-sm text-gray-400">Maximum Drawdown</div>
+                        <div class="text-xs text-red-400 mt-1">${data.max_drawdown_date || 'N/A'}</div>
+                    </div>
+                    <div class="text-center p-4 bg-gray-800/50 rounded">
+                        <div class="text-xl font-bold text-cyan-400">${recoveryText}</div>
+                        <div class="text-sm text-gray-400">Recovery Time</div>
+                        <div class="text-xs text-gray-500 mt-1">From max drawdown</div>
+                    </div>
+                    <div class="text-center p-4 bg-gray-800/50 rounded">
+                        <div class="text-xl font-bold text-yellow-400">${periodCount}</div>
+                        <div class="text-sm text-gray-400">Drawdown Periods</div>
+                        <div class="text-xs text-gray-500 mt-1">Declines > 1%</div>
+                    </div>
+                `;
+
+                // Create drawdown chart with real data
+                createDrawdownChart(data.drawdown_series || []);
+                
+            } catch (error) {
+                console.error('[ANALYSIS] Error loading drawdown analysis:', error);
+                
+                // Fall back to performance data
+                const perf = analysisData.performance || {};
+                container.innerHTML = `
+                    <div class="text-center p-4 bg-gray-800/50 rounded border border-red-500/30">
+                        <div class="text-2xl font-bold metric-negative">${(perf.max_drawdown || 0).toFixed(2)}%</div>
+                        <div class="text-sm text-gray-400">Maximum Drawdown</div>
+                    </div>
+                    <div class="text-center p-4 bg-gray-800/50 rounded">
+                        <div class="text-lg text-gray-400">Recovery Time</div>
+                        <div class="text-sm text-gray-500">Data unavailable</div>
+                    </div>
+                    <div class="text-center p-4 bg-gray-800/50 rounded">
+                        <div class="text-lg text-gray-400">Drawdown Periods</div>
+                        <div class="text-sm text-gray-500">Data unavailable</div>
+                    </div>
+                `;
+                
+                chartContainer.innerHTML = '<p class="text-center text-gray-400 p-4">Unable to load drawdown chart</p>';
+            }
+        }
+
+        // Create drawdown visualization chart with real data
+        function createDrawdownChart(drawdownSeries) {
+            const container = document.getElementById('drawdown-chart');
+
+            if (!drawdownSeries || drawdownSeries.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-400 p-4">No drawdown data available</p>';
+                return;
+            }
+
+            const dates = drawdownSeries.map(d => d.date);
+            const drawdowns = drawdownSeries.map(d => d.drawdown);
+
+            const trace = {
+                x: dates,
+                y: drawdowns,
+                type: 'scatter',
+                mode: 'lines',
+                name: 'Drawdown %',
+                line: {color: '#ff0040', width: 2},
+                fill: 'tozeroy',
+                fillcolor: 'rgba(255, 0, 64, 0.3)',
+                hovertemplate: 'Date: %{x}<br>Drawdown: %{y:.2f}%<extra></extra>'
+            };
+
+            const layout = {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                font: {color: '#e0e0e0'},
+                xaxis: {
+                    title: 'Date',
+                    gridcolor: 'rgba(255,255,255,0.1)',
+                    type: 'date'
+                },
+                yaxis: {
+                    title: 'Drawdown (%)',
+                    gridcolor: 'rgba(255,255,255,0.1)',
+                    tickformat: '.1f'
+                },
+                margin: {t: 10, r: 10, b: 40, l: 60},
+                shapes: [{
+                    type: 'line',
+                    x0: dates[0],
+                    x1: dates[dates.length - 1],
+                    y0: 0,
+                    y1: 0,
+                    line: {
+                        color: '#ffff00',
+                        width: 1,
+                        dash: 'dash'
+                    }
+                }]
+            };
+
+            const config = {
+                responsive: true,
+                displayModeBar: false,
+                staticPlot: false
+            };
+
+            Plotly.newPlot('drawdown-chart', [trace], layout, config);
+        }
+
+        // Update Market Tab
+        function updateMarketTab() {
+            const market = analysisData.market || {};
+            console.log('[ANALYSIS] Updating market tab with data:', market);
+
+            // Update market conditions
+            const conditionsContainer = document.getElementById('market-conditions');
+            if (!conditionsContainer) {
+                console.error('[ANALYSIS] Market conditions container not found');
+                return;
+            }
+
+            // Handle nested structure: market.market_conditions.market_conditions
+            const marketConditionsWrapper = market.market_conditions || {};
+            const conditions = marketConditionsWrapper.market_conditions || marketConditionsWrapper || {};
+            
+            console.log('[ANALYSIS] Market conditions:', conditions);
+            
+            // Check if we have market conditions data
+            if (!conditions || Object.keys(conditions).length === 0 || !conditions.bull_market_days) {
+                conditionsContainer.innerHTML = `
+                    <div class="text-center p-6 text-gray-400">
+                        <div class="text-2xl mb-2">📊</div>
+                        <p class="font-medium">Market Conditions Analysis</p>
+                        <p class="text-sm text-gray-500 mt-2">This feature requires SPY benchmark data in the stockr_backbone database.</p>
+                        <p class="text-xs text-gray-600 mt-1">Run stockr_backbone data fetch for SPY to enable this analysis.</p>
+                    </div>
+                `;
+            } else {
+                conditionsContainer.innerHTML = `
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div class="text-center p-4 bg-green-900/20 rounded">
+                            <div class="text-2xl font-bold text-green-400">${conditions.bull_market_days || 0}</div>
+                            <div class="text-sm text-gray-400">Bull Market Days</div>
+                        </div>
+                        <div class="text-center p-4 bg-red-900/20 rounded">
+                            <div class="text-2xl font-bold text-red-400">${conditions.bear_market_days || 0}</div>
+                            <div class="text-sm text-gray-400">Bear Market Days</div>
+                        </div>
+                        <div class="text-center p-4 bg-gray-800/50 rounded">
+                            <div class="text-2xl font-bold text-gray-400">${conditions.neutral_market_days || 0}</div>
+                            <div class="text-sm text-gray-400">Neutral Days</div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Update benchmark comparison
+            updateBenchmarkComparison();
+
+            // Update correlation matrix
+            updateCorrelationMatrix();
+        }
+
+        // Update benchmark comparison
+        function updateBenchmarkComparison() {
+            const container = document.getElementById('benchmark-comparison');
+            const risk = analysisData.risk || {};
+            const beta = risk.beta_analysis?.beta || 0;
+            const rSquared = risk.beta_analysis?.r_squared || 0;
+            
+            // Check if we have meaningful data
+            if (beta === 0 && rSquared === 0) {
+                container.innerHTML = `
+                    <div class="text-center p-6 text-gray-400">
+                        <p>Benchmark comparison requires SPY price data.</p>
+                        <p class="text-sm mt-2">Ensure SPY is tracked in the stockr_backbone database.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="p-4 bg-gray-800/50 rounded">
+                            <div class="text-lg font-bold metric-neutral">${beta.toFixed(3)}</div>
+                            <div class="text-sm text-gray-400">Beta vs S&P 500</div>
+                        </div>
+                        <div class="p-4 bg-gray-800/50 rounded">
+                            <div class="text-lg font-bold metric-neutral">${rSquared.toFixed(3)}</div>
+                            <div class="text-sm text-gray-400">R² (Fit Quality)</div>
+                        </div>
+                    </div>
+                    <div class="p-4 bg-gray-800/50 rounded">
+                        <div class="text-lg font-bold metric-neutral">${(risk.beta_analysis?.tracking_error || 0).toFixed(2)}%</div>
+                        <div class="text-sm text-gray-400">Tracking Error</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Update correlation matrix
+        function updateCorrelationMatrix() {
+            const container = document.getElementById('correlation-matrix');
+            const heatmapContainer = document.getElementById('correlation-heatmap');
+            const risk = analysisData.risk || {};
+            const corrMatrix = risk.correlation_matrix || {};
+
+            if (Object.keys(corrMatrix).length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-400">Insufficient data for correlation analysis</p>';
+                if (heatmapContainer) {
+                    heatmapContainer.innerHTML = '<p class="text-center text-gray-400 p-4">Insufficient data for correlation heatmap. Need multiple assets with price history.</p>';
+                }
+                return;
+            }
+
+            // Create correlation table
+            let html = '<table class="w-full text-sm border-collapse"><thead><tr>';
+            const tickers = Object.keys(corrMatrix);
+
+            html += '<th class="p-2 text-left border border-gray-600">Asset</th>';
+            tickers.forEach(ticker => {
+                html += `<th class="p-2 text-center border border-gray-600">${ticker}</th>`;
+            });
+            html += '</tr></thead><tbody>';
+
+            tickers.forEach(ticker => {
+                html += `<tr><td class="p-2 font-bold border border-gray-600">${ticker}</td>`;
+                tickers.forEach(other => {
+                    const corr = corrMatrix[ticker]?.[other] || 0;
+                    const intensity = Math.abs(corr);
+                    const bgColor = corr > 0 ?
+                        `rgba(0, 255, 0, ${intensity * 0.5})` :
+                        `rgba(255, 0, 64, ${intensity * 0.5})`;
+                    const textColor = intensity > 0.5 ? 'text-white' : 'text-gray-300';
+                    html += `<td class="p-2 text-center border border-gray-600 ${textColor}" style="background-color: ${bgColor}">${corr.toFixed(2)}</td>`;
+                });
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+
+            // Create correlation heatmap
+            createCorrelationHeatmap(corrMatrix);
+        }
+
+        // Create correlation heatmap
+        function createCorrelationHeatmap(corrMatrix) {
+            const container = document.getElementById('correlation-heatmap');
+
+            if (!corrMatrix || Object.keys(corrMatrix).length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-400">No correlation data available</p>';
+                return;
+            }
+
+            const tickers = Object.keys(corrMatrix);
+            const z = tickers.map(ticker =>
+                tickers.map(other => corrMatrix[ticker]?.[other] || 0)
+            );
+
+            const data = [{
+                z: z,
+                x: tickers,
+                y: tickers,
+                type: 'heatmap',
+                colorscale: [
+                    [0, 'rgba(255, 0, 64, 0.8)'],    // Strong negative correlation (red)
+                    [0.5, 'rgba(255, 255, 255, 0.1)'], // No correlation (neutral)
+                    [1, 'rgba(0, 255, 0, 0.8)']       // Strong positive correlation (green)
+                ],
+                showscale: true,
+                hoverongaps: false,
+                hovertemplate: '%{x} vs %{y}<br>Correlation: %{z:.3f}<extra></extra>'
+            }];
+
+            const layout = {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                font: {color: '#e0e0e0'},
+                title: {
+                    text: 'Asset Correlation Matrix',
+                    font: {color: '#00ffff', size: 14}
+                },
+                xaxis: {
+                    title: '',
+                    tickangle: -45,
+                    side: 'bottom'
+                },
+                yaxis: {
+                    title: '',
+                    autorange: 'reversed'
+                },
+                margin: {t: 50, r: 10, b: 60, l: 60},
+                annotations: []
+            };
+
+            // Add correlation value annotations for small matrices
+            if (tickers.length <= 5) {
+                for (let i = 0; i < tickers.length; i++) {
+                    for (let j = 0; j < tickers.length; j++) {
+                        layout.annotations.push({
+                            x: tickers[j],
+                            y: tickers[i],
+                            text: z[i][j].toFixed(2),
+                            showarrow: false,
+                            font: {
+                                color: Math.abs(z[i][j]) > 0.5 ? 'white' : '#e0e0e0',
+                                size: 10
+                            }
+                        });
+                    }
+                }
+            }
+
+            const config = {
+                responsive: true,
+                displayModeBar: true,
+                modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d'],
+                displaylogo: false
+            };
+
+            Plotly.newPlot('correlation-heatmap', data, layout, config);
+        }
+
+        // Update Allocation Tab
+        function updateAllocationTab() {
+            const allocation = analysisData.allocation || {};
+            console.log('[ANALYSIS] Updating allocation tab with data:', allocation);
+
+            // Update current allocation chart
+            const weights = allocation.position_weights || {};
+            const container = document.getElementById('current-allocation');
+            
+            if (!allocation || Object.keys(allocation).length === 0 || !weights || Object.keys(weights).length === 0) {
+                if (container) {
+                    container.innerHTML = `
+                        <div class="text-center p-8 text-gray-400">
+                            <p>No allocation data available. Please upload transaction data first.</p>
+                        </div>
+                    `;
+                }
+            } else {
+                if (Object.keys(weights).length > 0) {
+                    createAllocationChart(weights);
+                } else if (container) {
+                    container.innerHTML = `
+                        <div class="text-center p-8 text-gray-400">
+                            <p>No position weights available.</p>
+                        </div>
+                    `;
+                }
+            }
+
+            // Update diversification metrics
+            updateDiversificationMetrics(allocation.diversification_metrics || {});
+
+            // Update sector allocation chart
+            updateSectorAllocation(allocation.sector_allocation || {});
+
+            // Update optimization recommendations
+            updateOptimizationRecommendations(allocation.optimization_recommendations || {});
+        }
+
+        // Create allocation chart
+        function createAllocationChart(weights) {
+            const container = document.getElementById('current-allocation');
+
+            const data = [{
+                labels: Object.keys(weights),
+                values: Object.values(weights),
+                type: 'pie',
+                textinfo: 'label+percent',
+                textposition: 'outside',
+                marker: {
+                    colors: ['#ff00ff', '#00ffff', '#00ff00', '#ffff00', '#ff0040', '#8000ff']
+                }
+            }];
+
+            const layout = {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                font: {color: '#e0e0e0'},
+                showlegend: true,
+                margin: {t: 10, r: 10, b: 10, l: 10}
+            };
+
+            Plotly.newPlot('current-allocation', data, layout, {responsive: true});
+        }
+
+        // Update diversification metrics
+        function updateDiversificationMetrics(metrics) {
+            const container = document.getElementById('diversification-metrics');
+
+            container.innerHTML = `
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="p-4 bg-gray-800/50 rounded">
+                        <div class="text-lg font-bold metric-neutral">${metrics.effective_bets || 0}</div>
+                        <div class="text-sm text-gray-400">Effective Bets</div>
+                    </div>
+                    <div class="p-4 bg-gray-800/50 rounded">
+                        <div class="text-lg font-bold metric-neutral">${(metrics.diversification_score || 0).toFixed(1)}%</div>
+                        <div class="text-sm text-gray-400">Diversification Score</div>
+                    </div>
+                </div>
+                <div class="mt-4 p-4 bg-gray-800/50 rounded">
+                    <div class="text-lg font-bold metric-neutral">${metrics.num_positions || 0}</div>
+                    <div class="text-sm text-gray-400">Total Positions</div>
+                </div>
+            `;
+        }
+
+        // Update sector allocation
+        function updateSectorAllocation(sectorData) {
+            const container = document.getElementById('sector-allocation');
+            const sectorWeights = sectorData.sector_allocation || {};
+
+            if (Object.keys(sectorWeights).length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-400">No sector data available</p>';
+                return;
+            }
+
+            const data = [{
+                labels: Object.keys(sectorWeights),
+                values: Object.values(sectorWeights),
+                type: 'pie',
+                textinfo: 'label+percent',
+                marker: {
+                    colors: ['#ff00ff', '#00ffff', '#00ff00', '#ffff00', '#ff0040']
+                }
+            }];
+
+            const layout = {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                font: {color: '#e0e0e0'},
+                showlegend: true,
+                legend: {orientation: 'h', y: -0.2},
+                margin: {t: 10, r: 10, b: 10, l: 10}
+            };
+
+            Plotly.newPlot('sector-allocation', data, layout, {responsive: true});
+        }
+
+        // Update optimization recommendations
+        function updateOptimizationRecommendations(recommendations) {
+            const container = document.getElementById('optimization-recommendations');
+
+            const recs = recommendations.recommendations || [];
+            if (recs.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-400">No optimization recommendations available</p>';
+                return;
+            }
+
+            let html = '<div class="space-y-4">';
+            recs.forEach(rec => {
+                const priorityColor = rec.priority === 'high' ? 'border-red-500' : rec.priority === 'medium' ? 'border-yellow-500' : 'border-green-500';
+                html += `
+                    <div class="p-4 border-l-4 ${priorityColor} bg-gray-800/30 rounded">
+                        <div class="font-bold text-${rec.priority === 'high' ? 'red' : rec.priority === 'medium' ? 'yellow' : 'green'}-400">
+                            ${rec.type.toUpperCase()} - ${rec.priority.toUpperCase()}
+                        </div>
+                        <p class="text-gray-300 mt-2">${rec.message}</p>
+                        ${rec.suggestion ? `<p class="text-gray-400 text-sm mt-1">${rec.suggestion}</p>` : ''}
+                    </div>
+                `;
+            });
+            html += '</div>';
+
+            container.innerHTML = html;
+        }
+
+        // Show error state
+        function showErrorState(message) {
+            // Show error in all sections
+            document.querySelectorAll('.analysis-section').forEach(section => {
+                const containers = section.querySelectorAll('[id$="-metrics"], [id$="-analysis"], [id$="-conditions"]');
+                containers.forEach(container => {
+                    container.innerHTML = `
+                        <div class="text-center text-red-400">
+                            <p>Error: ${message}</p>
+                            <button class="cyberpunk-button mt-4" onclick="loadAnalysisData()">Retry</button>
+                        </div>
+                    `;
+                });
+            });
+        }
+
+        // Close modal
+        function closeModal() {
+            const modal = document.getElementById('education-modal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        // Global functions
+        window.closeModal = closeModal;
+    </script>
+</body>
+</html>

@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  # Production application service
+  robinhood-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: robinhood-dashboard-prod
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - DATABASE_URL=sqlite:///./data/portfolio.db
+      - STOCKR_DB_PATH=./data/stockr_backbone/stockr.db
+      - SECRET_KEY=${SECRET_KEY}
+      - HOST=0.0.0.0
+      - PORT=8000
+      - UPLOAD_DIR=./data/uploads
+      - MAX_UPLOAD_SIZE=10485760
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://yourdomain.com}
+      - FORCE_HTTPS=true
+      - LOG_LEVEL=INFO
+      - ENABLE_METRICS=true
+      - METRICS_TOKEN=${METRICS_TOKEN}
+    volumes:
+      # Persistent database storage
+      - portfolio_data:/app/data
+      # Upload directory persistence
+      - uploads_data:/app/uploads
+      # Static files
+      - static_data:/app/static
+      # Logs
+      - logs_data:/app/logs
+    depends_on:
+      - init-stockr-db-prod
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - robinhood-network
+
+  # Service to initialize stockr database for production
+  init-stockr-db-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: init-stockr-db-prod
+    command: >
+      sh -c "
+        echo 'Initializing production stockr database...' &&
+        mkdir -p /app/data/stockr_backbone &&
+        if [ ! -f /app/data/stockr_backbone/stockr.db ]; then
+          echo 'Copying stockr database...' &&
+          cp -r /app/stockr_backbone/* /app/data/stockr_backbone/ 2>/dev/null || echo 'No existing stockr db to copy'
+        fi &&
+        echo 'Production stockr database initialization complete'
+      "
+    volumes:
+      - ./stockr_backbone:/app/stockr_backbone:ro
+      - portfolio_data:/app/data
+    networks:
+      - robinhood-network
+
+  # Nginx reverse proxy for production
+  nginx:
+    image: nginx:alpine
+    container_name: robinhood-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - static_data:/app/static:ro
+    depends_on:
+      - robinhood-dashboard
+    restart: unless-stopped
+    networks:
+      - robinhood-network
+
+volumes:
+  portfolio_data:
+    driver: local
+  uploads_data:
+    driver: local
+  static_data:
+    driver: local
+  logs_data:
+    driver: local
+
+networks:
+  robinhood-network:
+    driver: bridge
