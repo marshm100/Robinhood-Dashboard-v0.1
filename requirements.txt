@@ -2,6 +2,7 @@
 fastapi
 uvicorn[standard]
 gunicorn
+aiofiles  # Required for FastAPI StaticFiles async serving
 
 # Database
 sqlalchemy

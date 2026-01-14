@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "src/main.py",
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "50mb",
+        "memory": 1024
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/static/(.*)",
+      "dest": "src/main.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "src/main.py"
+    }
+  ],
+  "env": {
+    "VERCEL": "1"
+  }
+}
