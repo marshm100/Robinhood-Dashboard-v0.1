@@ -324,20 +324,117 @@ class TestStockPriceService:
 
     def test_stock_price_service_initialization(self):
         """Test stock price service initialization"""
+        if not IMPORTS_AVAILABLE:
+            pytest.skip("Stock price service imports not available")
         service = stock_price_service
         assert service is not None
 
     def test_database_validation(self):
         """Test database validation"""
+        if not IMPORTS_AVAILABLE:
+            pytest.skip("Stock price service imports not available")
         result = stock_price_service.validate_database()
         # May return None if database not available, but should not crash
         assert isinstance(result, (dict, type(None)))
 
     def test_price_lookup_error_handling(self):
         """Test error handling in price lookups"""
+        if not IMPORTS_AVAILABLE:
+            pytest.skip("Stock price service imports not available")
         # Test with invalid ticker
         price = stock_price_service.get_price_at_date("INVALID", "2023-01-01")
         assert price is None or isinstance(price, (int, float))
+
+    def test_get_prices_batch_returns_dict_of_dataframes(self):
+        """Test that get_prices_batch returns Dict[str, DataFrame] for multiple tickers"""
+        if not IMPORTS_AVAILABLE:
+            pytest.skip("Stock price service imports not available")
+        tickers = ["AAPL", "MSFT"]
+        start_date = "2024-01-01"
+        end_date = "2024-01-31"
+        
+        result = stock_price_service.get_prices_batch(tickers, start_date, end_date)
+        
+        # Should return a dictionary
+        assert isinstance(result, dict)
+        
+        # Each value should be a DataFrame (if ticker exists in database)
+        for ticker, df in result.items():
+            assert isinstance(df, pd.DataFrame)
+            # DataFrame should have price columns if data exists
+            if not df.empty:
+                expected_columns = ['open', 'high', 'low', 'close', 'volume']
+                for col in expected_columns:
+                    assert col in df.columns, f"Missing column {col} for {ticker}"
+
+    def test_get_prices_batch_empty_tickers(self):
+        """Test that get_prices_batch handles empty ticker list gracefully"""
+        if not IMPORTS_AVAILABLE:
+            pytest.skip("Stock price service imports not available")
+        result = stock_price_service.get_prices_batch([], "2024-01-01", "2024-01-31")
+        
+        assert isinstance(result, dict)
+        assert len(result) == 0
+
+    def test_get_prices_batch_invalid_tickers(self):
+        """Test that get_prices_batch handles invalid tickers gracefully"""
+        if not IMPORTS_AVAILABLE:
+            pytest.skip("Stock price service imports not available")
+        result = stock_price_service.get_prices_batch(
+            ["INVALID_TICKER_XYZ123"], 
+            "2024-01-01", 
+            "2024-01-31"
+        )
+        
+        # Should not raise an error, returns empty dict or dict without invalid ticker
+        assert isinstance(result, dict)
+
+    def test_get_prices_batch_single_ticker(self):
+        """Test that get_prices_batch works with a single ticker"""
+        if not IMPORTS_AVAILABLE:
+            pytest.skip("Stock price service imports not available")
+        tickers = ["AAPL"]
+        start_date = "2024-01-01"
+        end_date = "2024-01-31"
+        
+        result = stock_price_service.get_prices_batch(tickers, start_date, end_date)
+        
+        assert isinstance(result, dict)
+        # If AAPL data exists, should have one entry
+        if result:
+            assert "AAPL" in result
+            assert isinstance(result["AAPL"], pd.DataFrame)
+
+    def test_get_prices_at_dates_batch(self):
+        """Test that get_prices_at_dates_batch returns correct structure"""
+        if not IMPORTS_AVAILABLE:
+            pytest.skip("Stock price service imports not available")
+        tickers = ["AAPL", "MSFT"]
+        dates = ["2024-01-02", "2024-01-15", "2024-01-30"]
+        
+        result = stock_price_service.get_prices_at_dates_batch(tickers, dates)
+        
+        # Should return Dict[str, Dict[str, float]]
+        assert isinstance(result, dict)
+        
+        for ticker, date_prices in result.items():
+            assert isinstance(date_prices, dict)
+            for date_str, price in date_prices.items():
+                assert isinstance(price, (int, float))
+
+    def test_get_prices_at_dates_batch_empty_inputs(self):
+        """Test that get_prices_at_dates_batch handles empty inputs"""
+        if not IMPORTS_AVAILABLE:
+            pytest.skip("Stock price service imports not available")
+        # Empty tickers
+        result1 = stock_price_service.get_prices_at_dates_batch([], ["2024-01-01"])
+        assert isinstance(result1, dict)
+        assert len(result1) == 0
+        
+        # Empty dates
+        result2 = stock_price_service.get_prices_at_dates_batch(["AAPL"], [])
+        assert isinstance(result2, dict)
+        assert len(result2) == 0
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -15,6 +15,114 @@ from io import StringIO
 from ..models import Transaction, StockPrice
 from .stock_price_service import stock_price_service
 
+# Sector mapping for common stocks and ETFs (50+ entries)
+SECTOR_MAPPING = {
+    # Broad ETFs
+    "SPY": "Large Cap Blend",
+    "VOO": "Large Cap Blend",
+    "VTI": "Total Market",
+    "DIA": "Large Cap Value",
+    "IWM": "Small Cap",
+    "QQQ": "Technology",
+    "EEM": "Emerging Markets",
+    "EFA": "International Developed",
+    "VNQ": "Real Estate",
+    # Sector ETFs
+    "XLK": "Technology",
+    "XLF": "Financials",
+    "XLV": "Healthcare",
+    "XLE": "Energy",
+    "XLY": "Consumer Discretionary",
+    "XLP": "Consumer Staples",
+    "XLU": "Utilities",
+    "XLI": "Industrials",
+    "XLB": "Materials",
+    "XLC": "Communication Services",
+    # Leveraged / Thematic ETFs
+    "TQQQ": "Technology",
+    "SQQQ": "Technology",
+    "TECL": "Technology",
+    "TECS": "Technology",
+    "SOXL": "Technology",
+    "SOXS": "Technology",
+    "LABU": "Healthcare",
+    "LABD": "Healthcare",
+    "SPXL": "Large Cap Blend",
+    "SPXS": "Large Cap Blend",
+    "BITU": "Cryptocurrency",
+    "BITO": "Cryptocurrency",
+    "AGQ": "Materials",
+    "SILJ": "Materials",
+    "GDX": "Materials",
+    "GLD": "Materials",
+    "SLV": "Materials",
+    "USO": "Energy",
+    "UNG": "Energy",
+    # Technology
+    "AAPL": "Technology",
+    "MSFT": "Technology",
+    "GOOGL": "Technology",
+    "AMZN": "Technology",
+    "NVDA": "Technology",
+    "META": "Technology",
+    "TSLA": "Consumer Discretionary",
+    "AMD": "Technology",
+    "INTC": "Technology",
+    "ADBE": "Technology",
+    "CRM": "Technology",
+    # Financials
+    "JPM": "Financials",
+    "BAC": "Financials",
+    "WFC": "Financials",
+    "GS": "Financials",
+    "MS": "Financials",
+    "V": "Financials",
+    "MA": "Financials",
+    "PYPL": "Financials",
+    "SQ": "Financials",
+    # Healthcare
+    "JNJ": "Healthcare",
+    "PFE": "Healthcare",
+    "UNH": "Healthcare",
+    "ABBV": "Healthcare",
+    "MRK": "Healthcare",
+    "ABT": "Healthcare",
+    # Consumer
+    "WMT": "Consumer Staples",
+    "COST": "Consumer Staples",
+    "KO": "Consumer Staples",
+    "PEP": "Consumer Staples",
+    "HD": "Consumer Discretionary",
+    "MCD": "Consumer Discretionary",
+    "NKE": "Consumer Discretionary",
+    "DIS": "Communication Services",
+    "SBUX": "Consumer Discretionary",
+    # Energy
+    "XOM": "Energy",
+    "CVX": "Energy",
+    "SLB": "Energy",
+    # Industrials
+    "BA": "Industrials",
+    "CAT": "Industrials",
+    "DE": "Industrials",
+    "UPS": "Industrials",
+    "FDX": "Industrials",
+    # Materials
+    "LIN": "Materials",
+    "FCX": "Materials",
+    # Communication Services
+    "T": "Communication Services",
+    "VZ": "Communication Services",
+    "TMUS": "Communication Services",
+    # Utilities
+    "DUK": "Utilities",
+    "SO": "Utilities",
+    "NEE": "Utilities",
+    # Real Estate
+    "AMT": "Real Estate",
+    "PLD": "Real Estate",
+}
+
 # Simple in-memory cache
 _cache = {}
 _cache_ttl = {}
@@ -40,6 +148,233 @@ class PortfolioCalculator:
 
     def __init__(self, db: Session):
         self.db = db
+        # Instance-level price cache: Dict[ticker, Dict[date_str, price]]
+        # Preloaded once and reused across all calculations for efficiency
+        self._price_cache: Dict[str, Dict[str, float]] = {}
+        self._price_cache_loaded: bool = False
+
+    def _preload_price_cache(self, tickers: Optional[List[str]] = None, 
+                              start_date: Optional[str] = None, 
+                              end_date: Optional[str] = None) -> None:
+        """
+        Preload price cache for all tickers in the date range.
+        Uses batch query for efficiency - prices fetched once and reused.
+        
+        Args:
+            tickers: List of tickers to cache. If None, uses all tickers from transactions.
+            start_date: Start date in YYYY-MM-DD format. If None, uses first transaction date.
+            end_date: End date in YYYY-MM-DD format. If None, uses today's date.
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # Get tickers from transactions if not provided
+            if tickers is None:
+                transactions = self.db.query(Transaction.ticker).filter(
+                    Transaction.ticker.isnot(None)
+                ).distinct().all()
+                tickers = [t[0] for t in transactions if t[0]]
+            
+            if not tickers:
+                logger.debug("[PriceCache] No tickers to cache")
+                return
+            
+            # Get date range from transactions if not provided
+            if not start_date or not end_date:
+                first_tx = self.db.query(Transaction).order_by(Transaction.activity_date).first()
+                last_tx = self.db.query(Transaction).order_by(Transaction.activity_date.desc()).first()
+                
+                if first_tx and not start_date:
+                    start_date = first_tx.activity_date
+                    if isinstance(start_date, (datetime, date)):
+                        start_date = start_date.strftime('%Y-%m-%d')
+                
+                if not end_date:
+                    end_date = datetime.now().strftime('%Y-%m-%d')
+            
+            if not start_date or not end_date:
+                logger.warning("[PriceCache] Could not determine date range for cache preload")
+                return
+            
+            logger.info(f"[PriceCache] Preloading prices for {len(tickers)} tickers from {start_date} to {end_date}")
+            
+            # Batch fetch all prices using the efficient batch method
+            batch_data = stock_price_service.get_prices_batch(tickers, start_date, end_date)
+            
+            # Populate the instance cache from batch data
+            for ticker, df in batch_data.items():
+                if ticker not in self._price_cache:
+                    self._price_cache[ticker] = {}
+                
+                # Extract close prices by date
+                if not df.empty and 'close' in df.columns:
+                    for idx, row in df.iterrows():
+                        # idx is the date (from DatetimeIndex)
+                        date_str = idx.strftime('%Y-%m-%d') if hasattr(idx, 'strftime') else str(idx)[:10]
+                        if pd.notna(row['close']) and row['close'] > 0:
+                            self._price_cache[ticker][date_str] = float(row['close'])
+            
+            self._price_cache_loaded = True
+            total_prices = sum(len(dates) for dates in self._price_cache.values())
+            logger.info(f"[PriceCache] Cached {total_prices} prices for {len(self._price_cache)} tickers")
+            
+        except Exception as e:
+            logger.error(f"[PriceCache] Error preloading price cache: {e}")
+            # Don't fail - cache is an optimization, not a requirement
+
+    def _get_cached_price(self, ticker: str, date_str: str) -> Optional[float]:
+        """
+        Get price from instance cache with forward-fill logic.
+        
+        If exact date not in cache, looks for the most recent prior date.
+        Returns None if no cached price available (will fall back to regular lookup).
+        
+        Args:
+            ticker: Stock ticker symbol
+            date_str: Date in YYYY-MM-DD format
+            
+        Returns:
+            Cached price if available, None otherwise
+        """
+        if ticker not in self._price_cache:
+            return None
+        
+        ticker_cache = self._price_cache[ticker]
+        
+        # Try exact date first
+        if date_str in ticker_cache:
+            return ticker_cache[date_str]
+        
+        # Forward-fill: find most recent price before the target date
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            closest_price = None
+            closest_date = None
+            
+            for cached_date_str, price in ticker_cache.items():
+                try:
+                    cached_date = datetime.strptime(cached_date_str, '%Y-%m-%d').date()
+                    if cached_date <= target_date:
+                        if closest_date is None or cached_date > closest_date:
+                            closest_date = cached_date
+                            closest_price = price
+                except (ValueError, TypeError):
+                    continue
+            
+            return closest_price
+        except (ValueError, TypeError):
+            return None
+
+    def _sample_dates(self, start_date: date, end_date: date, 
+                      transaction_dates: Optional[List[date]] = None) -> List[date]:
+        """
+        Sample dates for portfolios with long histories to reduce data points.
+        
+        Sampling logic:
+        - >3 years = monthly (first of each month)
+        - >1 year = weekly (every Monday)
+        - else = daily (no sampling)
+        
+        Always includes: first date, last date, and all transaction dates.
+        
+        Args:
+            start_date: Start date of the range
+            end_date: End date of the range
+            transaction_dates: List of transaction dates to always include
+            
+        Returns:
+            List of dates to use for portfolio calculations
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # Ensure dates are date objects
+        if isinstance(start_date, str):
+            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+        elif isinstance(start_date, datetime):
+            start_date = start_date.date()
+            
+        if isinstance(end_date, str):
+            end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+        elif isinstance(end_date, datetime):
+            end_date = end_date.date()
+        
+        # Calculate the date range in days
+        date_range_days = (end_date - start_date).days
+        
+        # Determine sampling frequency based on range length
+        # >3 years (1095 days) = monthly, >1 year (365 days) = weekly, else daily
+        if date_range_days > 1095:  # >3 years
+            sampling_mode = 'monthly'
+            logger.info(f"[DateSampling] Using monthly sampling for {date_range_days} day range")
+        elif date_range_days > 365:  # >1 year
+            sampling_mode = 'weekly'
+            logger.info(f"[DateSampling] Using weekly sampling for {date_range_days} day range")
+        else:
+            sampling_mode = 'daily'
+            logger.debug(f"[DateSampling] Using daily (no sampling) for {date_range_days} day range")
+        
+        # Generate sampled dates based on mode
+        sampled_dates = set()
+        
+        # Always include first and last dates
+        sampled_dates.add(start_date)
+        sampled_dates.add(end_date)
+        
+        # Always include transaction dates
+        if transaction_dates:
+            for tx_date in transaction_dates:
+                if isinstance(tx_date, str):
+                    try:
+                        tx_date = datetime.strptime(tx_date, '%Y-%m-%d').date()
+                    except (ValueError, TypeError):
+                        continue
+                elif isinstance(tx_date, datetime):
+                    tx_date = tx_date.date()
+                if start_date <= tx_date <= end_date:
+                    sampled_dates.add(tx_date)
+        
+        # Generate sampled dates based on frequency
+        if sampling_mode == 'daily':
+            # No sampling - include all business days
+            current = start_date
+            while current <= end_date:
+                # Skip weekends (Saturday=5, Sunday=6)
+                if current.weekday() < 5:
+                    sampled_dates.add(current)
+                current += timedelta(days=1)
+                
+        elif sampling_mode == 'weekly':
+            # Weekly sampling - every Monday
+            current = start_date
+            # Find first Monday
+            while current.weekday() != 0:  # 0 = Monday
+                current += timedelta(days=1)
+            while current <= end_date:
+                sampled_dates.add(current)
+                current += timedelta(days=7)
+                
+        elif sampling_mode == 'monthly':
+            # Monthly sampling - first business day of each month
+            current = start_date.replace(day=1)
+            while current <= end_date:
+                # Find first business day of month
+                first_of_month = current
+                while first_of_month.weekday() >= 5:  # Skip weekends
+                    first_of_month += timedelta(days=1)
+                if start_date <= first_of_month <= end_date:
+                    sampled_dates.add(first_of_month)
+                # Move to next month
+                if current.month == 12:
+                    current = current.replace(year=current.year + 1, month=1)
+                else:
+                    current = current.replace(month=current.month + 1)
+        
+        # Sort and return as list
+        result = sorted(sampled_dates)
+        logger.info(f"[DateSampling] Sampled {len(result)} dates from {date_range_days} day range ({sampling_mode})")
+        return result
 
     def get_current_holdings(self) -> Dict[str, float]:
         """
@@ -125,16 +460,128 @@ class PortfolioCalculator:
     def get_stock_price_at_date(self, ticker: str, date: str) -> Optional[float]:
         """
         Get stock price for ticker at specific date
-        Uses stockr_backbone database for price data
+        Uses instance cache, stockr_backbone database, and transaction fallback.
+        
+        Priority:
+        1. Instance price cache (preloaded, fastest)
+        2. stockr_backbone historical prices (primary source)
+        3. Transaction price fallback (if stockr unavailable)
+        
+        Returns 0.0 if stock didn't exist (explicit zero), None only for errors.
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         try:
+            # Check instance cache first (fastest path)
+            cached_price = self._get_cached_price(ticker, date)
+            if cached_price is not None and cached_price > 0:
+                return cached_price
+            
+            # Try stockr_backbone (primary source)
             price_data = stock_price_service.get_price_at_date(ticker, date)
             if price_data and 'close' in price_data:
-                return price_data['close']
+                close_price = price_data['close']
+                # Cache the result for future lookups
+                if ticker not in self._price_cache:
+                    self._price_cache[ticker] = {}
+                if close_price is not None:
+                    self._price_cache[ticker][date] = float(close_price)
+                # Return 0.0 if stock didn't exist (explicit zero), None only for errors
+                if close_price is not None and close_price > 0:
+                    return close_price
+            
+            # Fallback: use transaction price if stockr_backbone has no data
+            fallback_price = self._get_transaction_price_fallback(ticker, date)
+            if fallback_price is not None and fallback_price > 0:
+                logger.info(f"[PriceFallback] Using transaction price for {ticker} on {date}: ${fallback_price:.2f}")
+                # Cache the fallback price too
+                if ticker not in self._price_cache:
+                    self._price_cache[ticker] = {}
+                self._price_cache[ticker][date] = fallback_price
+                return fallback_price
+            
+            # If stockr returned explicit 0 (stock didn't exist), return 0
+            if price_data and price_data.get('close') == 0.0:
+                return 0.0
+                
             return None
 
         except Exception as e:
-            print(f"Error getting price for {ticker} on {date}: {e}")
+            logger.error(f"Error getting price for {ticker} on {date}: {e}")
+            return None
+
+    def _get_transaction_price_fallback(self, ticker: str, target_date: str) -> Optional[float]:
+        """
+        Get price from transaction history as fallback when stockr_backbone has no data.
+        
+        Looks for transactions of the ticker and returns the price from the
+        closest transaction to the target date (preferring earlier transactions).
+        
+        Args:
+            ticker: Stock ticker symbol
+            target_date: Date in YYYY-MM-DD format
+            
+        Returns:
+            Transaction price if found, None otherwise
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # Parse target date
+            if isinstance(target_date, str):
+                target_dt = datetime.strptime(target_date, '%Y-%m-%d').date()
+            else:
+                target_dt = target_date
+            
+            # Query transactions for this ticker that have a price
+            transactions = self.db.query(Transaction).filter(
+                and_(
+                    Transaction.ticker == ticker.upper(),
+                    Transaction.price.isnot(None),
+                    Transaction.price > 0
+                )
+            ).all()
+            
+            if not transactions:
+                return None
+            
+            # Find the closest transaction to the target date
+            closest_tx = None
+            min_days_diff = float('inf')
+            
+            for tx in transactions:
+                tx_date = tx.activity_date
+                if isinstance(tx_date, str):
+                    tx_date = datetime.strptime(tx_date, '%Y-%m-%d').date()
+                elif isinstance(tx_date, datetime):
+                    tx_date = tx_date.date()
+                
+                days_diff = abs((tx_date - target_dt).days)
+                
+                # Prefer transactions on or before the target date
+                if tx_date <= target_dt:
+                    # Prioritize earlier transactions (more accurate historical price)
+                    if days_diff < min_days_diff:
+                        min_days_diff = days_diff
+                        closest_tx = tx
+                elif closest_tx is None:
+                    # If no earlier transaction, consider later ones
+                    if days_diff < min_days_diff:
+                        min_days_diff = days_diff
+                        closest_tx = tx
+            
+            if closest_tx and closest_tx.price and closest_tx.price > 0:
+                logger.debug(f"[PriceFallback] Found transaction price for {ticker}: "
+                           f"${closest_tx.price:.2f} from {closest_tx.activity_date} "
+                           f"({min_days_diff} days from target {target_date})")
+                return float(closest_tx.price)
+            
+            return None
+            
+        except Exception as e:
+            logger.warning(f"[PriceFallback] Error getting transaction price for {ticker}: {e}")
             return None
 
     def calculate_total_return(self) -> Dict[str, float]:
@@ -240,6 +687,10 @@ class PortfolioCalculator:
         cached = _get_cache(cache_key)
         if cached is not None:
             return cached
+        
+        # Preload price cache for efficiency (if not already loaded)
+        if not self._price_cache_loaded:
+            self._preload_price_cache(start_date=start_date, end_date=end_date)
 
         try:
             logger.info(f"[PortfolioCalculator] Getting portfolio value history from {start_date} to {end_date}")
@@ -329,17 +780,18 @@ class PortfolioCalculator:
                 logger.warning("[PortfolioCalculator] No valid transaction dates found")
                 return pd.DataFrame()
 
-            # Sample dates for performance - use weekly sampling if more than 50 dates
+            # Get sorted transaction dates
             sorted_dates = sorted(transactions_by_date.keys())
-            if len(sorted_dates) > 50:
-                # Sample: keep first, last, and every 7th date
-                sampled_dates = [sorted_dates[0]]
-                sampled_dates.extend(sorted_dates[7::7])  # Every 7th date
-                if sorted_dates[-1] not in sampled_dates:
-                    sampled_dates.append(sorted_dates[-1])
-                logger.info(f"[PortfolioCalculator] Sampling {len(sampled_dates)} dates from {len(sorted_dates)} total")
-            else:
-                sampled_dates = sorted_dates
+            
+            # Use intelligent date sampling based on date range length
+            # >3 years = monthly, >1 year = weekly, else daily
+            # Always includes first, last, and all transaction dates
+            start_dt = datetime.strptime(sorted_dates[0], '%Y-%m-%d').date()
+            end_dt = datetime.strptime(sorted_dates[-1], '%Y-%m-%d').date()
+            transaction_date_list = [datetime.strptime(d, '%Y-%m-%d').date() for d in sorted_dates]
+            
+            sampled_date_objs = self._sample_dates(start_dt, end_dt, transaction_date_list)
+            sampled_dates = [d.strftime('%Y-%m-%d') for d in sampled_date_objs]
 
             # Pre-fetch all prices in batch for performance
             all_tickers = set()
@@ -507,7 +959,12 @@ class PortfolioCalculator:
                     "rolling_returns": {},
                     "volatility": 0.0,
                     "max_drawdown": 0.0,
-                    "sharpe_ratio": 0.0
+                    "sharpe_ratio": 0.0,
+                    "sortino_ratio": 0.0,
+                    "calmar_ratio": 0.0,
+                    "downside_deviation": 0.0,
+                    "recovery_time": None,
+                    "underwater_period": None
                 }
 
             # Convert to datetime index
@@ -542,6 +999,38 @@ class PortfolioCalculator:
             risk_free_rate = 0.02
             excess_returns = value_history['returns'] - risk_free_rate / 252
             sharpe_ratio = excess_returns.mean() / excess_returns.std() * np.sqrt(252) if excess_returns.std() > 0 else 0
+
+            # Sortino Ratio (downside deviation only)
+            downside_returns = value_history['returns'][value_history['returns'] < 0]
+            downside_deviation = downside_returns.std() * np.sqrt(252) if not downside_returns.empty else 0
+            sortino_ratio = excess_returns.mean() / downside_deviation * np.sqrt(252) if downside_deviation > 0 else 0
+
+            # Calmar Ratio (CAGR / Max Drawdown)
+            calmar_ratio = cagr / abs(max_drawdown) if max_drawdown < 0 else 0
+
+            # Downside Deviation (annualized)
+            downside_deviation_pct = downside_deviation * 100
+
+            # Calculate drawdown recovery metrics
+            recovery_metrics = self._calculate_drawdown_recovery_metrics(drawdown, value_history)
+
+            # Calculate rolling returns
+            rolling_returns = self._calculate_rolling_returns(value_history)
+
+            return {
+                "total_return": total_return,
+                "cagr": cagr,
+                "rolling_returns": rolling_returns,
+                "volatility": volatility,
+                "max_drawdown": max_drawdown,
+                "sharpe_ratio": sharpe_ratio,
+                "sortino_ratio": sortino_ratio,
+                "calmar_ratio": calmar_ratio,
+                "downside_deviation": downside_deviation_pct,
+                "recovery_time": recovery_metrics.get("recovery_time"),
+                "underwater_period": recovery_metrics.get("underwater_period"),
+                "worst_drawdown": recovery_metrics.get("worst_drawdown")
+            }
 
             # Rolling returns
             rolling_returns = self.calculate_rolling_returns()
@@ -881,39 +1370,11 @@ class PortfolioCalculator:
             if not weights:
                 return {"sector_allocation": {}, "sector_weights": {}}
 
-            # Simplified sector mapping (would be more comprehensive in production)
-            sector_mapping = {
-                # Technology
-                'AAPL': 'Technology', 'MSFT': 'Technology', 'GOOGL': 'Technology', 'AMZN': 'Technology',
-                'TSLA': 'Technology', 'NVDA': 'Technology', 'META': 'Technology', 'NFLX': 'Technology',
-                # Financials
-                'JPM': 'Financials', 'BAC': 'Financials', 'WFC': 'Financials', 'GS': 'Financials',
-                'MS': 'Financials', 'V': 'Financials', 'MA': 'Financials',
-                # Healthcare
-                'JNJ': 'Healthcare', 'PFE': 'Healthcare', 'UNH': 'Healthcare', 'ABT': 'Healthcare',
-                # Consumer
-                'KO': 'Consumer Staples', 'PEP': 'Consumer Staples', 'WMT': 'Consumer Staples',
-                'HD': 'Consumer Discretionary', 'MCD': 'Consumer Discretionary', 'DIS': 'Consumer Discretionary',
-                # Energy
-                'XOM': 'Energy', 'CVX': 'Energy',
-                # Industrials
-                'BA': 'Industrials', 'CAT': 'Industrials',
-                # Materials
-                'LIN': 'Materials',
-                # Telecom
-                'T': 'Telecommunications', 'VZ': 'Telecommunications',
-                # Utilities
-                'DUK': 'Utilities', 'SO': 'Utilities',
-                # Leveraged ETFs (categorized by underlying)
-                'TQQQ': 'Technology', 'QQQ': 'Technology', 'SPY': 'Large Cap Blend',
-                'BITU': 'Cryptocurrency', 'AGQ': 'Materials', 'TECL': 'Technology'
-            }
-
             sector_weights = {}
             total_weight = sum(weights.values())
 
             for ticker, weight in weights.items():
-                sector = sector_mapping.get(ticker.upper(), 'Unknown')
+                sector = SECTOR_MAPPING.get(ticker.upper(), 'Unknown')
                 if sector not in sector_weights:
                     sector_weights[sector] = 0
                 sector_weights[sector] += weight
@@ -1396,6 +1857,10 @@ class PortfolioCalculator:
         """
         Get comprehensive portfolio summary
         """
+        # Preload price cache for efficiency (if not already loaded)
+        if not self._price_cache_loaded:
+            self._preload_price_cache()
+        
         holdings = self.get_current_holdings()
         total_return_data = self.calculate_total_return()
 
@@ -1423,6 +1888,10 @@ class PortfolioCalculator:
         Returns dict with history list containing data points with date and portfolio value
         """
         try:
+            # Preload price cache for efficiency (if not already loaded)
+            if not self._price_cache_loaded:
+                self._preload_price_cache()
+            
             # Get all transactions within date range
             query = self.db.query(Transaction).filter(Transaction.ticker.isnot(None))
 
@@ -1636,10 +2105,17 @@ class PortfolioCalculator:
                             asset_return = ((end_price - start_price) / start_price) * 100
                             contribution = (weight / 100) * asset_return
                             
+                            # Safe rounding to handle NaN values
+                            import math
+                            def safe_round_attr(value, decimals=2):
+                                if math.isnan(value) or math.isinf(value):
+                                    return 0.0
+                                return round(float(value), decimals)
+
                             by_asset[ticker] = {
-                                "contribution": round(contribution, 2),
-                                "weight": round(weight, 2),
-                                "return": round(asset_return, 2)
+                                "contribution": safe_round_attr(contribution, 2),
+                                "weight": safe_round_attr(weight, 2),
+                                "return": safe_round_attr(asset_return, 2)
                             }
                             total_portfolio_return += contribution
                 except Exception as e:
@@ -1649,8 +2125,18 @@ class PortfolioCalculator:
             # Calculate quarterly attribution
             by_period = {}
             try:
-                start_dt = datetime.strptime(start_date, '%Y-%m-%d')
-                end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+                # Handle datetime objects with time components
+                if isinstance(start_date, str):
+                    start_dt = datetime.strptime(start_date.split(' ')[0], '%Y-%m-%d')
+                elif hasattr(start_date, 'date'):
+                    start_dt = start_date.date()
+                start_dt = datetime.combine(start_dt, datetime.min.time())
+
+                if isinstance(end_date, str):
+                    end_dt = datetime.strptime(end_date.split(' ')[0], '%Y-%m-%d')
+                elif hasattr(end_date, 'date'):
+                    end_dt = end_date.date()
+                end_dt = datetime.combine(end_dt, datetime.min.time())
                 
                 current = start_dt
                 while current < end_dt:
@@ -1819,3 +2305,315 @@ class PortfolioCalculator:
                 "recovery_time_days": None,
                 "drawdown_periods": []
             }
+
+    def _calculate_drawdown_recovery_metrics(self, drawdown: pd.Series, value_history: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Calculate detailed drawdown recovery metrics like Portfolio Visualizer
+        """
+        try:
+            # Find the maximum drawdown
+            max_drawdown_value = drawdown.min()
+            max_drawdown_idx = drawdown.idxmin()
+
+            # Calculate recovery time
+            recovery_time = None
+            underwater_period = None
+
+            if max_drawdown_value < 0:  # Only calculate if there was a drawdown
+                # Find when portfolio recovered to within 0.5% of previous peak
+                peak_before_drawdown = drawdown[:max_drawdown_idx].max()
+
+                # Find recovery point
+                recovery_mask = (drawdown[max_drawdown_idx:] >= peak_before_drawdown - 0.005)
+                if recovery_mask.any():
+                    recovery_idx = recovery_mask.idxmax()
+                    recovery_time = (recovery_idx - max_drawdown_idx).days
+                    underwater_period = recovery_time
+
+            return {
+                "recovery_time": recovery_time,
+                "underwater_period": underwater_period,
+                "worst_drawdown": {
+                    "depth": max_drawdown_value * 100,
+                    "date": max_drawdown_idx.strftime('%Y-%m-%d') if max_drawdown_idx else None
+                }
+            }
+
+        except Exception as e:
+            print(f"Error calculating drawdown recovery metrics: {e}")
+            return {
+                "recovery_time": None,
+                "underwater_period": None,
+                "worst_drawdown": {"depth": 0, "date": None}
+            }
+
+    def _calculate_rolling_returns(self, value_history: pd.DataFrame, periods: List[int] = [1, 3, 5, 7, 10]) -> Dict[str, Dict[str, float]]:
+        """
+        Calculate rolling returns for different periods like Portfolio Visualizer
+        """
+        try:
+            if value_history.empty or len(value_history) < 2:
+                return {f"{period}y": {"average": 0.0, "high": 0.0, "low": 0.0} for period in periods}
+
+            # Ensure we have datetime index
+            if not isinstance(value_history.index, pd.DatetimeIndex):
+                value_history.index = pd.to_datetime(value_history.index)
+
+            # Calculate daily returns
+            daily_returns = value_history['portfolio_value'].pct_change().dropna()
+
+            rolling_returns = {}
+
+            for period in periods:
+                # Convert years to trading days (252 trading days per year)
+                trading_days = period * 252
+
+                if len(daily_returns) < trading_days:
+                    rolling_returns[f"{period}y"] = {"average": 0.0, "high": 0.0, "low": 0.0}
+                    continue
+
+                # Calculate rolling cumulative returns
+                rolling_cumulative = (1 + daily_returns).rolling(window=trading_days).apply(lambda x: x.prod() - 1)
+
+                # Convert to annualized returns
+                annualized_returns = (rolling_cumulative + 1) ** (252 / trading_days) - 1
+
+                # Calculate statistics
+                avg_return = annualized_returns.mean() * 100
+                high_return = annualized_returns.max() * 100
+                low_return = annualized_returns.min() * 100
+
+                rolling_returns[f"{period}y"] = {
+                    "average": round(avg_return, 2) if not pd.isna(avg_return) else 0.0,
+                    "high": round(high_return, 2) if not pd.isna(high_return) else 0.0,
+                    "low": round(low_return, 2) if not pd.isna(low_return) else 0.0
+                }
+
+            return rolling_returns
+
+        except Exception as e:
+            print(f"Error calculating rolling returns: {e}")
+            return {f"{period}y": {"average": 0.0, "high": 0.0, "low": 0.0} for period in periods}
+
+    def _calculate_individual_asset_metrics(self) -> Dict[str, Any]:
+        """
+        Calculate individual asset performance metrics like Portfolio Visualizer
+        """
+        try:
+            holdings = self.get_current_holdings()
+            if not holdings:
+                return {}
+
+            asset_metrics = {}
+
+            for ticker in holdings.keys():
+                try:
+                    # Get asset price history
+                    price_history = self._get_asset_price_history(ticker)
+                    if price_history.empty:
+                        continue
+
+                    # Calculate returns
+                    price_history = price_history.sort_values('date')
+                    price_history['returns'] = price_history['close'].pct_change()
+
+                    # Basic metrics
+                    start_price = price_history['close'].iloc[0]
+                    end_price = price_history['close'].iloc[-1]
+                    total_return = ((end_price / start_price) - 1) * 100 if start_price > 0 else 0
+
+                    # CAGR
+                    days = (price_history['date'].max() - price_history['date'].min()).days
+                    years = days / 365.25
+                    cagr = ((end_price / start_price) ** (1 / years) - 1) * 100 if start_price > 0 and years > 0 else 0
+
+                    # Volatility
+                    daily_volatility = price_history['returns'].std()
+                    volatility = daily_volatility * np.sqrt(252) * 100
+
+                    # Sharpe ratio (assuming 2% risk-free rate)
+                    risk_free_rate = 0.02
+                    excess_returns = price_history['returns'] - risk_free_rate / 252
+                    sharpe_ratio = excess_returns.mean() / excess_returns.std() * np.sqrt(252) if excess_returns.std() > 0 else 0
+
+                    # Best and worst years
+                    price_history['year'] = price_history['date'].dt.year
+                    yearly_returns = price_history.groupby('year')['returns'].apply(lambda x: (1 + x).prod() - 1)
+                    best_year = yearly_returns.max() * 100 if not yearly_returns.empty else 0
+                    worst_year = yearly_returns.min() * 100 if not yearly_returns.empty else 0
+
+                    # Max drawdown for asset
+                    cumulative = (1 + price_history['returns']).cumprod()
+                    running_max = cumulative.expanding().max()
+                    drawdown = (cumulative - running_max) / running_max
+                    max_drawdown = drawdown.min() * 100
+
+                    # Handle NaN values properly
+                    import math
+                    def safe_round(value, decimals=2):
+                        if math.isnan(value) or math.isinf(value):
+                            return 0.0
+                        return round(float(value), decimals)
+
+                    asset_metrics[ticker] = {
+                        "cagr": safe_round(cagr, 2),
+                        "stdev": safe_round(volatility, 2),
+                        "best_year": safe_round(best_year, 2),
+                        "worst_year": safe_round(worst_year, 2),
+                        "max_drawdown": safe_round(max_drawdown, 2),
+                        "sharpe_ratio": safe_round(sharpe_ratio, 2),
+                        "total_return": safe_round(total_return, 2),
+                        "current_holding": holdings[ticker]
+                    }
+
+                except Exception as e:
+                    print(f"Error calculating metrics for {ticker}: {e}")
+                    continue
+
+            return asset_metrics
+
+        except Exception as e:
+            print(f"Error calculating individual asset metrics: {e}")
+            return {}
+
+    def _get_asset_price_history(self, ticker: str) -> pd.DataFrame:
+        """
+        Get price history for a specific asset
+        """
+        try:
+            # Query stock prices for this ticker
+            prices = self.db.query(StockPrice).filter(
+                StockPrice.ticker == ticker.upper()
+            ).order_by(StockPrice.date).all()
+
+            if not prices:
+                return pd.DataFrame()
+
+            data = [{
+                'date': price.date,
+                'close': price.close,
+                'high': price.high,
+                'low': price.low,
+                'open': price.open,
+                'volume': price.volume
+            } for price in prices]
+
+            return pd.DataFrame(data)
+
+        except Exception as e:
+            print(f"Error getting price history for {ticker}: {e}")
+            return pd.DataFrame()
+
+    def get_monthly_performance_table(self) -> Dict[str, Any]:
+        """
+        Generate monthly performance table like Portfolio Visualizer
+        Returns data structure with monthly returns, balances, and individual asset performance
+        """
+        try:
+            value_history = self.get_portfolio_value_history()
+
+            if value_history.empty:
+                return {"monthly_data": [], "summary_stats": {}, "asset_columns": []}
+
+            # Convert to datetime and set as index
+            value_history['date'] = pd.to_datetime(value_history['date'])
+            value_history = value_history.set_index('date').sort_index()
+
+            # Calculate daily returns
+            value_history['returns'] = value_history['portfolio_value'].pct_change()
+
+            # Resample to monthly data
+            monthly_value = value_history['portfolio_value'].resample('M').last()
+            monthly_returns = value_history['returns'].resample('M').apply(lambda x: (1 + x).prod() - 1)
+
+            # Get holdings for asset-level returns
+            holdings = self.get_current_holdings()
+            asset_columns = list(holdings.keys())[:5]  # Limit to top 5 holdings for display
+
+            # Create monthly data array similar to Portfolio Visualizer
+            monthly_data = []
+            years = sorted(monthly_value.index.year.unique())
+
+            for year in years:
+                year_mask = monthly_value.index.year == year
+                year_values = monthly_value[year_mask]
+                year_returns = monthly_returns[year_mask]
+
+                for month in range(1, 13):
+                    month_mask = year_values.index.month == month
+                    if month_mask.any():
+                        month_value = year_values[month_mask].iloc[0]
+                        month_return = year_returns[month_mask].iloc[0]
+
+                        row_data = {
+                            "year": year,
+                            "month": month,
+                            "return": round(month_return * 100, 2),
+                            "balance": round(month_value, 2)
+                        }
+
+                        # Add individual asset returns for this month
+                        for ticker in asset_columns:
+                            try:
+                                asset_return = self._get_asset_monthly_return(ticker, year, month)
+                                row_data[ticker] = round(asset_return * 100, 2) if asset_return is not None else None
+                            except:
+                                row_data[ticker] = None
+
+                        monthly_data.append(row_data)
+
+            # Calculate summary statistics
+            all_returns = monthly_returns.dropna()
+            summary_stats = {
+                "total_months": len(all_returns),
+                "positive_months": (all_returns > 0).sum(),
+                "negative_months": (all_returns < 0).sum(),
+                "best_month": all_returns.max() * 100,
+                "worst_month": all_returns.min() * 100,
+                "average_month": all_returns.mean() * 100,
+                "median_month": all_returns.median() * 100,
+                "monthly_volatility": all_returns.std() * 100,
+                "win_rate": (all_returns > 0).mean() * 100
+            }
+
+            return {
+                "monthly_data": monthly_data,
+                "summary_stats": summary_stats,
+                "asset_columns": asset_columns,
+                "years_covered": years.tolist()
+            }
+
+        except Exception as e:
+            print(f"Error calculating monthly performance table: {e}")
+            return {"monthly_data": [], "summary_stats": {}, "asset_columns": []}
+
+    def _get_asset_monthly_return(self, ticker: str, year: int, month: int) -> Optional[float]:
+        """
+        Get monthly return for a specific asset and month
+        """
+        try:
+            # Get asset price data for the month
+            start_date = f"{year}-{month:02d}-01"
+            end_date = f"{year}-{month+1:02d}-01" if month < 12 else f"{year+1}-01-01"
+
+            # Query prices for this date range
+            prices = self.db.query(StockPrice).filter(
+                StockPrice.symbol == ticker.upper(),
+                StockPrice.date >= start_date,
+                StockPrice.date < end_date
+            ).order_by(StockPrice.date).all()
+
+            if len(prices) < 2:
+                return None
+
+            # Calculate monthly return
+            start_price = prices[0].close
+            end_price = prices[-1].close
+
+            if start_price > 0:
+                return (end_price / start_price) - 1
+
+            return None
+
+        except Exception as e:
+            return None

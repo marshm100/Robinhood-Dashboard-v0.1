@@ -55,9 +55,25 @@ class StockPriceService:
         )
         return result[0][0] if result else None
 
+    def _stock_existed_before_date(self, stock_id: int, target_date: str) -> bool:
+        """
+        Check if stock had any price data before the target date.
+        Returns True if stock existed before date, False otherwise.
+        """
+        result = self._execute_query(
+            """SELECT COUNT(*) FROM historical_prices 
+               WHERE stock_id = ? AND date < ?""",
+            (stock_id, target_date)
+        )
+        return result[0][0] > 0 if result else False
+
     def get_price_at_date(self, symbol: str, target_date: str) -> Optional[Dict[str, float]]:
         """
-        Get stock price data for a specific date
+        Get stock price data for a specific date with forward-fill logic.
+        
+        - If stock didn't exist before target_date: returns dict with 0 prices
+        - If stock existed but no exact match: forward-fills with last available price
+        - If exact match found: returns actual price data
         
         If the stock is not found, it will be automatically added to tracking
         via the stockr_backbone maintenance system.
@@ -67,7 +83,7 @@ class StockPriceService:
             target_date: Date in YYYY-MM-DD format
 
         Returns:
-            Dict with price data or None if not found
+            Dict with price data, dict with 0 prices if stock didn't exist, or None
         """
         try:
             stock_id = self.get_stock_id(symbol)
@@ -115,6 +131,9 @@ class StockPriceService:
             if not stock_id:
                 return None
 
+            # Check if stock existed before target date
+            stock_existed = self._stock_existed_before_date(stock_id, target_date)
+
             # Try exact date match first
             result = self._execute_query(
                 """SELECT date, open, high, low, close, volume
@@ -135,7 +154,18 @@ class StockPriceService:
                     'volume': volume
                 }
 
-            # If no exact match, find the most recent price before the target date
+            # If no exact match and stock didn't exist before, return 0 prices
+            if not stock_existed:
+                return {
+                    'date': target_date,
+                    'open': 0.0,
+                    'high': 0.0,
+                    'low': 0.0,
+                    'close': 0.0,
+                    'volume': 0.0
+                }
+
+            # Stock existed but no exact match - forward fill with last available price
             result = self._execute_query(
                 """SELECT date, open, high, low, close, volume
                    FROM historical_prices
@@ -147,7 +177,7 @@ class StockPriceService:
             if result:
                 date_val, open_price, high, low, close, volume = result[0]
                 return {
-                    'date': date_val,
+                    'date': target_date,  # Use target_date, not date_val (forward-fill)
                     'open': open_price,
                     'high': high,
                     'low': low,
@@ -163,7 +193,9 @@ class StockPriceService:
 
     def get_price_history(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
         """
-        Get historical price data for a date range
+        Get historical price data for a date range with forward-fill for gaps.
+        
+        Creates a complete date range and forward-fills missing prices.
 
         Args:
             symbol: Stock ticker symbol
@@ -171,7 +203,7 @@ class StockPriceService:
             end_date: End date in YYYY-MM-DD format
 
         Returns:
-            DataFrame with price history
+            DataFrame with price history (gaps forward-filled)
         """
         try:
             stock_id = self.get_stock_id(symbol)
@@ -194,6 +226,20 @@ class StockPriceService:
             df = pd.DataFrame(results, columns=['date', 'open', 'high', 'low', 'close', 'volume'])
             df['date'] = pd.to_datetime(df['date'])
             df = df.sort_values('date')
+
+            # Convert to date-indexed DataFrame
+            df = df.set_index('date')
+
+            # Create complete business day range (excludes weekends/holidays)
+            date_range = pd.date_range(start=start_date, end=end_date, freq='B')
+            
+            # Reindex to include all business days and forward-fill gaps
+            df = df.reindex(date_range)
+            df = df.fillna(method='ffill')  # Forward fill missing values
+            
+            # Reset index to have 'date' as column again
+            df = df.reset_index()
+            df.rename(columns={'index': 'date'}, inplace=True)
 
             return df
 
@@ -308,12 +354,20 @@ class StockPriceService:
                     'volume': row[6]
                 })
             
-            # Convert to DataFrames
+            # Convert to DataFrames and forward-fill gaps
             result = {}
+            # Create complete business day date range for the period
+            date_range = pd.date_range(start=start_date, end=end_date, freq='B')
+            
             for ticker, data in ticker_data.items():
                 df = pd.DataFrame(data)
                 df['date'] = pd.to_datetime(df['date'])
                 df = df.set_index('date').sort_index()
+                
+                # Reindex to complete date range and forward-fill gaps
+                df = df.reindex(date_range)
+                df = df.ffill()
+                
                 result[ticker] = df
             
             return result
@@ -324,10 +378,11 @@ class StockPriceService:
 
     def get_prices_at_dates_batch(self, tickers: List[str], dates: List[str]) -> Dict[str, Dict[str, float]]:
         """
-        Get closing prices for multiple tickers at multiple dates efficiently.
+        Get closing prices for multiple tickers at multiple dates efficiently with forward-fill logic.
         Returns dict of ticker -> {date: close_price}
         
         Uses a single query to fetch all needed data.
+        Returns 0.0 if stock didn't exist before date, otherwise forward-fills.
         """
         if not tickers or not dates:
             return {}
@@ -348,14 +403,35 @@ class StockPriceService:
             
             for ticker, df in batch_data.items():
                 result[ticker] = {}
+                stock_id = self.get_stock_id(ticker)
+                
                 for date_str in dates:
                     try:
                         target_date = pd.to_datetime(date_str)
+                        
+                        # Check if stock existed before this date
+                        stock_existed = self._stock_existed_before_date(stock_id, date_str) if stock_id else False
+                        
                         # Get exact match or most recent price before target
                         available = df[df.index <= target_date]
+                        
                         if not available.empty:
+                            # Forward-fill: use last available price
                             result[ticker][date_str] = float(available.iloc[-1]['close'])
-                    except Exception:
+                        elif stock_existed:
+                            # Stock existed but no data in batch range - try individual lookup
+                            price_data = self.get_price_at_date(ticker, date_str)
+                            if price_data:
+                                result[ticker][date_str] = float(price_data.get('close', 0.0))
+                            else:
+                                result[ticker][date_str] = 0.0
+                        else:
+                            # Stock didn't exist - return 0
+                            result[ticker][date_str] = 0.0
+                            
+                    except Exception as e:
+                        print(f"Error processing {ticker} for {date_str}: {e}")
+                        result[ticker][date_str] = 0.0
                         continue
             
             return result

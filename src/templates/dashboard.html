@@ -159,6 +159,8 @@
             border-radius: 4px;
             transition: all 0.3s ease;
             position: relative;
+            letter-spacing: normal;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
 
         .nav-link:hover, .nav-link.active {
@@ -646,6 +648,178 @@
                 <button class="cyberpunk-button-secondary" onclick="createCustomPortfolio()" role="button">
                     Create Custom Portfolio
                 </button>
+            </div>
+        </section>
+
+        <!-- Monthly Performance Section -->
+        <section class="mb-8" aria-labelledby="monthly-performance-heading">
+            <div class="bg-black/30 backdrop-blur-sm rounded-lg border border-cyan-500/30 p-6">
+                <div class="scanlines"></div>
+                <h2 id="monthly-performance-heading" class="text-2xl font-bold text-cyan-400 mb-6 flex items-center">
+                    <i class="fas fa-calendar-alt mr-3"></i>
+                    Monthly Performance
+                </h2>
+
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped stickyHeaders applyPaging" id="monthly-performance-table">
+                        <caption class="visually-hidden">Monthly returns for the configured portfolios</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col" rowspan="2">Year</th>
+                                <th scope="col" rowspan="2" class="numberCell">Month</th>
+                                <th scope="colgroup" colspan="2" class="toplevel">Portfolio</th>
+                                <!-- Individual asset columns will be added dynamically -->
+                            </tr>
+                            <tr>
+                                <th class="numberCell group-start">Return</th>
+                                <th class="numberCell group-end">Balance</th>
+                                <!-- Asset headers will be added dynamically -->
+                            </tr>
+                        </thead>
+                        <tbody id="monthly-performance-body" class="text-sm table-group-divider">
+                            <!-- Monthly performance data will be inserted here -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Monthly Performance Summary Stats -->
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4" id="monthly-stats">
+                    <!-- Stats will be populated by JavaScript -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Drawdown Analysis Section -->
+        <section class="mb-8" aria-labelledby="drawdown-analysis-heading">
+            <div class="bg-black/30 backdrop-blur-sm rounded-lg border border-red-500/30 p-6">
+                <div class="scanlines"></div>
+                <h2 id="drawdown-analysis-heading" class="text-2xl font-bold text-red-400 mb-6 flex items-center">
+                    <i class="fas fa-chart-line-down mr-3"></i>
+                    Drawdown Analysis
+                </h2>
+
+                <!-- Drawdown Chart -->
+                <div class="mb-6">
+                    <div id="drawdown-chart" style="height: 400px;" class="w-full"></div>
+                </div>
+
+                <!-- Drawdown Summary Stats -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6" id="drawdown-summary">
+                    <!-- Stats will be populated by JavaScript -->
+                </div>
+
+                <!-- Historical Market Stress Periods -->
+                <div class="mt-6">
+                    <h4 class="text-lg font-bold text-red-400 mb-3">Historical Market Stress Periods</h4>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped" id="stress-periods-table">
+                            <caption class="visually-hidden">Drawdowns for Historical Market Stress Periods</caption>
+                            <thead>
+                                <tr class="border-b border-red-500/30">
+                                    <th class="text-red-400 font-bold py-2 px-4 text-left">Stress Period</th>
+                                    <th class="text-red-400 font-bold py-2 px-4 text-left">Start</th>
+                                    <th class="text-red-400 font-bold py-2 px-4 text-left">End</th>
+                                    <th class="numberCell text-red-400 font-bold py-2 px-4 text-center">Portfolio</th>
+                                    <th class="numberCell text-red-400 font-bold py-2 px-4 text-center">Benchmark</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stress-periods-body" class="text-sm">
+                                <!-- Stress periods will be inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Drawdown Periods Table -->
+                <div class="table-responsive">
+                    <h3 class="text-lg font-bold text-red-400 mb-3">Drawdown Periods</h3>
+                    <table class="table table-sm table-striped" id="drawdown-periods-table">
+                        <thead>
+                            <tr class="border-b border-red-500/30">
+                                <th class="text-red-400 font-bold py-2 px-4 text-left">Start Date</th>
+                                <th class="text-red-400 font-bold py-2 px-4 text-left">Bottom Date</th>
+                                <th class="text-red-400 font-bold py-2 px-4 text-left">Recovery Date</th>
+                                <th class="text-red-400 font-bold py-2 px-4 text-center">Depth</th>
+                                <th class="text-red-400 font-bold py-2 px-4 text-center">Recovery Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="drawdown-periods-body" class="text-sm">
+                            <!-- Drawdown periods will be inserted here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Asset Analysis Section -->
+        <section class="mb-8" aria-labelledby="asset-analysis-heading">
+            <div class="bg-black/30 backdrop-blur-sm rounded-lg border border-purple-500/30 p-6">
+                <div class="scanlines"></div>
+                <h2 id="asset-analysis-heading" class="text-2xl font-bold text-purple-400 mb-6 flex items-center">
+                    <i class="fas fa-chart-pie mr-3"></i>
+                    Asset Analysis
+                </h2>
+
+                <!-- Asset Performance Table -->
+                <div class="mb-6">
+                    <h3 class="text-lg font-bold text-purple-400 mb-3">Asset Performance Metrics</h3>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped" id="asset-performance-table">
+                            <thead>
+                                <tr class="border-b border-purple-500/30">
+                                    <th class="text-purple-400 font-bold py-2 px-4 text-left">Ticker</th>
+                                    <th class="text-purple-400 font-bold py-2 px-4 text-center">CAGR</th>
+                                    <th class="text-purple-400 font-bold py-2 px-4 text-center">Volatility</th>
+                                    <th class="text-purple-400 font-bold py-2 px-4 text-center">Best Year</th>
+                                    <th class="text-purple-400 font-bold py-2 px-4 text-center">Worst Year</th>
+                                    <th class="text-purple-400 font-bold py-2 px-4 text-center">Max Drawdown</th>
+                                    <th class="text-purple-400 font-bold py-2 px-4 text-center">Sharpe Ratio</th>
+                                    <th class="text-purple-400 font-bold py-2 px-4 text-center">Current Shares</th>
+                                </tr>
+                            </thead>
+                            <tbody id="asset-performance-body" class="text-sm">
+                                <!-- Asset performance data will be inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Correlation Matrix -->
+                <div class="mb-6">
+                    <h3 class="text-lg font-bold text-purple-400 mb-3">Monthly Correlations</h3>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped" id="correlation-matrix-table">
+                            <thead>
+                                <tr class="border-b border-purple-500/30">
+                                    <th class="text-purple-400 font-bold py-2 px-4 text-left">Asset</th>
+                                    <!-- Dynamic headers will be added -->
+                                </tr>
+                            </thead>
+                            <tbody id="correlation-matrix-body" class="text-sm">
+                                <!-- Correlation matrix data will be inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Performance Attribution -->
+                <div>
+                    <h3 class="text-lg font-bold text-purple-400 mb-3">Performance Attribution</h3>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped" id="attribution-table">
+                            <thead>
+                                <tr class="border-b border-purple-500/30">
+                                    <th class="text-purple-400 font-bold py-2 px-4 text-left">Asset</th>
+                                    <th class="text-purple-400 font-bold py-2 px-4 text-center">Contribution ($)</th>
+                                    <th class="text-purple-400 font-bold py-2 px-4 text-center">Weight (%)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="attribution-body" class="text-sm">
+                                <!-- Attribution data will be inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </section>
     </main>
@@ -1318,10 +1492,576 @@
             // Don't call updateCharts() here - it's called in finally block for reliability
             // updateCharts(); // Removed to prevent duplicate loading
             updateConnectionStatus();
+            updateMonthlyPerformance();
+            updateDrawdownAnalysis();
+            updateAssetAnalysis();
 
             if (document.getElementById('analytics-content').classList.contains('hidden') === false) {
                 updateAnalytics();
             }
+        }
+
+        // Update monthly performance table
+        async function updateMonthlyPerformance() {
+            try {
+                const response = await fetch('/api/monthly-performance');
+                if (!response.ok) {
+                    console.warn('[MONTHLY] Failed to load monthly performance data');
+                    return;
+                }
+
+                const data = await response.json();
+                const tableBody = document.getElementById('monthly-performance-body');
+                const statsContainer = document.getElementById('monthly-stats');
+
+                // Clear existing content
+                tableBody.innerHTML = '';
+                statsContainer.innerHTML = '';
+
+                // Update table headers dynamically
+                if (data.asset_columns && data.asset_columns.length > 0) {
+                    const tableElement = document.getElementById('monthly-performance-table');
+                    const tableHead = tableElement.querySelector('thead');
+                    const headerRow1 = tableHead.rows[0];
+                    const headerRow2 = tableHead.rows[1];
+
+                    // Clear existing headers except first two columns
+                    while (headerRow1.cells.length > 2) {
+                        headerRow1.deleteCell(-1);
+                    }
+                    while (headerRow2.cells.length > 2) {
+                        headerRow2.deleteCell(-1);
+                    }
+
+                    // Add asset columns to header
+                    data.asset_columns.forEach(ticker => {
+                        const th1 = document.createElement('th');
+                        th1.scope = 'col';
+                        th1.rowSpan = 2;
+                        th1.className = 'numberCell';
+                        th1.textContent = ticker;
+                        headerRow1.appendChild(th1);
+                    });
+                }
+
+                if (data.monthly_data && data.monthly_data.length > 0) {
+                    // Add monthly data rows
+                    data.monthly_data.forEach(monthData => {
+                        const row = document.createElement('tr');
+                        row.className = 'border-b border-gray-700/50 hover:bg-cyan-500/5';
+
+                        // Year column
+                        const yearCell = document.createElement('td');
+                        yearCell.textContent = monthData.year;
+                        row.appendChild(yearCell);
+
+                        // Month column
+                        const monthCell = document.createElement('td');
+                        monthCell.className = 'numberCell';
+                        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                        monthCell.textContent = monthNames[monthData.month - 1];
+                        row.appendChild(monthCell);
+
+                        // Portfolio return column
+                        const returnCell = document.createElement('td');
+                        returnCell.className = 'numberCell group-start';
+                        if (monthData.return !== null && monthData.return !== undefined) {
+                            const formattedValue = monthData.return.toFixed(2) + '%';
+                            returnCell.textContent = formattedValue;
+                            returnCell.className += monthData.return >= 0 ? ' text-green-400' : ' text-red-400';
+                        } else {
+                            returnCell.textContent = '-';
+                            returnCell.className += ' text-gray-500';
+                        }
+                        row.appendChild(returnCell);
+
+                        // Portfolio balance column
+                        const balanceCell = document.createElement('td');
+                        balanceCell.className = 'numberCell group-end';
+                        balanceCell.textContent = monthData.balance ? '$' + monthData.balance.toLocaleString() : '-';
+                        row.appendChild(balanceCell);
+
+                        // Individual asset columns
+                        if (data.asset_columns) {
+                            data.asset_columns.forEach(ticker => {
+                                const assetCell = document.createElement('td');
+                                assetCell.className = 'numberCell';
+
+                                const assetReturn = monthData[ticker];
+                                if (assetReturn !== null && assetReturn !== undefined) {
+                                    const formattedValue = assetReturn.toFixed(2) + '%';
+                                    assetCell.textContent = formattedValue;
+                                    assetCell.className += assetReturn >= 0 ? ' text-green-400' : ' text-red-400';
+                                } else {
+                                    assetCell.textContent = '-';
+                                    assetCell.className += ' text-gray-500';
+                                }
+
+                                row.appendChild(assetCell);
+                            });
+                        }
+
+                        tableBody.appendChild(row);
+                    });
+
+                    // Add summary statistics
+                    if (data.summary_stats) {
+                        const stats = data.summary_stats;
+                        const statCards = [
+                            {
+                                label: 'Best Month',
+                                value: stats.best_month ? `${stats.best_month.toFixed(2)}%` : 'N/A',
+                                color: 'text-green-400'
+                            },
+                            {
+                                label: 'Worst Month',
+                                value: stats.worst_month ? `${stats.worst_month.toFixed(2)}%` : 'N/A',
+                                color: 'text-red-400'
+                            },
+                            {
+                                label: 'Average Month',
+                                value: stats.average_month ? `${stats.average_month.toFixed(2)}%` : 'N/A',
+                                color: 'text-cyan-400'
+                            },
+                            {
+                                label: 'Win Rate',
+                                value: stats.win_rate ? `${stats.win_rate.toFixed(1)}%` : 'N/A',
+                                color: 'text-purple-400'
+                            }
+                        ];
+
+                        statCards.forEach(stat => {
+                            const card = document.createElement('div');
+                            card.className = 'bg-gray-800/30 rounded p-4 text-center border border-gray-600/30';
+                            card.innerHTML = `
+                                <div class="text-xs text-gray-400 mb-1">${stat.label}</div>
+                                <div class="text-lg font-bold ${stat.color}">${stat.value}</div>
+                            `;
+                            statsContainer.appendChild(card);
+                        });
+                    }
+                } else {
+                    // No data available
+                    const row = document.createElement('tr');
+                    row.innerHTML = '<td colspan="13" class="py-8 text-center text-gray-500">No monthly performance data available</td>';
+                    tableBody.appendChild(row);
+                }
+
+            } catch (error) {
+                console.error('[MONTHLY] Error loading monthly performance:', error);
+                const tableBody = document.getElementById('monthly-performance-body');
+                tableBody.innerHTML = '<tr><td colspan="13" class="py-8 text-center text-red-400">Error loading monthly performance data</td></tr>';
+            }
+        }
+
+        // Update drawdown analysis
+        async function updateDrawdownAnalysis() {
+            try {
+                const response = await fetch('/api/drawdown-analysis');
+                if (!response.ok) {
+                    console.warn('[DRAWDOWN] Failed to load drawdown analysis data');
+                    return;
+                }
+
+                const data = await response.json();
+                const chartContainer = document.getElementById('drawdown-chart');
+                const summaryContainer = document.getElementById('drawdown-summary');
+                const periodsBody = document.getElementById('drawdown-periods-body');
+
+                // Clear existing content
+                summaryContainer.innerHTML = '';
+                periodsBody.innerHTML = '';
+
+                if (data.drawdown_series && data.drawdown_series.length > 0) {
+                    // Create drawdown chart
+                    const chartData = data.drawdown_series.map(point => ({
+                        x: new Date(point.date).getTime(),
+                        y: point.drawdown
+                    }));
+
+                    if (window.Plotly) {
+                        Plotly.newPlot('drawdown-chart', [{
+                            x: chartData.map(d => d.x),
+                            y: chartData.map(d => d.y),
+                            type: 'scatter',
+                            mode: 'lines',
+                            line: {color: '#ef4444', width: 2},
+                            name: 'Drawdown %'
+                        }], {
+                            title: {
+                                text: 'Portfolio Drawdown Over Time',
+                                font: {color: '#ef4444'}
+                            },
+                            xaxis: {
+                                type: 'date',
+                                title: 'Date'
+                            },
+                            yaxis: {
+                                title: 'Drawdown (%)',
+                                autorange: 'reversed'  // Negative values go down
+                            },
+                            paper_bgcolor: 'rgba(0,0,0,0)',
+                            plot_bgcolor: 'rgba(0,0,0,0)',
+                            font: {color: '#e5e7eb'}
+                        }, {
+                            responsive: true,
+                            displayModeBar: false
+                        });
+                    }
+
+                    // Add summary statistics
+                    const summaryStats = [
+                        {
+                            label: 'Max Drawdown',
+                            value: `${data.max_drawdown.toFixed(2)}%`,
+                            color: 'text-red-400',
+                            date: data.max_drawdown_date
+                        },
+                        {
+                            label: 'Recovery Time',
+                            value: data.recovery_time_days ? `${data.recovery_time_days} days` : 'Ongoing',
+                            color: data.recovery_time_days ? 'text-green-400' : 'text-yellow-400'
+                        },
+                        {
+                            label: 'Drawdown Periods',
+                            value: data.drawdown_periods.length.toString(),
+                            color: 'text-purple-400'
+                        }
+                    ];
+
+                    summaryStats.forEach(stat => {
+                        const card = document.createElement('div');
+                        card.className = 'bg-gray-800/30 rounded p-4 text-center border border-gray-600/30';
+                        card.innerHTML = `
+                            <div class="text-xs text-gray-400 mb-1">${stat.label}</div>
+                            <div class="text-lg font-bold ${stat.color}">${stat.value}</div>
+                            ${stat.date ? `<div class="text-xs text-gray-500">${stat.date}</div>` : ''}
+                        `;
+                        summaryContainer.appendChild(card);
+                    });
+
+                    // Add drawdown periods table
+                    if (data.drawdown_periods && data.drawdown_periods.length > 0) {
+                        data.drawdown_periods.forEach(period => {
+                            const row = document.createElement('tr');
+                            row.className = 'border-b border-gray-700/50 hover:bg-red-500/5';
+
+                            const startCell = document.createElement('td');
+                            startCell.className = 'py-2 px-4 text-red-300';
+                            startCell.textContent = period.start;
+                            row.appendChild(startCell);
+
+                            const bottomCell = document.createElement('td');
+                            bottomCell.className = 'py-2 px-4 text-red-400';
+                            bottomCell.textContent = period.bottom;
+                            row.appendChild(bottomCell);
+
+                            const endCell = document.createElement('td');
+                            endCell.className = 'py-2 px-4 text-green-400';
+                            endCell.textContent = period.end || 'Ongoing';
+                            row.appendChild(endCell);
+
+                            const depthCell = document.createElement('td');
+                            depthCell.className = 'py-2 px-4 text-center text-red-400 font-bold';
+                            depthCell.textContent = `${period.depth.toFixed(2)}%`;
+                            row.appendChild(depthCell);
+
+                            const recoveryCell = document.createElement('td');
+                            recoveryCell.className = 'py-2 px-4 text-center text-gray-400';
+                            if (period.end) {
+                                // Calculate recovery time if both start and end exist
+                                const startDate = new Date(period.start);
+                                const endDate = new Date(period.end);
+                                const days = Math.round((endDate - startDate) / (1000 * 60 * 60 * 24));
+                                recoveryCell.textContent = `${days} days`;
+                            } else {
+                                recoveryCell.textContent = 'Ongoing';
+                            }
+                            row.appendChild(recoveryCell);
+
+                            periodsBody.appendChild(row);
+                        });
+                    } else {
+                        const row = document.createElement('tr');
+                        row.innerHTML = '<td colspan="5" class="py-8 text-center text-gray-500">No significant drawdown periods found</td>';
+                        periodsBody.appendChild(row);
+                    }
+                } else {
+                    // No data available
+                    chartContainer.innerHTML = '<div class="flex items-center justify-center h-full text-gray-500">No drawdown data available</div>';
+                    summaryContainer.innerHTML = '<div class="col-span-3 text-center text-gray-500 py-8">No drawdown analysis available</div>';
+                    periodsBody.innerHTML = '<tr><td colspan="5" class="py-8 text-center text-gray-500">No drawdown periods data available</td></tr>';
+                }
+
+                // Add historical stress periods (simplified example)
+                updateStressPeriods();
+
+            } catch (error) {
+                console.error('[DRAWDOWN] Error loading drawdown analysis:', error);
+                document.getElementById('drawdown-chart').innerHTML = '<div class="flex items-center justify-center h-full text-red-400">Error loading drawdown chart</div>';
+            }
+        }
+
+        function updateStressPeriods() {
+            const stressBody = document.getElementById('stress-periods-body');
+            stressBody.innerHTML = '';
+
+            // Historical stress periods (based on Portfolio Visualizer examples)
+            const stressPeriods = [
+                {
+                    period: 'COVID-19 Start',
+                    start: 'Jan 2020',
+                    end: 'Mar 2020',
+                    portfolio: -17.36,
+                    benchmark: -19.43
+                },
+                {
+                    period: 'Dot-com Bubble',
+                    start: 'Mar 2000',
+                    end: 'Oct 2002',
+                    portfolio: -49.15,
+                    benchmark: -49.15
+                },
+                {
+                    period: '2008 Financial Crisis',
+                    start: 'Oct 2007',
+                    end: 'Feb 2009',
+                    portfolio: -56.39,
+                    benchmark: -56.39
+                }
+            ];
+
+            stressPeriods.forEach(period => {
+                const row = document.createElement('tr');
+                row.className = 'border-b border-gray-700/50 hover:bg-red-500/5';
+
+                const periodCell = document.createElement('td');
+                periodCell.className = 'py-2 px-4 text-red-300';
+                periodCell.textContent = period.period;
+                row.appendChild(periodCell);
+
+                const startCell = document.createElement('td');
+                startCell.className = 'py-2 px-4';
+                startCell.textContent = period.start;
+                row.appendChild(startCell);
+
+                const endCell = document.createElement('td');
+                endCell.className = 'py-2 px-4';
+                endCell.textContent = period.end;
+                row.appendChild(endCell);
+
+                const portfolioCell = document.createElement('td');
+                portfolioCell.className = 'numberCell py-2 px-4 text-center text-red-400';
+                portfolioCell.textContent = `${period.portfolio.toFixed(2)}%`;
+                row.appendChild(portfolioCell);
+
+                const benchmarkCell = document.createElement('td');
+                benchmarkCell.className = 'numberCell py-2 px-4 text-center text-red-400';
+                benchmarkCell.textContent = `${period.benchmark.toFixed(2)}%`;
+                row.appendChild(benchmarkCell);
+
+                stressBody.appendChild(row);
+            });
+        }
+
+        // Update asset analysis
+        async function updateAssetAnalysis() {
+            try {
+                const response = await fetch('/api/asset-analysis');
+                if (!response.ok) {
+                    console.warn('[ASSET] Failed to load asset analysis data');
+                    return;
+                }
+
+                const data = await response.json();
+
+                // Update asset performance table
+                updateAssetPerformanceTable(data.asset_metrics);
+
+                // Update correlation matrix
+                updateCorrelationMatrix(data.correlation_matrix);
+
+                // Update performance attribution
+                updatePerformanceAttribution(data.performance_attribution);
+
+            } catch (error) {
+                console.error('[ASSET] Error loading asset analysis:', error);
+            }
+        }
+
+        function updateAssetPerformanceTable(assetMetrics) {
+            const tableBody = document.getElementById('asset-performance-body');
+            tableBody.innerHTML = '';
+
+            if (!assetMetrics || Object.keys(assetMetrics).length === 0) {
+                const row = document.createElement('tr');
+                row.innerHTML = '<td colspan="8" class="py-8 text-center text-gray-500">No asset performance data available</td>';
+                tableBody.appendChild(row);
+                return;
+            }
+
+            Object.entries(assetMetrics).forEach(([ticker, metrics]) => {
+                const row = document.createElement('tr');
+                row.className = 'border-b border-gray-700/50 hover:bg-purple-500/5';
+
+                // Ticker
+                const tickerCell = document.createElement('td');
+                tickerCell.className = 'py-2 px-4 font-bold text-purple-400';
+                tickerCell.textContent = ticker;
+                row.appendChild(tickerCell);
+
+                // CAGR
+                const cagrCell = document.createElement('td');
+                cagrCell.className = 'py-2 px-4 text-center';
+                cagrCell.textContent = `${metrics.cagr.toFixed(2)}%`;
+                row.appendChild(cagrCell);
+
+                // Volatility
+                const volCell = document.createElement('td');
+                volCell.className = 'py-2 px-4 text-center';
+                volCell.textContent = `${metrics.stdev.toFixed(2)}%`;
+                row.appendChild(volCell);
+
+                // Best Year
+                const bestCell = document.createElement('td');
+                bestCell.className = 'py-2 px-4 text-center text-green-400';
+                bestCell.textContent = `${metrics.best_year.toFixed(2)}%`;
+                row.appendChild(bestCell);
+
+                // Worst Year
+                const worstCell = document.createElement('td');
+                worstCell.className = 'py-2 px-4 text-center text-red-400';
+                worstCell.textContent = `${metrics.worst_year.toFixed(2)}%`;
+                row.appendChild(worstCell);
+
+                // Max Drawdown
+                const ddCell = document.createElement('td');
+                ddCell.className = 'py-2 px-4 text-center text-red-400';
+                ddCell.textContent = `${metrics.max_drawdown.toFixed(2)}%`;
+                row.appendChild(ddCell);
+
+                // Sharpe Ratio
+                const sharpeCell = document.createElement('td');
+                sharpeCell.className = 'py-2 px-4 text-center';
+                sharpeCell.textContent = metrics.sharpe_ratio.toFixed(2);
+                row.appendChild(sharpeCell);
+
+                // Current Shares
+                const sharesCell = document.createElement('td');
+                sharesCell.className = 'py-2 px-4 text-center';
+                sharesCell.textContent = metrics.current_holding.toFixed(2);
+                row.appendChild(sharesCell);
+
+                tableBody.appendChild(row);
+            });
+        }
+
+        function updateCorrelationMatrix(correlationMatrix) {
+            const tableHead = document.querySelector('#correlation-matrix-table thead tr');
+            const tableBody = document.getElementById('correlation-matrix-body');
+
+            // Clear existing content
+            tableHead.innerHTML = '<th class="text-purple-400 font-bold py-2 px-4 text-left">Asset</th>';
+            tableBody.innerHTML = '';
+
+            if (!correlationMatrix || Object.keys(correlationMatrix).length === 0) {
+                const row = document.createElement('tr');
+                row.innerHTML = '<td colspan="2" class="py-8 text-center text-gray-500">No correlation data available</td>';
+                tableBody.appendChild(row);
+                return;
+            }
+
+            const assets = Object.keys(correlationMatrix);
+
+            // Add column headers
+            assets.forEach(asset => {
+                const th = document.createElement('th');
+                th.className = 'text-purple-400 font-bold py-2 px-4 text-center';
+                th.textContent = asset;
+                tableHead.appendChild(th);
+            });
+
+            // Add rows
+            assets.forEach(asset1 => {
+                const row = document.createElement('tr');
+                row.className = 'border-b border-gray-700/50 hover:bg-purple-500/5';
+
+                // Row header
+                const headerCell = document.createElement('td');
+                headerCell.className = 'py-2 px-4 font-bold text-purple-400';
+                headerCell.textContent = asset1;
+                row.appendChild(headerCell);
+
+                // Correlation values
+                assets.forEach(asset2 => {
+                    const cell = document.createElement('td');
+                    cell.className = 'py-2 px-4 text-center';
+
+                    const correlation = correlationMatrix[asset1][asset2];
+                    if (correlation !== undefined) {
+                        const value = correlation.toFixed(2);
+                        cell.textContent = value;
+
+                        // Color code correlations
+                        if (Math.abs(correlation) > 0.7) {
+                            cell.className += correlation > 0 ? ' text-red-400' : ' text-blue-400';
+                        } else if (Math.abs(correlation) > 0.3) {
+                            cell.className += ' text-yellow-400';
+                        } else {
+                            cell.className += ' text-green-400';
+                        }
+
+                        // Highlight diagonal (self-correlation)
+                        if (asset1 === asset2) {
+                            cell.className += ' font-bold bg-purple-500/20';
+                        }
+                    } else {
+                        cell.textContent = '-';
+                        cell.className += ' text-gray-500';
+                    }
+
+                    row.appendChild(cell);
+                });
+
+                tableBody.appendChild(row);
+            });
+        }
+
+        function updatePerformanceAttribution(attributionData) {
+            const tableBody = document.getElementById('attribution-body');
+            tableBody.innerHTML = '';
+
+            if (!attributionData || !attributionData.by_asset || Object.keys(attributionData.by_asset).length === 0) {
+                const row = document.createElement('tr');
+                row.innerHTML = '<td colspan="3" class="py-8 text-center text-gray-500">No attribution data available</td>';
+                tableBody.appendChild(row);
+                return;
+            }
+
+            Object.entries(attributionData.by_asset).forEach(([asset, data]) => {
+                const row = document.createElement('tr');
+                row.className = 'border-b border-gray-700/50 hover:bg-purple-500/5';
+
+                // Asset
+                const assetCell = document.createElement('td');
+                assetCell.className = 'py-2 px-4 font-bold text-purple-400';
+                assetCell.textContent = asset;
+                row.appendChild(assetCell);
+
+                // Contribution
+                const contribCell = document.createElement('td');
+                contribCell.className = 'py-2 px-4 text-center text-green-400';
+                contribCell.textContent = `$${data.contribution.toFixed(2)}`;
+                row.appendChild(contribCell);
+
+                // Weight
+                const weightCell = document.createElement('td');
+                weightCell.className = 'py-2 px-4 text-center';
+                weightCell.textContent = `${data.weight.toFixed(2)}%`;
+                row.appendChild(weightCell);
+
+                tableBody.appendChild(row);
+            });
         }
 
         // Update key metrics with graceful degradation
