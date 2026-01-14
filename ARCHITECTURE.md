@@ -635,18 +635,18 @@ docker-compose -f docker-compose.prod.yml up -d
 # - Redis (optional, for caching)
 ```
 
-### Vercel Deployment
+### Railway Deployment
 
-**Important:** Vercel has a read-only filesystem except `/tmp`.
-
-The application handles this automatically:
-- Uploads go to `/tmp/uploads`
-- Debug logs go to `/tmp/debug_upload.log`
-- Environment detection via `VERCEL` env var
+Railway automatically detects and deploys Docker applications.
 
 **Configuration:**
-- Set `DATABASE_URL` to PostgreSQL connection string
-- SQLite will NOT work on Vercel (ephemeral `/tmp`)
+1. Connect your GitHub repository to Railway
+2. Railway will auto-detect the Dockerfile
+3. Set environment variables in Railway dashboard:
+   - `DATABASE_URL=sqlite:///./data/portfolio.db`
+   - `STOCKR_DB_PATH=./data/stockr_backbone/stockr.db`
+   - `SECRET_KEY=your-secure-key`
+4. Data persists in the `./data` directory (mounted volume)
 
 ---
 
@@ -665,16 +665,6 @@ The application handles this automatically:
 | `CORS_ORIGINS` | localhost:3000,5173 | Allowed CORS origins |
 | `ALPHA_VANTAGE_KEY` | None | Optional API key |
 | `FINNHUB_KEY` | None | Optional API key |
-
-### Serverless Detection
-
-The app auto-detects serverless environments by checking:
-- `VERCEL` - Vercel deployment
-- `AWS_LAMBDA_FUNCTION_NAME` - AWS Lambda
-- `GOOGLE_CLOUD_PROJECT` - Google Cloud Functions
-- `FUNCTIONS_WORKER_RUNTIME` - Azure Functions
-
-When detected, file operations use `/tmp` instead of project directory.
 
 ---
 
@@ -769,7 +759,7 @@ When detected, file operations use `/tmp` instead of project directory.
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0.0 | Nov 2025 | Initial release |
-| 1.0.1 | Jan 2026 | Vercel serverless support |
+| 1.0.1 | Jan 2026 | Docker/Railway deployment optimization |
 
 ---
 

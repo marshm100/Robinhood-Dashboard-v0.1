@@ -30,7 +30,7 @@ proc_name = "robinhood-dashboard"
 
 # Server mechanics
 preload_app = True
-pidfile = "/tmp/gunicorn.pid"
+pidfile = "./data/gunicorn.pid"
 user = "app"
 group = "app"
 tmp_upload_dir = None

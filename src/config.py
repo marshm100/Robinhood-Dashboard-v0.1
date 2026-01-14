@@ -1,5 +1,9 @@
 """
 Application configuration settings
+
+This module provides configuration for Docker/Railway deployment with persistent
+volume storage. Database and uploads are stored in ./data directory which is
+mounted as a Docker volume for persistence.
 """
 
 import os
@@ -13,43 +17,6 @@ from pydantic import field_validator
 PROJECT_ROOT = Path(__file__).parent.parent
 
 
-def _is_serverless_environment() -> bool:
-    """
-    Detect if running in a serverless environment (Vercel, AWS Lambda, etc.).
-    
-    In serverless environments, the filesystem is read-only except for /tmp.
-    This function checks for common environment variables that indicate
-    a serverless deployment.
-    """
-    serverless_indicators = [
-        'VERCEL',           # Vercel deployment
-        'AWS_LAMBDA_FUNCTION_NAME',  # AWS Lambda
-        'LAMBDA_TASK_ROOT',  # AWS Lambda
-        'GOOGLE_CLOUD_PROJECT',  # Google Cloud Functions
-        'FUNCTIONS_WORKER_RUNTIME',  # Azure Functions
-    ]
-    return any(os.getenv(var) for var in serverless_indicators)
-
-
-def _get_writable_temp_dir() -> Path:
-    """
-    Get a writable temporary directory path.
-    
-    NOTE: In Vercel/Lambda serverless environments, the filesystem is read-only
-    except for /tmp. This function returns /tmp for serverless environments
-    and the project root for local development.
-    
-    Returns:
-        Path: A writable directory path appropriate for the environment.
-    """
-    if _is_serverless_environment():
-        # Serverless environments (Vercel, Lambda) only allow writing to /tmp
-        return Path("/tmp")
-    else:
-        # Local development - use project root
-        return PROJECT_ROOT
-
-
 def _get_absolute_db_url() -> str:
     """
     Get database URL with absolute path.
@@ -57,11 +24,13 @@ def _get_absolute_db_url() -> str:
     This ensures the database file is always in the same location
     regardless of the current working directory when the app starts.
     
+    Default path: ./data/portfolio.db (persisted via Docker volume)
+    
     If DATABASE_URL env var is set:
       - PostgreSQL URLs are used as-is
       - SQLite relative paths are converted to absolute paths
     If not set:
-      - Uses absolute path to portfolio.db in project root
+      - Uses absolute path to ./data/portfolio.db
     """
     env_url = os.getenv('DATABASE_URL')
     project_root = Path(__file__).parent.parent
@@ -83,8 +52,8 @@ def _get_absolute_db_url() -> str:
         absolute_path = (project_root / db_path).resolve()
         return f"sqlite:///{absolute_path}"
     
-    # Default: Use absolute path to portfolio.db in project root
-    db_file = project_root / "portfolio.db"
+    # Default: Use ./data/portfolio.db for Docker volume persistence
+    db_file = project_root / "data" / "portfolio.db"
     return f"sqlite:///{db_file.resolve()}"
 
 
@@ -101,8 +70,8 @@ class Settings(BaseSettings):
     alpha_vantage_key: Optional[str] = None
     finnhub_key: Optional[str] = None
 
-    # Stockr Database
-    stockr_db_path: str = "./stockr_backbone/stockr.db"
+    # Stockr Database (persisted via Docker volume in ./data)
+    stockr_db_path: str = "./data/stockr_backbone/stockr.db"
 
     # Application
     debug: bool = True
@@ -112,10 +81,8 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
 
-    # File Upload
-    # NOTE: upload_dir is relative - actual path is computed via get_upload_path()
-    # In serverless environments (Vercel/Lambda), files are written to /tmp
-    upload_dir: str = "uploads"
+    # File Upload (persisted via Docker volume in ./data/uploads)
+    upload_dir: str = "data/uploads"
     max_upload_size: int = 10 * 1024 * 1024  # 10MB
 
     # CORS
@@ -192,26 +159,22 @@ settings = Settings()
 
 def get_upload_path() -> Path:
     """
-    Get the upload directory path appropriate for the current environment.
+    Get the upload directory path.
     
-    IMPORTANT: In Vercel/Lambda serverless environments, the filesystem is 
-    read-only except for /tmp. This function ensures uploads go to a writable
-    location regardless of deployment environment.
+    Default: ./data/uploads (persisted via Docker volume)
     
     Returns:
         Path: Absolute path to the upload directory.
     """
-    base_dir = _get_writable_temp_dir()
-    upload_dir = base_dir / settings.upload_dir
-    return upload_dir
+    upload_path = PROJECT_ROOT / settings.upload_dir
+    return upload_path
 
 
 def get_temp_file_path(filename: str) -> Path:
     """
-    Get a path for a temporary file in a writable location.
+    Get a path for a temporary file.
     
-    Use this for any temporary files that need to be written during request
-    processing (debug logs, temp uploads, etc.).
+    Temp files are stored in ./data/temp for Docker volume persistence.
     
     Args:
         filename: The name of the temporary file.
@@ -219,18 +182,11 @@ def get_temp_file_path(filename: str) -> Path:
     Returns:
         Path: Absolute path to the temporary file location.
     """
-    base_dir = _get_writable_temp_dir()
-    return base_dir / filename
+    temp_dir = PROJECT_ROOT / "data" / "temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    return temp_dir / filename
 
 
-# Create upload directory
-# NOTE: In serverless environments (Vercel, AWS Lambda), only /tmp is writable.
-# This path will be /tmp/uploads in those environments, or ./uploads locally.
+# Create upload directory (Docker volume mounted at ./data)
 upload_path = get_upload_path()
-try:
-    upload_path.mkdir(parents=True, exist_ok=True)
-except OSError as e:
-    # If directory creation fails (e.g., read-only filesystem), log warning
-    # but don't crash - the path will be created on first write if possible
-    import logging
-    logging.warning(f"Could not create upload directory {upload_path}: {e}")
+upload_path.mkdir(parents=True, exist_ok=True)

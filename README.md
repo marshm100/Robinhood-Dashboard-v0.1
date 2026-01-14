@@ -185,7 +185,7 @@ Compare your portfolio against:
 | Database | SQLite (dev) / PostgreSQL (prod) |
 | Frontend | Jinja2 Templates, Plotly.js, CSS |
 | Stock Data | stockr_backbone (internal database) |
-| Deployment | Docker, Gunicorn, Nginx, Vercel |
+| Deployment | Docker, Gunicorn, Nginx, Railway |
 
 ---
 
@@ -267,12 +267,12 @@ uvicorn src.main:app --reload
 docker-compose -f docker-compose.prod.yml up -d
 ```
 
-### Vercel
+### Railway Deployment
 
-The application supports Vercel deployment:
-- Automatic `/tmp` directory usage for file writes
-- Configure `DATABASE_URL` for PostgreSQL
-- SQLite not supported (ephemeral filesystem)
+The application is optimized for Railway deployment:
+- Automatic Docker detection and deployment
+- Persistent storage via mounted volumes (`./data`)
+- Set environment variables in Railway dashboard
 
 ---
 

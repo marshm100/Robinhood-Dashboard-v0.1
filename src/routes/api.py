@@ -89,7 +89,6 @@ async def validate_csv(file: UploadFile = File(...)):
 async def test_upload():
     """Simple test endpoint"""
     print("DEBUG: Test upload function called")
-    # NOTE: In serverless environments (Vercel/Lambda), only /tmp is writable
     debug_log_path = get_temp_file_path("debug_upload.log")
     with open(debug_log_path, "w") as f:
         f.write("Test upload function called\n")
@@ -102,7 +101,6 @@ async def upload_csv(
 ):
     """Upload and process Robinhood CSV file with security measures"""
     # Debug logging
-    # NOTE: In serverless environments (Vercel/Lambda), only /tmp is writable
     debug_log_path = get_temp_file_path("debug_upload.log")
     print("DEBUG: Upload function called")
     with open(debug_log_path, "w") as f:
@@ -216,7 +214,6 @@ async def upload_csv(
         # Log the actual error for debugging
         import logging
         logging.error(f"CSV upload failed: {str(e)}", exc_info=True)
-        # Write to debug file (using /tmp path for serverless compatibility)
         with open(debug_log_path, "a") as f:
             f.write(f"CSV upload failed: {str(e)}\n")
             import traceback

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Backup service
   backup:
@@ -18,7 +16,7 @@ services:
         done
       "
     volumes:
-      - portfolio_data:/app/data:ro
+      - ./data:/app/data:ro
       - ./backups:/app/backups
       - ./scripts:/app/scripts:ro
     depends_on:
@@ -34,17 +32,13 @@ services:
     profiles: ["manual"]
     command: sh -c "python scripts/backup.py backup --name manual-$(date +%Y%m%d_%H%M%S)"
     volumes:
-      - portfolio_data:/app/data:ro
+      - ./data:/app/data:ro
       - ./backups:/app/backups
       - ./scripts:/app/scripts:ro
     depends_on:
       - robinhood-dashboard
     networks:
       - robinhood-network
-
-volumes:
-  portfolio_data:
-    external: true
 
 networks:
   robinhood-network:

@@ -24,8 +24,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create necessary directories
-RUN mkdir -p uploads static logs
+# Create necessary directories for persistent storage
+# These directories will be mounted as volumes in production
+RUN mkdir -p data/uploads data/stockr_backbone data/temp static logs
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash app \

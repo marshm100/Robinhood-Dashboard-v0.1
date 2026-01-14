@@ -53,21 +53,9 @@ async def add_security_headers(request, call_next):
     return response
 
 # Mount static files
-# NOTE: In serverless environments (Vercel/Lambda), the source directory is read-only.
-# Static files should already exist in the deployed bundle; we only create the 
-# directory during local development.
 static_path = Path(__file__).parent / "static"
-try:
-    static_path.mkdir(exist_ok=True)
-except OSError:
-    # In serverless environments, this may fail if the directory doesn't exist
-    # and the filesystem is read-only. The directory should already exist
-    # in the deployment bundle if static files are needed.
-    pass
-
-# Only mount static files if the directory exists
-if static_path.exists():
-    app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
+static_path.mkdir(exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
 # Mount templates
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
