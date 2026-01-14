@@ -126,6 +126,19 @@ async def root():
     """Root endpoint"""
     return {"message": "Robinhood Portfolio Analysis API", "status": "running"}
 
+@app.get("/debug")
+async def debug():
+    """Simple debug endpoint - no database or complex setup required"""
+    import os
+    return {
+        "status": "debug_ok",
+        "port": os.getenv("PORT", "not_set"),
+        "environment": os.getenv("ENVIRONMENT", "not_set"),
+        "cors_origins": os.getenv("CORS_ORIGINS", "not_set"),
+        "python_version": f"{__import__('sys').version_info.major}.{__import__('sys').version_info.minor}",
+        "timestamp": __import__('time').time()
+    }
+
 @app.get("/health")
 async def health_check():
     """
