@@ -85,8 +85,8 @@ class Settings(BaseSettings):
     upload_dir: str = "data/uploads"
     max_upload_size: int = 10 * 1024 * 1024  # 10MB
 
-    # CORS
-    cors_origins: List[str] = ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000"]
+    # CORS - stored as string to avoid JSON parsing issues with env vars
+    cors_origins: str = Field(default="http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000", env="CORS_ORIGINS")
 
     # Security
     force_https: bool = False
@@ -147,14 +147,19 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins_list(self) -> List[str]:
-        """Get CORS origins as a list"""
-        if isinstance(self.cors_origins, str):
-            return [origin.strip() for origin in self.cors_origins.split(",")]
-        return self.cors_origins
+        """Parse comma-separated CORS origins string safely into list"""
+        value = self.cors_origins.strip()
+        if not value or value == "*":
+            return ["*"]  # Allow all origins (fine for initial deploy; tighten later)
+        return [origin.strip() for origin in value.split(",") if origin.strip()]
 
 
 # Global settings instance
 settings = Settings()
+
+# Debug logging for Railway troubleshooting
+print(f"CORS_ORIGINS raw env: {os.getenv('CORS_ORIGINS')!r}")
+print(f"Parsed CORS origins: {settings.cors_origins_list}")
 
 
 def get_upload_path() -> Path:
