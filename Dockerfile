@@ -4,6 +4,7 @@ FROM python:3.11-slim
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+ENV PORT=8000
 
 # Set work directory
 WORKDIR /app
@@ -26,19 +27,15 @@ COPY . .
 
 # Create necessary directories for persistent storage
 # These directories will be mounted as volumes in production
-RUN mkdir -p data/uploads data/stockr_backbone data/temp static logs
+RUN mkdir -p data/uploads data/stockr_backbone data/temp static logs \
+    && chmod -R 777 data logs
 
-# Create non-root user for security
-RUN useradd --create-home --shell /bin/bash app \
-    && chown -R app:app /app
-USER app
+# Expose port (Railway uses PORT env var)
+EXPOSE ${PORT}
 
-# Expose port
-EXPOSE 8000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+# Health check using PORT env var
+HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
 
 # Run the application
 CMD ["python", "run_prod.py"]
