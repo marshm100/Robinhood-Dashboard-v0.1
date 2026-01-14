@@ -26,16 +26,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Create necessary directories for persistent storage
-# These directories will be mounted as volumes in production
-RUN mkdir -p data/uploads data/stockr_backbone data/temp static logs \
-    && chmod -R 777 data logs
+RUN mkdir -p data/uploads data/stockr_backbone data/temp static logs src/static \
+    && chmod -R 777 data logs static
 
 # Expose port (Railway uses PORT env var)
 EXPOSE ${PORT}
 
-# Health check using PORT env var
-HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/health || exit 1
+# Health check - disabled during debugging
+# HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \
+#     CMD curl -f http://localhost:${PORT}/health || exit 1
 
-# Run the application
-CMD ["python", "run_prod.py"]
+# Run gunicorn directly (simpler, more reliable)
+CMD gunicorn --bind 0.0.0.0:$PORT --workers 2 --worker-class uvicorn.workers.UvicornWorker --timeout 120 --access-logfile - --error-logfile - src.main:app
