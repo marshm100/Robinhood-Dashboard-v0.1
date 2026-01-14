@@ -188,5 +188,10 @@ def get_temp_file_path(filename: str) -> Path:
 
 
 # Create upload directory (Docker volume mounted at ./data)
-upload_path = get_upload_path()
-upload_path.mkdir(parents=True, exist_ok=True)
+# Wrapped in try-except for environments where directory creation might fail
+try:
+    upload_path = get_upload_path()
+    upload_path.mkdir(parents=True, exist_ok=True)
+except OSError as e:
+    import logging
+    logging.warning(f"Could not create upload directory: {e}")
