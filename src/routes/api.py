@@ -19,6 +19,7 @@ from src.database import get_db_sync
 from src.models import Transaction, CustomPortfolio
 from src.services import csv_processor, portfolio_calculator
 from src.services.custom_portfolio_service import CustomPortfolioService
+from src.config import get_temp_file_path
 from pydantic import BaseModel, Field
 
 # Simple caching decorator
@@ -88,7 +89,9 @@ async def validate_csv(file: UploadFile = File(...)):
 async def test_upload():
     """Simple test endpoint"""
     print("DEBUG: Test upload function called")
-    with open("debug_upload.log", "w") as f:
+    # NOTE: In serverless environments (Vercel/Lambda), only /tmp is writable
+    debug_log_path = get_temp_file_path("debug_upload.log")
+    with open(debug_log_path, "w") as f:
         f.write("Test upload function called\n")
     return {"message": "Test upload endpoint works"}
 
@@ -99,8 +102,10 @@ async def upload_csv(
 ):
     """Upload and process Robinhood CSV file with security measures"""
     # Debug logging
+    # NOTE: In serverless environments (Vercel/Lambda), only /tmp is writable
+    debug_log_path = get_temp_file_path("debug_upload.log")
     print("DEBUG: Upload function called")
-    with open("debug_upload.log", "w") as f:
+    with open(debug_log_path, "w") as f:
         f.write("Upload function called\n")
 
     # Rate limiting - temporarily disabled for debugging
@@ -132,7 +137,7 @@ async def upload_csv(
         content = b''.join(content_chunks)
 
         # Debug logging
-        with open("debug_upload.log", "w") as f:
+        with open(debug_log_path, "w") as f:
             f.write(f"File reconstructed, size: {len(content)}\n")
 
         # Validate content type
@@ -142,7 +147,7 @@ async def upload_csv(
         # Try to decode as UTF-8
         try:
             csv_content = content.decode('utf-8')
-            with open("debug_upload.log", "a") as f:
+            with open(debug_log_path, "a") as f:
                 f.write(f"CSV content length: {len(csv_content)}\n")
                 f.write(f"First 500 chars: {csv_content[:500]}\n")
         except UnicodeDecodeError:
@@ -211,8 +216,8 @@ async def upload_csv(
         # Log the actual error for debugging
         import logging
         logging.error(f"CSV upload failed: {str(e)}", exc_info=True)
-        # Write to debug file
-        with open("debug_upload.log", "a") as f:
+        # Write to debug file (using /tmp path for serverless compatibility)
+        with open(debug_log_path, "a") as f:
             f.write(f"CSV upload failed: {str(e)}\n")
             import traceback
             f.write(traceback.format_exc())
@@ -279,6 +284,7 @@ def get_portfolio_overview(db: Session = Depends(get_db_sync)):
         "performance_metrics": {},
         "risk_assessment": {},
         "advanced_analytics": {},
+        "sector_allocation": {},
         "stock_database": {"status": "unknown"}
     }
 
@@ -327,6 +333,19 @@ def get_portfolio_overview(db: Session = Depends(get_db_sync)):
     except Exception as e:
         logger.error(f"[API] Error getting risk assessment: {e}", exc_info=True)
         overview_data["risk_assessment"] = {}
+
+    # Add sector allocation
+    try:
+        logger.info("[API] Getting sector allocation")
+        sector_data = calculator.get_sector_allocation()
+        if sector_data and "sector_allocation" in sector_data:
+            overview_data["sector_allocation"] = sector_data.get("sector_allocation", {})
+            overview_data["sector_count"] = sector_data.get("sector_count", 0)
+            overview_data["largest_sector"] = sector_data.get("largest_sector", ("None", 0))
+            logger.info(f"[API] Sector allocation retrieved successfully ({len(overview_data['sector_allocation'])} sectors)")
+    except Exception as e:
+        logger.error(f"[API] Error getting sector allocation: {e}", exc_info=True)
+        overview_data["sector_allocation"] = {}
 
     # Add advanced analytics
     try:
@@ -470,6 +489,29 @@ def get_performance_metrics(db: Session = Depends(get_db_sync)):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting performance metrics: {str(e)}")
+
+
+@router.get("/monthly-performance")
+def get_monthly_performance(db: Session = Depends(get_db_sync)):
+    """Get monthly performance breakdown like Portfolio Visualizer"""
+    try:
+        from src.services.portfolio_calculator import PortfolioCalculator
+        calculator = PortfolioCalculator(db)
+        monthly_data = calculator.get_monthly_performance_table()
+
+        return monthly_data
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting monthly performance: {str(e)}")
+
+
+# Removed duplicate drawdown-analysis endpoint
+
+
+# Temporarily disabled - causing JSON serialization issues
+# @router.get("/asset-analysis")
+# def get_asset_analysis(db: Session = Depends(get_db_sync)):
+#     """Get asset-level analysis like Portfolio Visualizer"""
 
 
 @router.get("/risk-assessment")

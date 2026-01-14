@@ -2,9 +2,48 @@
 Database connection and initialization
 """
 
+import logging
+from pathlib import Path
+
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
 from .config import settings
+
+logger = logging.getLogger(__name__)
+
+
+def _ensure_db_directory(db_url: str) -> None:
+    """
+    Ensure database directory exists for SQLite databases.
+    
+    This function creates the parent directory if it doesn't exist
+    and logs the database file location for debugging.
+    
+    NOTE: In serverless environments (Vercel, AWS Lambda), the filesystem 
+    is read-only except for /tmp. SQLite databases should either:
+    1. Use /tmp (ephemeral, lost between invocations)
+    2. Use a managed database service like PostgreSQL
+    """
+    if db_url.startswith("sqlite:///"):
+        db_path = db_url.replace("sqlite:///", "")
+        db_file = Path(db_path)
+        
+        # Create parent directory if needed
+        try:
+            db_file.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            # In serverless environments, this may fail if the directory
+            # is outside /tmp. Log warning but continue - the database
+            # might still work if the directory already exists.
+            logger.warning(f"Could not create database directory {db_file.parent}: {e}")
+        
+        # Log database location for debugging
+        logger.info(f"Database location: {db_file.resolve()}")
+        logger.info(f"Database file exists: {db_file.exists()}")
+
+
+# Ensure database directory exists before creating engine
+_ensure_db_directory(settings.database_url)
 
 engine = create_engine(
     settings.database_url,
@@ -23,9 +62,9 @@ def init_db_sync():
     try:
         from .models import Base
         Base.metadata.create_all(bind=engine)
-        print("Database tables created successfully")
+        logger.info("Database tables created successfully")
     except Exception as e:
-        print(f"Error creating database tables: {e}")
+        logger.error(f"Error creating database tables: {e}")
         raise
 
 
@@ -44,7 +83,7 @@ def reset_db_sync():
         from .models import Base
         Base.metadata.drop_all(bind=engine)
         Base.metadata.create_all(bind=engine)
-        print("Database reset successfully")
+        logger.info("Database reset successfully")
     except Exception as e:
-        print(f"Error resetting database: {e}")
+        logger.error(f"Error resetting database: {e}")
         raise

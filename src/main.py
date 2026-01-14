@@ -53,9 +53,21 @@ async def add_security_headers(request, call_next):
     return response
 
 # Mount static files
+# NOTE: In serverless environments (Vercel/Lambda), the source directory is read-only.
+# Static files should already exist in the deployed bundle; we only create the 
+# directory during local development.
 static_path = Path(__file__).parent / "static"
-static_path.mkdir(exist_ok=True)
-app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
+try:
+    static_path.mkdir(exist_ok=True)
+except OSError:
+    # In serverless environments, this may fail if the directory doesn't exist
+    # and the filesystem is read-only. The directory should already exist
+    # in the deployment bundle if static files are needed.
+    pass
+
+# Only mount static files if the directory exists
+if static_path.exists():
+    app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
 # Mount templates
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -89,12 +101,12 @@ def startup_event():
         if str(stockr_path) not in sys.path:
             sys.path.insert(0, str(stockr_path))
         
-        from src.background_maintenance import start_maintenance_service
-        
+        # from src.background_maintenance import start_maintenance_service
+
         # Start the maintenance service (refreshes every 60 minutes by default)
         # This ensures all tracked stocks are kept up-to-date automatically
-        start_maintenance_service(refresh_interval_minutes=60)
-        print("✓ Stockr_backbone maintenance service started (CORE ARCHITECTURE)")
+        # start_maintenance_service(refresh_interval_minutes=60)
+        print("Stockr_backbone maintenance service disabled (temporarily)")
         
     except Exception as e:
         # Log error but don't fail startup - app can still work without it
@@ -115,9 +127,9 @@ def shutdown_event():
         if str(stockr_path) not in sys.path:
             sys.path.insert(0, str(stockr_path))
         
-        from src.background_maintenance import stop_maintenance_service
-        stop_maintenance_service()
-        print("✓ Stockr_backbone maintenance service stopped")
+        # from src.background_maintenance import stop_maintenance_service
+        # stop_maintenance_service()
+        print("Stockr_backbone maintenance service disabled (temporarily)")
     except Exception as e:
         print(f"Warning: Error stopping maintenance service: {e}")
 
@@ -167,11 +179,12 @@ async def health_check():
         if str(stockr_path) not in sys.path:
             sys.path.insert(0, str(stockr_path))
         
-        from src.background_maintenance import get_maintenance_service
-        
-        service = get_maintenance_service()
-        stockr_status = service.get_status()
-        
+        # from src.background_maintenance import get_maintenance_service
+
+        # service = get_maintenance_service()
+        # stockr_status = service.get_status()
+        stockr_status = {"running": False, "message": "Service temporarily disabled"}
+
         if stockr_status.get("running", False):
             health_status["checks"]["stockr_backbone"] = {
                 "status": "ok",
@@ -236,11 +249,12 @@ async def get_stockr_status():
         if str(stockr_path) not in sys.path:
             sys.path.insert(0, str(stockr_path))
         
-        from src.background_maintenance import get_maintenance_service
-        
-        service = get_maintenance_service()
-        status = service.get_status()
-        
+        # from src.background_maintenance import get_maintenance_service
+
+        # service = get_maintenance_service()
+        # status = service.get_status()
+        status = {"running": False, "message": "Service temporarily disabled"}
+
         return {
             "status": "ok",
             "stockr_backbone": {
