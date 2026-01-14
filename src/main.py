@@ -68,13 +68,18 @@ app.include_router(web_router, tags=["Web"])
 def startup_event():
     """
     Initialize application on startup.
-    
+
     This includes:
     1. Database initialization
     2. Starting the stockr_backbone maintenance service (CORE ARCHITECTURE)
     """
-    # Initialize main application database
-    init_db_sync()
+    try:
+        # Initialize main application database
+        init_db_sync()
+        print("✓ Database initialized successfully")
+    except Exception as e:
+        print(f"⚠️  Database initialization failed: {e}")
+        # Don't fail startup for database issues - let endpoints handle it
     
     # Start stockr_backbone maintenance service
     # This is a CORE ARCHITECTURAL COMPONENT that maintains the stock database
@@ -135,7 +140,11 @@ async def debug():
         "port": os.getenv("PORT", "not_set"),
         "environment": os.getenv("ENVIRONMENT", "not_set"),
         "cors_origins": os.getenv("CORS_ORIGINS", "not_set"),
+        "secret_key_set": bool(os.getenv("SECRET_KEY", "")),
+        "database_url": os.getenv("DATABASE_URL", "not_set")[:50] + "..." if os.getenv("DATABASE_URL") else "not_set",
+        "stockr_db_path": os.getenv("STOCKR_DB_PATH", "not_set"),
         "python_version": f"{__import__('sys').version_info.major}.{__import__('sys').version_info.minor}",
+        "working_dir": str(__import__('pathlib').Path.cwd()),
         "timestamp": __import__('time').time()
     }
 
