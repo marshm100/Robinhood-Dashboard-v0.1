@@ -28,10 +28,14 @@ app.add_middleware(
 @app.get("/")
 def health():
     return {
-        "status": "LIVE ON VERCEL",
-        "message": "Full app restoring – /tmp in use",
-        "db_url": DATABASE_URL,
-        "upload_dir": str(UPLOAD_DIR)
+        "status": "LIVE ON VERCEL – Phase II",
+        "endpoints": [
+            "/api/health",
+            "/api/portfolios",
+            "/api/analysis/compare",
+            "/api/stockr/prices/{ticker}"
+        ],
+        "note": "Core features restoring – /tmp SQLite in use"
     }
 
 # === Add routers here in next steps ===
@@ -39,9 +43,20 @@ def health():
 @app.on_event("startup")
 async def startup():
     print("Full FastAPI startup complete")
+    from api.database import init_db
+    await init_db()
 
 from api.routes.health import router as health_router
 app.include_router(health_router)
+
+from api.routes.portfolio import router as portfolio_router
+app.include_router(portfolio_router)
+
+from api.routes.analysis import router as analysis_router
+app.include_router(analysis_router)
+
+from api.routes.stockr import router as stockr_router
+app.include_router(stockr_router)
 
 if __name__ == "__main__":
     import uvicorn

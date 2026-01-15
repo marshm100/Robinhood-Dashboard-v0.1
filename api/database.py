@@ -14,4 +14,8 @@ def get_db():
     finally:
         db.close()
 
-# Add your models and init_db here later
+from api.models.portfolio import Portfolio, Holding, Benchmark
+
+def init_db():
+    Base.metadata.create_all(bind=engine)
+    print("Database tables created (portfolios, holdings, benchmarks)")
