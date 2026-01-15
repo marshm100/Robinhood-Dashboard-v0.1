@@ -10,6 +10,8 @@ from fastapi.templating import Jinja2Templates
 import uvicorn
 from pathlib import Path
 from typing import Optional
+import os # Added for direct os.getenv calls
+import sys # Added for debug logging
 
 from .config import settings
 from .database import init_db_sync, get_db_sync
@@ -68,11 +70,21 @@ app.include_router(web_router, tags=["Web"])
 def startup_event():
     """
     Initialize application on startup.
-
     This includes:
     1. Database initialization
-    2. Starting the stockr_backbone maintenance service (CORE ARCHITECTURE)
+    2. Starting the stockr_backbone maintenance service (CORE ARCHITECTURAL COMPONENT)
     """
+    print("🚀 Application startup initiated.")
+    print(f"DEBUG: PORT env: {os.getenv("PORT")!r}")
+    print(f"DEBUG: ENVIRONMENT env: {os.getenv("ENVIRONMENT")!r}")
+    print(f"DEBUG: SECRET_KEY env set: {bool(os.getenv("SECRET_KEY"))!r}")
+    print(f"DEBUG: DATABASE_URL env: {os.getenv("DATABASE_URL")!r}")
+    print(f"DEBUG: STOCKR_DB_PATH env: {os.getenv("STOCKR_DB_PATH")!r}")
+    print(f"DEBUG: CORS_ORIGINS raw env: {os.getenv('CORS_ORIGINS')!r}")
+    print(f"DEBUG: Parsed CORS origins: {settings.cors_origins_list}")
+    print(f"DEBUG: Working directory: {Path.cwd()}")
+    print(f"DEBUG: Python version: {sys.version.split(' ')[0]}")
+    
     try:
         # Initialize main application database
         init_db_sync()
@@ -81,31 +93,13 @@ def startup_event():
         print(f"⚠️  Database initialization failed: {e}")
         # Don't fail startup for database issues - let endpoints handle it
     
-    # Start stockr_backbone maintenance service
-    # This is a CORE ARCHITECTURAL COMPONENT that maintains the stock database
-    # It runs continuously in the background to keep stock data up-to-date
-    try:
-        import sys
-        from pathlib import Path
-        
-        # Add stockr_backbone to Python path
-        project_root = Path(__file__).parent.parent
-        stockr_path = project_root / "stockr_backbone"
-        if str(stockr_path) not in sys.path:
-            sys.path.insert(0, str(stockr_path))
-        
-        # from src.background_maintenance import start_maintenance_service
-
-        # Start the maintenance service (refreshes every 60 minutes by default)
-        # This ensures all tracked stocks are kept up-to-date automatically
-        # start_maintenance_service(refresh_interval_minutes=60)
-        print("Stockr_backbone maintenance service disabled (temporarily)")
-        
-    except Exception as e:
-        # Log error but don't fail startup - app can still work without it
-        print(f"Warning: Failed to start stockr_backbone maintenance service: {e}")
-        import traceback
-        traceback.print_exc()
+    # Placeholder for stockr_backbone maintenance service startup
+    print("Stockr_backbone maintenance service startup placeholder.")
+    # The actual startup of this service should be handled here
+    # If it's a long-running process, it should be started in a separate thread/process
+    # or as a separate container in docker-compose.
+    # For now, it's just a placeholder to ensure startup doesn't block.
+    print("🚀 Application startup complete.")
 
 
 @app.on_event("shutdown")
@@ -148,18 +142,21 @@ async def debug():
         "timestamp": __import__('time').time()
     }
 
+@app.get("/ready")
+async def ready_check():
+    """Simple readiness check that always returns 200 OK."""
+    return {"status": "ok", "message": "Application is ready to receive traffic"}
+
 @app.get("/health")
 async def health_check():
     """
     Comprehensive health check endpoint.
-    
     Checks:
     1. Main application database connectivity
-    2. stockr_backbone maintenance service status (CORE ARCHITECTURE)
+    2. stockr_backbone maintenance service status (placeholder)
     """
-    from .database import get_db_sync
     import time
-    
+
     health_status = {
         "status": "healthy",
         "timestamp": time.time(),
@@ -167,7 +164,7 @@ async def health_check():
         "environment": settings.environment,
         "checks": {}
     }
-    
+
     # Check main application database
     try:
         db = next(get_db_sync())
@@ -178,53 +175,18 @@ async def health_check():
     except Exception as e:
         health_status["status"] = "unhealthy"
         health_status["checks"]["database"] = {"status": "error", "message": f"Database connection failed: {str(e)}"}
-    
-    # Check stockr_backbone maintenance service (CORE ARCHITECTURAL COMPONENT)
-    try:
-        import sys
-        from pathlib import Path
-        
-        project_root = Path(__file__).parent.parent
-        stockr_path = project_root / "stockr_backbone"
-        if str(stockr_path) not in sys.path:
-            sys.path.insert(0, str(stockr_path))
-        
-        # from src.background_maintenance import get_maintenance_service
 
-        # service = get_maintenance_service()
-        # stockr_status = service.get_status()
-        stockr_status = {"running": False, "message": "Service temporarily disabled"}
+    # Placeholder for stockr_backbone status if implemented
+    health_status["checks"]["stockr_backbone"] = {
+        "status": "warning",
+        "message": "Maintenance service status check currently disabled/placeholder",
+        "importance": "CRITICAL - Core architectural component"
+    }
+    if health_status["status"] != "unhealthy": # Only set to degraded if not already unhealthy
+        health_status["status"] = "degraded" # Reflect that a critical service check is disabled
 
-        if stockr_status.get("running", False):
-            health_status["checks"]["stockr_backbone"] = {
-                "status": "ok",
-                "message": "Maintenance service running",
-                "details": {
-                    "running": True,
-                    "refresh_count": stockr_status.get("refresh_count", 0),
-                    "last_refresh": stockr_status.get("last_refresh"),
-                    "tracked_stocks": stockr_status.get("tracked_stocks_count", 0),
-                    "refresh_interval_minutes": stockr_status.get("refresh_interval_minutes", 60)
-                },
-                "importance": "CRITICAL - Core architectural component"
-            }
-        else:
-            health_status["status"] = "degraded"
-            health_status["checks"]["stockr_backbone"] = {
-                "status": "warning",
-                "message": "Maintenance service not running",
-                "details": stockr_status,
-                "importance": "CRITICAL - Core architectural component"
-            }
-    except Exception as e:
-        health_status["status"] = "degraded"
-        health_status["checks"]["stockr_backbone"] = {
-            "status": "error",
-            "message": f"Failed to check maintenance service: {str(e)}",
-            "importance": "CRITICAL - Core architectural component"
-        }
-    
     return health_status
+
 
 @app.get("/metrics")
 async def metrics():
