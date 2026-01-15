@@ -2,51 +2,44 @@ import os
 from pathlib import Path
 from fastapi import FastAPI
 
-print("=== VERCEL LOADING api/index.py ===")
-print("If you see this in Vercel logs, we are past the import crash!")
+print("\n" + "="*60)
+print("VERCEL SUCCESS: LOADING api/index.py – OLD src/ IS GONE!")
+print("If you see this in function logs → entrypoint fixed!")
+print("Working dir:", os.getcwd())
+print("="*60 + "\n")
 
-# Force ALL writes to /tmp only
-TMP_ROOT = Path("/tmp")
-DATA_DIR = TMP_ROOT / "data"
-UPLOAD_DIR = DATA_DIR / "uploads"
-STOCKR_DIR = DATA_DIR / "stockr_backbone"
-TEMP_DIR = DATA_DIR / "temp"
+TMP = Path("/tmp")
+DATA = TMP / "data"
+UPLOAD = DATA / "uploads"
+STOCKR = DATA / "stockr_backbone"
+TEMP = DATA / "temp"
 
-for d in [DATA_DIR, UPLOAD_DIR, STOCKR_DIR, TEMP_DIR]:
+for p in [DATA, UPLOAD, STOCKR, TEMP]:
     try:
-        d.mkdir(parents=True, exist_ok=True)
-        print(f"Created directory: {d}")
+        p.mkdir(parents=True, exist_ok=True)
+        print(f"Created: {p}")
     except Exception as e:
-        print(f"Warning: could not create {d}: {e}")
+        print(f"mkdir warning {p}: {e}")
 
-# Hard-coded defaults using /tmp
-DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{TMP_ROOT}/data/portfolio.db")
-STOCKR_DB_PATH = os.getenv("STOCKR_DB_PATH", f"{TMP_ROOT}/data/stockr_backbone/stockr.db")
-upload_path = UPLOAD_DIR
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{TMP}/data/portfolio.db")
+STOCKR_DB_PATH = os.getenv("STOCKR_DB_PATH", f"{TMP}/data/stockr_backbone/stockr.db")
 
-app = FastAPI(
-    title="Robinhood Portfolio Analysis",
-    description="Temporary Vercel serverless version – data in /tmp",
-    version="vercel-tmp"
-)
+app = FastAPI(title="Robinhood Dashboard – Vercel Live")
 
 @app.get("/")
-def root():
+def home():
     return {
-        "status": "alive on Vercel!",
-        "message": "Successfully bypassed read-only filesystem crash",
-        "tmp_root": str(TMP_ROOT),
-        "upload_dir": str(UPLOAD_DIR),
-        "database_url": DATABASE_URL,
-        "stockr_path": STOCKR_DB_PATH
+        "status": "LIVE ON VERCEL 🚀",
+        "message": "Old src/ deleted – read-only crash fixed",
+        "tmp": str(TMP),
+        "upload_dir": str(UPLOAD),
+        "db": DATABASE_URL
     }
 
 @app.on_event("startup")
-async def startup_event():
-    print("=== FastAPI app startup complete ===")
-    print("Serverless function ready")
+async def startup():
+    print("FastAPI ready – accepting requests\n")
 
-# Local dev only
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("index:app", host="0.0.0.0", port=8000, reload=True)
