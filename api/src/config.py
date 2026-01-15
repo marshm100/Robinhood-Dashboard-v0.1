@@ -12,16 +12,19 @@ from typing import List, Optional
 from pydantic_settings import BaseSettings
 from pydantic import field_validator
 
-# Vercel serverless override – use /tmp for everything writable
-BASE_DIR = Path("/tmp")
-DATA_DIR = BASE_DIR / "data"
+# Vercel serverless: force everything writable into /tmp
+TMP_BASE = Path("/tmp")
+DATA_DIR = TMP_BASE / "data"
 UPLOAD_DIR = DATA_DIR / "uploads"
-STOCKR_BACKBONE_DIR = DATA_DIR / "stockr_backbone"
+STOCKR_DIR = DATA_DIR / "stockr_backbone"
 TEMP_DIR = DATA_DIR / "temp"
 
-# Ensure directories exist
-for d in [DATA_DIR, UPLOAD_DIR, STOCKR_BACKBONE_DIR, TEMP_DIR]:
-    d.mkdir(parents=True, exist_ok=True)
+# Create directories safely
+for directory in [TMP_BASE, DATA_DIR, UPLOAD_DIR, STOCKR_DIR, TEMP_DIR]:
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        print(f"Warning: Could not create directory {directory}: {e}")
 
 
 # Project root directory (parent of src/)
@@ -82,7 +85,7 @@ class Settings(BaseSettings):
     finnhub_key: Optional[str] = None
 
     # Stockr Database (persisted via Docker volume in ./data)
-    stockr_db_path: str = "/tmp/data/stockr_backbone/stockr.db"
+    stockr_db_path: str = os.getenv("STOCKR_DB_PATH", "/tmp/data/stockr_backbone/stockr.db")
 
     # Application
     debug: bool = True
@@ -182,7 +185,7 @@ def get_upload_path() -> Path:
     Returns:
         Path: Absolute path to the upload directory.
     """
-    upload_path = PROJECT_ROOT / settings.upload_dir
+    upload_path = UPLOAD_DIR
     return upload_path
 
 
@@ -198,7 +201,7 @@ def get_temp_file_path(filename: str) -> Path:
     Returns:
         Path: Absolute path to the temporary file location.
     """
-    temp_dir = Path("/tmp/data/temp")
+    temp_dir = TEMP_DIR
     temp_dir.mkdir(parents=True, exist_ok=True)
     return temp_dir / filename
 

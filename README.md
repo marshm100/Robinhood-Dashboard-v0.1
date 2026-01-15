@@ -1,8 +1,7 @@
-## Vercel Deployment
 
-1. Connect this repo to Vercel
-2. Vercel will auto-detect Python/FastAPI
-3. Add environment variables in Vercel dashboard (same as .env)
-4. Deploy!
+## Vercel Deployment Status
 
-Note: Data is stored in /tmp – will reset on cold starts. For persistence, add Vercel Postgres later.
+Deployed to Vercel serverless.
+- All data stored in /tmp → resets on cold starts
+- Visit / to confirm it's alive
+- Next step: migrate to Vercel Postgres + Blob for persistence

@@ -245,10 +245,13 @@ async def get_stockr_status():
             }
         }
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
 
 @app.get("/")
-async def root():
-    return {"message": "Robinhood Portfolio Analysis API – running on Vercel"}
+def read_root():
+    return {"message": "Robinhood Portfolio Analysis API is running on Vercel!", "tmp_dir": str(Path("/tmp"))}
+
+@app.on_event("startup")
+async def startup_event():
+    print("App started successfully on Vercel")
+    print(f"Upload dir: {UPLOAD_DIR}")
+    print(f"DB path: /tmp/data/portfolio.db")
