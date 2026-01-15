@@ -26,7 +26,10 @@ def _ensure_db_directory(db_url: str) -> None:
         db_file = Path(db_path)
         
         # Create parent directory if needed
-        db_file.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            db_file.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            logger.warning(f"Could not create database directory {db_file.parent}: {e}")
         
         # Log database location for debugging
         logger.info(f"Database location: {db_file.resolve()}")
