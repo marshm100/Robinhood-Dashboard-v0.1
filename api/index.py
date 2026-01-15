@@ -1,44 +1,47 @@
 import os
-from pathlib import Path
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from api.config import CORS_ORIGINS, DATABASE_URL, STOCKR_DB_PATH, UPLOAD_DIR
 
-print("\n" + "="*60)
-print("VERCEL SUCCESS: LOADING api/index.py – OLD src/ IS GONE!")
-print("If you see this in function logs → entrypoint fixed!")
-print("Working dir:", os.getcwd())
-print("="*60 + "\n")
+print("\n" + "="*80)
+print("VERCEL: Full app restoring – api/index.py loaded")
+print("DB URL:", DATABASE_URL)
+print("Upload dir:", UPLOAD_DIR)
+print("="*80 + "\n")
 
-TMP = Path("/tmp")
-DATA = TMP / "data"
-UPLOAD = DATA / "uploads"
-STOCKR = DATA / "stockr_backbone"
-TEMP = DATA / "temp"
+app = FastAPI(
+    title="Robinhood Portfolio Analysis",
+    description="Full version on Vercel serverless",
+    version="1.0"
+)
 
-for p in [DATA, UPLOAD, STOCKR, TEMP]:
-    try:
-        p.mkdir(parents=True, exist_ok=True)
-        print(f"Created: {p}")
-    except Exception as e:
-        print(f"mkdir warning {p}: {e}")
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{TMP}/data/portfolio.db")
-STOCKR_DB_PATH = os.getenv("STOCKR_DB_PATH", f"{TMP}/data/stockr_backbone/stockr.db")
-
-app = FastAPI(title="Robinhood Dashboard – Vercel Live")
-
+# Health check
 @app.get("/")
-def home():
+def health():
     return {
-        "status": "LIVE ON VERCEL 🚀",
-        "message": "Old src/ deleted – read-only crash fixed",
-        "tmp": str(TMP),
-        "upload_dir": str(UPLOAD),
-        "db": DATABASE_URL
+        "status": "LIVE ON VERCEL",
+        "message": "Full app restoring – /tmp in use",
+        "db_url": DATABASE_URL,
+        "upload_dir": str(UPLOAD_DIR)
     }
+
+# === Add routers here in next steps ===
 
 @app.on_event("startup")
 async def startup():
-    print("FastAPI ready – accepting requests\n")
+    print("Full FastAPI startup complete")
+
+from api.routes.health import router as health_router
+app.include_router(health_router)
 
 if __name__ == "__main__":
     import uvicorn
