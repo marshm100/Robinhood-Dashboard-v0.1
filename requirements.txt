@@ -1,6 +1,6 @@
 # Web Framework
-fastapi
 uvicorn[standard]
+fastapi
 gunicorn
 aiofiles  # Required for FastAPI StaticFiles async serving
 

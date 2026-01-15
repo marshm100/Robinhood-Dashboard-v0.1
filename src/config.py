@@ -12,6 +12,17 @@ from typing import List, Optional
 from pydantic_settings import BaseSettings
 from pydantic import field_validator
 
+# Vercel serverless override – use /tmp for everything writable
+BASE_DIR = Path("/tmp")
+DATA_DIR = BASE_DIR / "data"
+UPLOAD_DIR = DATA_DIR / "uploads"
+STOCKR_BACKBONE_DIR = DATA_DIR / "stockr_backbone"
+TEMP_DIR = DATA_DIR / "temp"
+
+# Ensure directories exist
+for d in [DATA_DIR, UPLOAD_DIR, STOCKR_BACKBONE_DIR, TEMP_DIR]:
+    d.mkdir(parents=True, exist_ok=True)
+
 
 # Project root directory (parent of src/)
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -53,7 +64,7 @@ def _get_absolute_db_url() -> str:
         return f"sqlite:///{absolute_path}"
     
     # Default: Use ./data/portfolio.db for Docker volume persistence
-    db_file = project_root / "data" / "portfolio.db"
+    db_file = Path("/tmp/data/portfolio.db")
     return f"sqlite:///{db_file.resolve()}"
 
 
@@ -71,7 +82,7 @@ class Settings(BaseSettings):
     finnhub_key: Optional[str] = None
 
     # Stockr Database (persisted via Docker volume in ./data)
-    stockr_db_path: str = "./data/stockr_backbone/stockr.db"
+    stockr_db_path: str = "/tmp/data/stockr_backbone/stockr.db"
 
     # Application
     debug: bool = True
@@ -82,7 +93,7 @@ class Settings(BaseSettings):
     port: int = 8000
 
     # File Upload (persisted via Docker volume in ./data/uploads)
-    upload_dir: str = "data/uploads"
+    upload_dir: str = "/tmp/data/uploads"
     max_upload_size: int = 10 * 1024 * 1024  # 10MB
 
     # CORS - stored as string to avoid JSON parsing issues with env vars
@@ -187,7 +198,7 @@ def get_temp_file_path(filename: str) -> Path:
     Returns:
         Path: Absolute path to the temporary file location.
     """
-    temp_dir = PROJECT_ROOT / "data" / "temp"
+    temp_dir = Path("/tmp/data/temp")
     temp_dir.mkdir(parents=True, exist_ok=True)
     return temp_dir / filename
 
