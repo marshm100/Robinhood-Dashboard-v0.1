@@ -28,14 +28,17 @@ app.add_middleware(
 @app.get("/")
 def health():
     return {
-        "status": "LIVE ON VERCEL – Phase II",
+        "status": "LIVE ON VERCEL – Phase III COMPLETE",
         "endpoints": [
             "/api/health",
-            "/api/portfolios",
-            "/api/analysis/compare",
+            "/api/portfolios (POST/GET)",
+            "/api/portfolios/{id} (GET with holdings)",
+            "/api/portfolios/{id}/holdings (POST manual)",
+            "/api/upload/{id} (POST CSV)",
+            "/api/analysis/compare/{id}",
             "/api/stockr/prices/{ticker}"
         ],
-        "note": "Core features restoring – /tmp SQLite in use"
+        "note": "Full core features restored – yfinance prices, CSV upload, comparison charts"
     }
 
 # === Add routers here in next steps ===
@@ -57,6 +60,9 @@ app.include_router(analysis_router)
 
 from api.routes.stockr import router as stockr_router
 app.include_router(stockr_router)
+
+from api.routes.upload import router as upload_router
+app.include_router(upload_router)
 
 if __name__ == "__main__":
     import uvicorn
