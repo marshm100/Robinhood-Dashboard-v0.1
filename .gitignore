@@ -155,3 +155,6 @@ logs/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Reference Docs
+portfolio_visualizer_backtest_portfolio_source_code.html
