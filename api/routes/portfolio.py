@@ -10,23 +10,17 @@ router = APIRouter(prefix="/api/portfolios", tags=["portfolios"])
 def create_portfolio(name: str, db: Session = Depends(get_db)):
     portfolio = Portfolio(name=name)
     db.add(portfolio)
-    await db.commit()
-    await db.refresh(portfolio)
+    db.commit()
+    db.refresh(portfolio)
     return {"id": portfolio.id, "name": portfolio.name}
 
 @router.get("/")
 def list_portfolios(db: Session = Depends(get_db)):
-    result = await db.execute(select(Portfolio))
-    return result.scalars().all()
+    return db.query(Portfolio).all()
 
 @router.get("/{portfolio_id}")
 def get_portfolio(portfolio_id: int, db: Session = Depends(get_db)):
-    result = await db.execute(
-        select(Portfolio)
-        .options(selectinload(Portfolio.holdings))
-        .filter(Portfolio.id == portfolio_id)
-    )
-    portfolio = result.scalars().first()
+    portfolio = db.query(Portfolio).options(selectinload(Portfolio.holdings)).filter(Portfolio.id == portfolio_id).first()
     if not portfolio:
         raise HTTPException(status_code=404, detail="Portfolio not found")
     return portfolio

@@ -1,12 +1,11 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api.config import CORS_ORIGINS, DATABASE_URL, STOCKR_DB_PATH, UPLOAD_DIR
+from api.config import CORS_ORIGINS, DATABASE_URL
 
 print("\n" + "="*80)
 print("VERCEL: Full app restoring – api/index.py loaded")
 print("DB URL:", DATABASE_URL)
-print("Upload dir:", UPLOAD_DIR)
 print("="*80 + "\n")
 
 app = FastAPI(

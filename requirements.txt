@@ -1,5 +1,8 @@
-yfinance==0.2.41
-pandas==2.2.3
+fastapi==0.110.0
+uvicorn[standard]==0.27.0
 sqlalchemy==2.0.35
-psycopg2-binary==2.9.9  # for Postgres
-vercel-blob==0.1.0
+psycopg2-binary==2.9.9          # Postgres driver
+pandas==2.2.3
+yfinance==0.2.41
+vercel-blob==0.1.0              # For CSV archiving
+python-multipart==0.0.9         # Needed for FastAPI file uploads

@@ -19,9 +19,9 @@ async def upload_holdings_csv(portfolio_id: int, file: UploadFile = File(...), d
     try:
         df = pd.read_csv(StringIO(contents.decode("utf-8")))
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid CSV: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Invalid CSV format: {str(e)}")
 
-    # Flexible column detection - kept unchanged
+    # Flexible column detection
     ticker_cols = [c for c in df.columns if c.lower() in ["ticker", "symbol"]]
     shares_cols = [c for c in df.columns if c.lower() in ["shares", "quantity", "amount"]]
     if not ticker_cols or not shares_cols:
@@ -52,10 +52,9 @@ async def upload_holdings_csv(portfolio_id: int, file: UploadFile = File(...), d
             continue  # skip invalid rows
 
     db.commit()
-
     return {
         "status": "success",
         "holdings_added": added,
         "archive_url": archive_url,
-        "note": "Holdings replaced; optional Blob archive"
+        "note": "Previous holdings cleared and replaced"
     }
