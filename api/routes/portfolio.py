@@ -8,11 +8,16 @@ router = APIRouter(prefix="/api/portfolios", tags=["portfolios"])
 
 @router.post("/")
 def create_portfolio(name: str, db: Session = Depends(get_db)):
-    portfolio = Portfolio(name=name)
-    db.add(portfolio)
-    db.commit()
-    db.refresh(portfolio)
-    return {"id": portfolio.id, "name": portfolio.name}
+    try:
+        portfolio = Portfolio(name=name)
+        db.add(portfolio)
+        db.commit()
+        db.refresh(portfolio)
+        return {"id": portfolio.id, "name": portfolio.name}
+    except Exception as e:
+        print("ERROR in create_portfolio():")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Database error during create")
 
 @router.get("/")
 def list_portfolios(db: Session = Depends(get_db)):
