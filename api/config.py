@@ -15,7 +15,7 @@ for d in [DATA_DIR, UPLOAD_DIR, STOCKR_DIR, TEMP_DIR]:
         print(f"Warning: mkdir {d} failed: {e}")
 
 # Database paths
-DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{TMP_ROOT}/data/portfolio.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:////tmp/portfolio.db")
 STOCKR_DB_PATH = os.getenv("STOCKR_DB_PATH", f"{TMP_ROOT}/data/stockr_backbone/stockr.db")
 
 # Other settings (add your original ones here later)

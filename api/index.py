@@ -26,26 +26,26 @@ app.add_middleware(
 
 # Health check
 @app.get("/")
-def health():
+async def health():
     return {
-        "status": "LIVE ON VERCEL – Phase III COMPLETE",
+        "status": "LIVE ON VERCEL – Phase IV COMPLETE",
         "endpoints": [
             "/api/health",
             "/api/portfolios (POST/GET)",
             "/api/portfolios/{id} (GET with holdings)",
             "/api/portfolios/{id}/holdings (POST manual)",
-            "/api/upload/{id} (POST CSV)",
+            "/api/upload/{id} (POST CSV - with optional Blob archive)",
             "/api/analysis/compare/{id}",
             "/api/stockr/prices/{ticker}"
         ],
-        "note": "Full core features restored – yfinance prices, CSV upload, comparison charts"
+        "note": "Persistent with Vercel Postgres + Blob; fallback local SQLite"
     }
 
 # === Add routers here in next steps ===
 
 @app.on_event("startup")
 async def startup():
-    print("Full FastAPI startup complete")
+    print("App starting - Vercel serverless")
     from api.database import init_db
     await init_db()
 
