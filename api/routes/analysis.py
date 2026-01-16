@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import Session, selectinload
 from api.database import get_db
 from api.models.portfolio import Portfolio
 from api.services.analysis_service import calculate_portfolio_returns
@@ -14,7 +13,7 @@ async def compare_portfolio(
     period: str = "1y",
     db: AsyncSession = Depends(get_db)
 ):
-    portfolio = await db.query(Portfolio).options(selectinload(Portfolio.holdings)).filter(Portfolio.id == portfolio_id).first()
+    portfolio = db.query(Portfolio).options(selectinload(Portfolio.holdings)).filter(Portfolio.id == portfolio_id).first()
     if not portfolio:
         raise HTTPException(status_code=404, detail="Portfolio not found")
 

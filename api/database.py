@@ -1,18 +1,22 @@
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from api.config import DATABASE_URL
-from api.models.portfolio import Portfolio, Holding, Benchmark  # Import all models
-
-engine = create_async_engine(DATABASE_URL, echo=False)
-AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 Base = declarative_base()
 
-async def get_db():
-    async with AsyncSessionLocal() as session:
-        yield session
+engine = create_engine(DATABASE_URL, echo=False, future=True)
 
-async def init_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    print("Database tables created (portfolios, holdings, benchmarks)")
+SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+def init_db():
+    # Lazy import models here to avoid circular imports
+    from api.models.portfolio import Portfolio, Holding, Benchmark
+    Base.metadata.create_all(bind=engine)
+    print("Database tables created (sync engine - Postgres or SQLite)")

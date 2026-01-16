@@ -1,26 +1,27 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from api.database import get_db
 from api.models.portfolio import Holding
+from api.services.blob_service import archive_upload
 import pandas as pd
 from io import StringIO
 
 router = APIRouter(prefix="/api/upload", tags=["upload"])
 
 @router.post("/{portfolio_id}")
-async def upload_holdings_csv(portfolio_id: int, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+async def upload_holdings_csv(portfolio_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="File must be a CSV")
 
     contents = await file.read()
-    from api.services.blob_service import archive_upload
     archive_url = await archive_upload(file.filename, contents)
+
     try:
         df = pd.read_csv(StringIO(contents.decode("utf-8")))
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid CSV format: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Invalid CSV: {str(e)}")
 
-    # Flexible column detection
+    # Flexible column detection - kept unchanged
     ticker_cols = [c for c in df.columns if c.lower() in ["ticker", "symbol"]]
     shares_cols = [c for c in df.columns if c.lower() in ["shares", "quantity", "amount"]]
     if not ticker_cols or not shares_cols:
@@ -50,5 +51,11 @@ async def upload_holdings_csv(portfolio_id: int, file: UploadFile = File(...), d
         except:
             continue  # skip invalid rows
 
-    await db.commit()
-    return {"status": "success", "holdings_added": added, "note": "Previous holdings cleared and replaced", "archive_url": archive_url}
+    db.commit()
+
+    return {
+        "status": "success",
+        "holdings_added": added,
+        "archive_url": archive_url,
+        "note": "Holdings replaced; optional Blob archive"
+    }

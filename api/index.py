@@ -26,9 +26,9 @@ app.add_middleware(
 
 # Health check
 @app.get("/")
-async def health():
+def health():
     return {
-        "status": "LIVE ON VERCEL – Phase IV COMPLETE",
+        "status": "LIVE ON VERCEL – Phase IV COMPLETE (Sync Postgres)",
         "endpoints": [
             "/api/health",
             "/api/portfolios (POST/GET)",
@@ -44,10 +44,10 @@ async def health():
 # === Add routers here in next steps ===
 
 @app.on_event("startup")
-async def startup():
+def startup():
     print("App starting - Vercel serverless")
     from api.database import init_db
-    await init_db()
+    init_db()
 
 from api.routes.health import router as health_router
 app.include_router(health_router)
