@@ -15,8 +15,10 @@ def calculate_portfolio_returns(
     tickers = [h.ticker for h in valid_holdings]
     all_tickers = tickers + [benchmark]
 
+    print(f"Analysis request: tickers={tickers}, benchmark={benchmark}, period={period}")
     prices_df = get_historical_prices(all_tickers, period=period)
     if prices_df.empty or benchmark not in prices_df.columns:
+        print("Price fetch returned empty - insufficient data")
         return {"error": "Insufficient price data"}
 
     # Compute daily portfolio value
