@@ -10,27 +10,27 @@ FETCHER_PATH = os.path.join(SRC_PATH, "fetcher.py")
 if not os.path.exists(FETCHER_PATH):
     raise FileNotFoundError(f"fetcher.py not found at {FETCHER_PATH}")
 
-print(f"Temporarily adding {SRC_PATH} to sys.path for relative imports...")
+print(f"Temporarily adding {SRC_PATH} to sys.path...")
 sys.path.insert(0, SRC_PATH)
+print("sys.path[0]:", sys.path[0])
 
-print(f"Loading fetcher module from {FETCHER_PATH}...")
+print(f"Loading fetcher module as flat 'fetcher' from {FETCHER_PATH}...")
 
-spec = importlib.util.spec_from_file_location("stockr_backbone.src.fetcher", FETCHER_PATH)
+spec = importlib.util.spec_from_file_location("fetcher", FETCHER_PATH)  # Flat name
 fetcher_module = importlib.util.module_from_spec(spec)
-fetcher_module.__package__ = "stockr_backbone.src"  # Critical for relative imports like 'from config...'
+# Do not set __package__ — let absolute imports use sys.path
 spec.loader.exec_module(fetcher_module)
 
-# Clean up path
 sys.path.pop(0)
 print("sys.path restored")
 
 if not hasattr(fetcher_module, "batch_fetch"):
-    raise AttributeError("batch_fetch function not found in fetcher.py")
+    raise AttributeError("batch_fetch not found — check function name in fetcher.py")
 
 batch_func = fetcher_module.batch_fetch
 print("batch_fetch loaded successfully!")
 
 if __name__ == "__main__":
-    print("Executing batch_fetch for all tickers in tickers.txt...")
+    print("Starting batch_fetch...")
     batch_func()
-    print("Batch fetch complete! stockr_backbone/stockr.db is now fully populated.")
+    print("Batch fetch complete! stockr.db updated.")
