@@ -2,6 +2,10 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.config import CORS_ORIGINS, DATABASE_URL
+from fastapi import Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 
 print("\n" + "="*80)
 print("VERCEL: Full app restoring – api/index.py loaded")
