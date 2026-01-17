@@ -2,10 +2,13 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.config import CORS_ORIGINS, DATABASE_URL
-from fastapi import Request
+from fastapi import Request, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.orm import Session
+from api.database import get_db
+from api.models.portfolio import Portfolio
 
 print("\n" + "="*80)
 print("VERCEL: Full app restoring – api/index.py loaded")
@@ -38,6 +41,11 @@ app.add_middleware(
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request, "title": "Home"})
+
+@app.get("/portfolios", response_class=HTMLResponse)
+async def portfolios_list(request: Request, db: Session = Depends(get_db)):
+    portfolios = db.query(Portfolio).all()
+    return templates.TemplateResponse("portfolios.html", {"request": request, "portfolios": portfolios})
 
 # === Add routers here in next steps ===
 
