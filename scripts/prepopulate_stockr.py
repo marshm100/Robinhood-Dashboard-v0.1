@@ -1,4 +1,5 @@
 import os
+import sys
 import subprocess
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -9,24 +10,24 @@ FETCHER_PATH = os.path.join(SRC_PATH, "fetcher.py")
 if not os.path.exists(FETCHER_PATH):
     raise FileNotFoundError(f"fetcher.py not found at {FETCHER_PATH}")
 
-print(f"Executing fetcher.py as script in its native directory {SRC_PATH}...")
+print(f"Executing fetcher.py using venv Python: {sys.executable}")
+print(f"in directory {SRC_PATH}...")
 
-# Run fetcher.py in src/ (assumes it has if __name__ == "__main__": batch_fetch() or similar)
 result = subprocess.run(
-    ["python", "fetcher.py"],
+    [sys.executable, "fetcher.py"],
     cwd=SRC_PATH,
     capture_output=True,
     text=True
 )
 
 print("=== STDOUT ===")
-print(result.stdout)
+print(result.stdout or "(no output)")
 print("=== STDERR ===")
-print(result.stderr)
+print(result.stderr or "(no errors)")
 print("=== RETURN CODE ===")
 print(result.returncode)
 
 if result.returncode != 0:
-    raise RuntimeError(f"fetcher.py failed with code {result.returncode}")
+    raise RuntimeError(f"fetcher.py failed with code {result.returncode}. Check STDERR above.")
 
-print("Batch fetch complete via subprocess! stockr_backbone/stockr.db fully updated with fresh data.")
+print("Batch fetch complete! stockr_backbone/stockr.db updated with fresh Stooq data.")
