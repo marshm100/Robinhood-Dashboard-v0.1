@@ -16,9 +16,9 @@ print("sys.path[0]:", sys.path[0])
 
 print(f"Loading fetcher module as flat 'fetcher' from {FETCHER_PATH}...")
 
-spec = importlib.util.spec_from_file_location("fetcher", FETCHER_PATH)  # Flat name
+spec = importlib.util.spec_from_file_location("stockr_backbone.src.fetcher", FETCHER_PATH)  # Use full package path
 fetcher_module = importlib.util.module_from_spec(spec)
-# Do not set __package__ — let absolute imports use sys.path
+fetcher_module.__package__ = "stockr_backbone.src"  # Critical for relative imports like 'from config...'
 spec.loader.exec_module(fetcher_module)
 
 sys.path.pop(0)
