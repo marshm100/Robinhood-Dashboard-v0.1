@@ -7,9 +7,39 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body class="bg-gray-50 text-gray-800">
-    <div class="container mx-auto p-6">
+<body class="bg-gray-50 min-h-screen flex flex-col">
+
+    <header class="bg-gradient-to-r from-indigo-600 to-purple-700 text-white shadow-lg">
+
+        <div class="container mx-auto px-6 py-5 flex justify-between items-center">
+
+            <h1 class="text-3xl font-bold tracking-tight">Robinhood Portfolio Dashboard</h1>
+
+            <nav class="space-x-10 text-lg">
+
+                <a href="/" class="hover:text-indigo-200 transition">Home</a>
+
+                <a href="/portfolios" class="hover:text-indigo-200 transition">Portfolios</a>
+
+                <a href="/upload" class="hover:text-indigo-200 transition">Upload CSV</a>
+
+            </nav>
+
+        </div>
+
+    </header>
+
+    <main class="container mx-auto px-6 py-12 flex-grow">
+
         {% block content %}{% endblock %}
-    </div>
+
+    </main>
+
+    <footer class="bg-gray-900 text-gray-400 text-center py-6">
+
+        <p class="text-sm">© 2026 • Powered by FastAPI + Vercel • Historical prices via yfinance</p>
+
+    </footer>
+
 </body>
 </html>
