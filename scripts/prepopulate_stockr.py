@@ -1,0 +1,1 @@
+# Script to read tickers.txt and force fetch all into stockr.db
