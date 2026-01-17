@@ -14,6 +14,13 @@ app = FastAPI(
     version="1.0"
 )
 
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+
+templates = Jinja2Templates(directory="templates")
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 # CORS
 app.add_middleware(
     CORSMiddleware,
@@ -24,21 +31,9 @@ app.add_middleware(
 )
 
 # Health check
-@app.get("/")
-def health():
-    return {
-        "status": "LIVE ON VERCEL – Phase IV COMPLETE (Sync Postgres)",
-        "endpoints": [
-            "/api/health",
-            "/api/portfolios (POST/GET)",
-            "/api/portfolios/{id} (GET with holdings)",
-            "/api/portfolios/{id}/holdings (POST manual)",
-            "/api/upload/{id} (POST CSV - with optional Blob archive)",
-            "/api/analysis/compare/{id}",
-            "/api/stockr/prices/{ticker}"
-        ],
-        "note": "Persistent with Vercel Postgres + Blob; fallback local SQLite"
-    }
+@app.get("/", response_class=HTMLResponse)
+async def home(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request, "title": "Home"})
 
 # === Add routers here in next steps ===
 

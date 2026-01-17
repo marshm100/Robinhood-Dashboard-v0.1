@@ -1,17 +1,18 @@
-import traceback
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from api.config import DATABASE_URL
 
 Base = declarative_base()
 
-# Force SSL + echo for debugging
+connect_args = {}
+if "postgres" in DATABASE_URL:
+    connect_args["sslmode"] = "require"
+
 engine = create_engine(
     DATABASE_URL,
-    echo=True,  # Log all SQL
+    echo=False,  # Set to True for debug SQL logs
     future=True,
-    connect_args={"sslmode": "require"},
-    pool_pre_ping=True  # Validate connections
+    connect_args=connect_args
 )
 
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
