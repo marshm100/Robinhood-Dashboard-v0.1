@@ -1,7 +1,26 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, Date, ForeignKey, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from api.database import Base
 from datetime import datetime
+
+
+class HistoricalPrice(Base):
+    """
+    Persistent cache for historical stock prices.
+    Stores daily close prices fetched from yfinance.
+    """
+    __tablename__ = "historical_prices"
+    __table_args__ = (
+        UniqueConstraint('ticker', 'date', name='uq_ticker_date'),
+        Index('ix_historical_prices_ticker_date', 'ticker', 'date'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String(10), nullable=False, index=True)
+    date = Column(Date, nullable=False, index=True)
+    close_price = Column(Float, nullable=False)
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+
 
 class Portfolio(Base):
     __tablename__ = "portfolios"

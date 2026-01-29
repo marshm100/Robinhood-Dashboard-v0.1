@@ -10,7 +10,7 @@ from api.config import DATABASE_URL
 from api.database import Base
 
 # Import models to ensure they're registered with Base.metadata
-from api.models.portfolio import Portfolio, Holding, Benchmark
+from api.models.portfolio import Portfolio, Holding, Benchmark, HistoricalPrice
 
 config = context.config
 
