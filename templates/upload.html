@@ -2,7 +2,7 @@
 {% block title %}Upload CSV{% endblock %}
 {% block content %}
 <div class="max-w-2xl mx-auto">
-    <h2 class="text-3xl font-bold mb-8">Upload Holdings CSV</h2>
+    <h2 class="text-3xl font-bold mb-8">Upload CSV</h2>
 
     <!-- Portfolio Selection -->
     <div class="bg-white p-8 rounded-lg shadow-lg mb-8">
@@ -45,7 +45,7 @@
                         <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                     </svg>
                     <p class="text-lg text-gray-600" id="fileLabel">Click to select or drag & drop your CSV</p>
-                    <p class="text-sm text-gray-500 mt-2">Required columns: ticker/symbol, shares/quantity</p>
+                    <p class="text-sm text-gray-500 mt-2">Supports Robinhood transaction history or simple holdings files</p>
                 </div>
             </div>
 
@@ -55,18 +55,29 @@
                 disabled
                 class="w-full px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
-                Upload Holdings
+                Upload & Process
             </button>
         </form>
 
         <div id="message" class="mt-4 hidden"></div>
+        <div id="stats" class="mt-4 hidden"></div>
 
-        <div class="mt-6 p-4 bg-gray-50 rounded-lg">
-            <h4 class="font-semibold text-gray-700 mb-2">CSV Format Example:</h4>
-            <pre class="text-sm bg-white p-3 rounded border overflow-x-auto">ticker,shares,cost_basis
+        <!-- Help Section -->
+        <div class="mt-6 space-y-4">
+            <div class="p-4 bg-green-50 border border-green-200 rounded-lg">
+                <h4 class="font-semibold text-green-800 mb-2">Robinhood Transaction History (Recommended)</h4>
+                <p class="text-sm text-green-700 mb-2">Export from Robinhood: Account → Statements & History → Download CSV</p>
+                <p class="text-sm text-green-600">The parser will compute your current holdings from all buy/sell transactions, including dividend reinvestments and stock splits.</p>
+            </div>
+
+            <div class="p-4 bg-gray-50 rounded-lg">
+                <h4 class="font-semibold text-gray-700 mb-2">Simple Holdings Format</h4>
+                <p class="text-sm text-gray-600 mb-2">Or use a simple CSV with these columns:</p>
+                <pre class="text-sm bg-white p-3 rounded border overflow-x-auto">ticker,shares,cost_basis
 AAPL,100,15000.00
 MSFT,50,12500.00
 TSLA,25,5000.00</pre>
+            </div>
         </div>
     </div>
 </div>
@@ -78,6 +89,7 @@ const fileLabel = document.getElementById('fileLabel');
 const uploadBtn = document.getElementById('uploadBtn');
 const uploadForm = document.getElementById('uploadForm');
 const messageDiv = document.getElementById('message');
+const statsDiv = document.getElementById('stats');
 
 // Click to select file
 dropZone.addEventListener('click', () => fileInput.click());
@@ -147,7 +159,8 @@ uploadForm.addEventListener('submit', async (e) => {
     }
 
     uploadBtn.disabled = true;
-    uploadBtn.textContent = 'Uploading...';
+    uploadBtn.textContent = 'Processing...';
+    statsDiv.classList.add('hidden');
 
     const formData = new FormData();
     formData.append('file', fileInput.files[0]);
@@ -158,22 +171,42 @@ uploadForm.addEventListener('submit', async (e) => {
             body: formData
         });
 
+        const data = await response.json();
+
         if (response.ok) {
-            const data = await response.json();
-            showMessage(`Success! ${data.holdings_added} holdings imported.`, 'success');
+            showMessage(`Success! ${data.holdings_added} holdings imported via ${data.parse_method}.`, 'success');
+
+            // Show stats if available
+            if (data.stats) {
+                let statsHtml = '<div class="grid grid-cols-2 md:grid-cols-4 gap-3">';
+                if (data.stats.buys !== undefined) {
+                    statsHtml += `<div class="bg-green-50 p-3 rounded text-center"><div class="text-2xl font-bold text-green-700">${data.stats.buys}</div><div class="text-xs text-green-600">Buy Transactions</div></div>`;
+                }
+                if (data.stats.sells !== undefined) {
+                    statsHtml += `<div class="bg-red-50 p-3 rounded text-center"><div class="text-2xl font-bold text-red-700">${data.stats.sells}</div><div class="text-xs text-red-600">Sell Transactions</div></div>`;
+                }
+                if (data.stats.dividends !== undefined && data.stats.dividends > 0) {
+                    statsHtml += `<div class="bg-blue-50 p-3 rounded text-center"><div class="text-2xl font-bold text-blue-700">${data.stats.dividends}</div><div class="text-xs text-blue-600">Dividend Reinvests</div></div>`;
+                }
+                if (data.stats.tickers_found !== undefined) {
+                    statsHtml += `<div class="bg-purple-50 p-3 rounded text-center"><div class="text-2xl font-bold text-purple-700">${data.stats.tickers_found}</div><div class="text-xs text-purple-600">Unique Tickers</div></div>`;
+                }
+                statsHtml += '</div>';
+                statsDiv.innerHTML = statsHtml;
+                statsDiv.classList.remove('hidden');
+            }
 
             // Redirect after delay
             setTimeout(() => {
                 window.location.href = `/portfolios/${portfolioId}`;
-            }, 1500);
+            }, 2500);
         } else {
-            const error = await response.json();
-            throw new Error(error.detail || 'Upload failed');
+            throw new Error(data.detail || 'Upload failed');
         }
     } catch (err) {
         showMessage(err.message, 'error');
         uploadBtn.disabled = false;
-        uploadBtn.textContent = 'Upload Holdings';
+        uploadBtn.textContent = 'Upload & Process';
     }
 });
 
