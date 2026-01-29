@@ -174,7 +174,11 @@ uploadForm.addEventListener('submit', async (e) => {
         const data = await response.json();
 
         if (response.ok) {
-            showMessage(`Success! ${data.holdings_added} holdings imported via ${data.parse_method}.`, 'success');
+            let successMsg = `Success! ${data.holdings_added} holdings imported via ${data.parse_method}.`;
+            if (data.transactions_added > 0) {
+                successMsg += ` ${data.transactions_added} transactions saved for time-weighted analysis.`;
+            }
+            showMessage(successMsg, 'success');
 
             // Show stats if available
             if (data.stats) {
@@ -190,6 +194,9 @@ uploadForm.addEventListener('submit', async (e) => {
                 }
                 if (data.stats.tickers_found !== undefined) {
                     statsHtml += `<div class="bg-purple-50 p-3 rounded text-center"><div class="text-2xl font-bold text-purple-700">${data.stats.tickers_found}</div><div class="text-xs text-purple-600">Unique Tickers</div></div>`;
+                }
+                if (data.stats.transactions_created !== undefined && data.stats.transactions_created > 0) {
+                    statsHtml += `<div class="bg-indigo-50 p-3 rounded text-center col-span-2 md:col-span-4"><div class="text-lg font-bold text-indigo-700">${data.stats.transactions_created} transactions saved</div><div class="text-xs text-indigo-600">Time-weighted performance analysis enabled</div></div>`;
                 }
                 statsHtml += '</div>';
                 statsDiv.innerHTML = statsHtml;

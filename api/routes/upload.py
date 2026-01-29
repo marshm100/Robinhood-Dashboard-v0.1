@@ -1,5 +1,6 @@
 import csv
 import logging
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from io import StringIO
 from typing import List, Dict, Tuple
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Session
 import pandas as pd
 
 from api.database import get_db
-from api.models.portfolio import Holding
+from api.models.portfolio import Holding, Transaction
 from api.services.blob_service import archive_upload
 
 logger = logging.getLogger(__name__)
@@ -39,18 +40,42 @@ def detect_csv_type(df: pd.DataFrame) -> str:
     return "unknown"
 
 
-def parse_robinhood_transactions(csv_content: str, portfolio_id: int) -> Tuple[List[Holding], Dict]:
-    """
-    Parse Robinhood transaction history CSV and compute current holdings.
+def parse_date(date_str: str) -> datetime.date:
+    """Parse date from various formats."""
+    if not date_str or date_str.lower() in ["", "nan", "none"]:
+        return None
 
-    Handles:
-    - Buy transactions (including fractional shares)
-    - Sell transactions (reduces holdings with average cost basis)
-    - CDIV (dividend reinvestment)
-    - Stock splits (via quantity adjustments)
+    date_str = str(date_str).strip()
+
+    # Try common formats
+    formats = [
+        "%m/%d/%Y",  # 01/15/2024
+        "%Y-%m-%d",  # 2024-01-15
+        "%m-%d-%Y",  # 01-15-2024
+        "%d/%m/%Y",  # 15/01/2024 (European)
+        "%Y/%m/%d",  # 2024/01/15
+    ]
+
+    for fmt in formats:
+        try:
+            return datetime.strptime(date_str, fmt).date()
+        except ValueError:
+            continue
+
+    logger.warning(f"Could not parse date: {date_str}")
+    return None
+
+
+def parse_robinhood_transactions(
+    csv_content: str,
+    portfolio_id: int
+) -> Tuple[List[Holding], List[Transaction], Dict]:
+    """
+    Parse Robinhood transaction history CSV.
 
     Returns:
-    - List of Holding objects with computed shares and cost basis
+    - List of Holding objects (computed current positions)
+    - List of Transaction objects (for replay)
     - Stats dict with transaction counts
     """
     try:
@@ -74,33 +99,42 @@ def parse_robinhood_transactions(csv_content: str, portfolio_id: int) -> Tuple[L
 
     # Track holdings: ticker -> {shares, total_cost}
     holdings: Dict[str, Dict[str, Decimal]] = {}
+    transactions: List[Transaction] = []
+
     stats = {
         "total_rows": len(df),
         "buys": 0,
         "sells": 0,
         "dividends": 0,
+        "deposits": 0,
+        "withdrawals": 0,
         "skipped": 0,
-        "tickers_found": set()
+        "tickers_found": set(),
+        "date_range": {"start": None, "end": None}
     }
 
     for idx, row in df.iterrows():
         try:
-            # Get ticker - try multiple column names
+            # Parse date - try multiple column names
+            trans_date = None
+            for col in ["Activity Date", "Date", "Trade Date", "activity date", "date"]:
+                if col in row and row[col]:
+                    trans_date = parse_date(row[col])
+                    if trans_date:
+                        break
+
+            # Get ticker
             ticker = ""
             for col in ["Instrument", "Symbol", "Ticker", "instrument", "symbol", "ticker"]:
                 if col in row and row[col]:
                     ticker = str(row[col]).strip().upper()
                     break
 
-            if not ticker or ticker in ["", "NAN", "NONE"]:
-                stats["skipped"] += 1
-                continue
-
             # Get transaction code
             trans_code = ""
             for col in ["Trans Code", "Trans. Code", "Transaction", "trans code", "Type", "type"]:
                 if col in row and row[col]:
-                    trans_code = str(row[col]).strip()
+                    trans_code = str(row[col]).strip().upper()
                     break
 
             # Parse quantity
@@ -140,45 +174,115 @@ def parse_robinhood_transactions(csv_content: str, portfolio_id: int) -> Tuple[L
                     except (InvalidOperation, ValueError):
                         pass
 
-            # Initialize ticker if new
-            if ticker not in holdings:
-                holdings[ticker] = {"shares": Decimal("0"), "total_cost": Decimal("0")}
+            # Get description
+            description = ""
+            for col in ["Description", "description", "Desc"]:
+                if col in row and row[col]:
+                    description = str(row[col]).strip()[:500]
+                    break
+
+            # Track date range
+            if trans_date:
+                if stats["date_range"]["start"] is None or trans_date < stats["date_range"]["start"]:
+                    stats["date_range"]["start"] = trans_date
+                if stats["date_range"]["end"] is None or trans_date > stats["date_range"]["end"]:
+                    stats["date_range"]["end"] = trans_date
 
             # Process based on transaction type
-            trans_upper = trans_code.upper()
+            trans_type = None
+            cash_amount = Decimal("0")
 
-            if trans_upper in ["BUY", "CDIV", "DRIP", "ACH", "REINVEST"]:
+            if trans_code in ["BUY", "CDIV", "DRIP", "REINVEST"]:
                 # Buy or dividend reinvestment
-                if quantity > 0:
-                    cost = abs(amount) if amount != 0 else quantity * price
+                if ticker and quantity > 0:
+                    trans_type = "BUY" if trans_code == "BUY" else "CDIV"
+                    # Cash goes out (negative) for buys
+                    cash_amount = -abs(amount) if amount != 0 else -(quantity * price)
+
+                    # Update holdings
+                    if ticker not in holdings:
+                        holdings[ticker] = {"shares": Decimal("0"), "total_cost": Decimal("0")}
                     holdings[ticker]["shares"] += quantity
-                    holdings[ticker]["total_cost"] += cost
+                    holdings[ticker]["total_cost"] += abs(cash_amount)
+
                     stats["buys"] += 1
-                    if trans_upper in ["CDIV", "DRIP", "REINVEST"]:
+                    if trans_code in ["CDIV", "DRIP", "REINVEST"]:
                         stats["dividends"] += 1
                     stats["tickers_found"].add(ticker)
 
-            elif trans_upper in ["SELL", "SLD"]:
-                # Sell - reduce holdings using average cost basis
-                if quantity > 0 and holdings[ticker]["shares"] > 0:
-                    avg_cost = holdings[ticker]["total_cost"] / holdings[ticker]["shares"]
-                    sold_cost = avg_cost * quantity
-                    holdings[ticker]["shares"] -= quantity
-                    holdings[ticker]["total_cost"] -= sold_cost
+            elif trans_code in ["SELL", "SLD"]:
+                # Sell
+                if ticker and quantity > 0:
+                    trans_type = "SELL"
+                    # Cash comes in (positive) for sells
+                    cash_amount = abs(amount) if amount != 0 else quantity * price
+
+                    # Update holdings
+                    if ticker in holdings and holdings[ticker]["shares"] > 0:
+                        avg_cost = holdings[ticker]["total_cost"] / holdings[ticker]["shares"]
+                        sold_cost = avg_cost * quantity
+                        holdings[ticker]["shares"] -= quantity
+                        holdings[ticker]["total_cost"] -= sold_cost
+
                     stats["sells"] += 1
                     stats["tickers_found"].add(ticker)
 
-            elif trans_upper in ["SPLIT", "STKSPLT"]:
-                # Stock split - just adjust quantity, cost basis stays same
-                if quantity != 0:
-                    holdings[ticker]["shares"] = quantity
+            elif trans_code in ["ACH", "DEPOSIT", "WIRE"]:
+                # Deposit (cash in)
+                if amount > 0:
+                    trans_type = "DEPOSIT"
+                    cash_amount = abs(amount)
+                    stats["deposits"] += 1
+
+            elif trans_code in ["WITHDRAWAL", "WTHD"]:
+                # Withdrawal (cash out)
+                trans_type = "WITHDRAWAL"
+                cash_amount = -abs(amount)
+                stats["withdrawals"] += 1
+
+            elif trans_code in ["DIV", "DIVIDEND"]:
+                # Cash dividend (not reinvested)
+                trans_type = "DIVIDEND"
+                cash_amount = abs(amount)
+
+            elif trans_code in ["SPLIT", "STKSPLT"]:
+                # Stock split
+                if ticker and quantity != 0:
+                    trans_type = "SPLIT"
+                    cash_amount = Decimal("0")
+                    if ticker in holdings:
+                        holdings[ticker]["shares"] = quantity
                     stats["tickers_found"].add(ticker)
 
+            elif trans_code in ["INT", "INTEREST"]:
+                # Interest
+                trans_type = "INTEREST"
+                cash_amount = abs(amount)
+
+            elif trans_code in ["FEE", "FEES"]:
+                # Fees
+                trans_type = "FEE"
+                cash_amount = -abs(amount)
+
             else:
-                # Unknown transaction type - log but skip
+                # Unknown - skip for holdings but log
                 if trans_code:
-                    logger.debug(f"Skipping unknown trans code '{trans_code}' for {ticker}")
+                    logger.debug(f"Skipping unknown trans code '{trans_code}'")
                 stats["skipped"] += 1
+                continue
+
+            # Create transaction record if we have valid data
+            if trans_type and trans_date:
+                transactions.append(Transaction(
+                    portfolio_id=portfolio_id,
+                    date=trans_date,
+                    trans_type=trans_type,
+                    ticker=ticker if ticker else None,
+                    quantity=float(quantity) if quantity else None,
+                    price=float(price) if price else None,
+                    amount=float(cash_amount),
+                    description=description if description else None
+                ))
 
         except Exception as e:
             logger.warning(f"Error processing row {idx}: {e}")
@@ -186,20 +290,14 @@ def parse_robinhood_transactions(csv_content: str, portfolio_id: int) -> Tuple[L
             continue
 
     # Build Holding objects from aggregated data
-    result = []
+    result_holdings = []
     for ticker, data in holdings.items():
-        # Clean up near-zero positions
         if data["shares"] < Decimal("0.0001"):
             continue
 
-        # Calculate average cost basis
-        if data["shares"] > 0:
-            avg_cost_per_share = data["total_cost"] / data["shares"]
-            total_cost_basis = float(data["total_cost"])
-        else:
-            total_cost_basis = None
+        total_cost_basis = float(data["total_cost"]) if data["shares"] > 0 else None
 
-        result.append(Holding(
+        result_holdings.append(Holding(
             portfolio_id=portfolio_id,
             ticker=ticker,
             shares=float(data["shares"]),
@@ -207,18 +305,26 @@ def parse_robinhood_transactions(csv_content: str, portfolio_id: int) -> Tuple[L
         ))
 
     stats["tickers_found"] = len(stats["tickers_found"])
-    stats["holdings_created"] = len(result)
+    stats["holdings_created"] = len(result_holdings)
+    stats["transactions_created"] = len(transactions)
+
+    # Convert dates to strings for JSON serialization
+    if stats["date_range"]["start"]:
+        stats["date_range"]["start"] = stats["date_range"]["start"].isoformat()
+    if stats["date_range"]["end"]:
+        stats["date_range"]["end"] = stats["date_range"]["end"].isoformat()
 
     logger.info(f"Transaction parsing complete: {stats}")
-    return result, stats
+    return result_holdings, transactions, stats
 
 
-def parse_simple_holdings(csv_content: str, portfolio_id: int) -> Tuple[List[Holding], Dict]:
+def parse_simple_holdings(csv_content: str, portfolio_id: int) -> Tuple[List[Holding], List[Transaction], Dict]:
     """
     Parse simple holdings CSV (ticker, shares, optional cost_basis columns).
 
     Returns:
     - List of Holding objects
+    - Empty list (no transactions for simple holdings)
     - Stats dict
     """
     try:
@@ -254,7 +360,7 @@ def parse_simple_holdings(csv_content: str, portfolio_id: int) -> Tuple[List[Hol
             break
 
     result = []
-    stats = {"total_rows": len(df), "holdings_created": 0, "skipped": 0}
+    stats = {"total_rows": len(df), "holdings_created": 0, "skipped": 0, "transactions_created": 0}
 
     for _, row in df.iterrows():
         try:
@@ -288,7 +394,8 @@ def parse_simple_holdings(csv_content: str, portfolio_id: int) -> Tuple[List[Hol
             stats["skipped"] += 1
             continue
 
-    return result, stats
+    # No transactions for simple holdings format
+    return result, [], stats
 
 
 @router.post("/{portfolio_id}")
@@ -298,14 +405,16 @@ async def upload_csv(
     db: Session = Depends(get_db)
 ):
     """
-    Upload a CSV file to populate portfolio holdings.
+    Upload a CSV file to populate portfolio holdings and transactions.
 
     Supports two formats:
     1. Robinhood transaction history (with Trans Code, Instrument, etc.)
+       - Saves individual transactions for time-weighted replay
+       - Computes current holdings from buy/sell activity
     2. Simple holdings snapshot (with ticker/symbol, shares/quantity columns)
+       - Only saves current holdings (no transaction history)
 
     The parser auto-detects the format and processes accordingly.
-    For transaction history, it computes current holdings from buy/sell activity.
     """
     if not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="File must be a CSV")
@@ -322,7 +431,7 @@ async def upload_csv(
             StringIO(csv_content),
             engine="python",
             on_bad_lines="skip",
-            nrows=5  # Just peek at first few rows
+            nrows=5
         )
         csv_type = detect_csv_type(df)
     except Exception as e:
@@ -333,10 +442,10 @@ async def upload_csv(
     # Parse based on type
     try:
         if csv_type == "transactions":
-            holdings, stats = parse_robinhood_transactions(csv_content, portfolio_id)
+            holdings, transactions, stats = parse_robinhood_transactions(csv_content, portfolio_id)
             parse_method = "Robinhood transaction history"
         else:
-            holdings, stats = parse_simple_holdings(csv_content, portfolio_id)
+            holdings, transactions, stats = parse_simple_holdings(csv_content, portfolio_id)
             parse_method = "Simple holdings"
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -347,12 +456,17 @@ async def upload_csv(
             detail="No valid holdings found in CSV. Check the file format."
         )
 
-    # Clear existing holdings (replace mode)
+    # Clear existing data (replace mode)
     db.query(Holding).filter(Holding.portfolio_id == portfolio_id).delete()
+    db.query(Transaction).filter(Transaction.portfolio_id == portfolio_id).delete()
 
     # Add new holdings
     for holding in holdings:
         db.add(holding)
+
+    # Add transactions
+    for transaction in transactions:
+        db.add(transaction)
 
     db.commit()
 
@@ -360,7 +474,8 @@ async def upload_csv(
         "status": "success",
         "parse_method": parse_method,
         "holdings_added": len(holdings),
+        "transactions_added": len(transactions),
         "stats": stats,
         "archive_url": archive_url,
-        "note": "Previous holdings cleared and replaced"
+        "note": "Previous holdings and transactions cleared and replaced"
     }

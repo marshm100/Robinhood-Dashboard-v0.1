@@ -72,7 +72,7 @@ def init_db():
     """Initialize database tables and verify connection."""
     try:
         # Lazy import models to avoid circular imports
-        from api.models.portfolio import Portfolio, Holding, Benchmark, HistoricalPrice
+        from api.models.portfolio import Portfolio, Holding, Benchmark, HistoricalPrice, Transaction
 
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables created successfully")

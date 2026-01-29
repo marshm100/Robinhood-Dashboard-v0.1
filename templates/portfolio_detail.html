@@ -59,21 +59,30 @@
 {% if holdings %}
 <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
     <div class="flex justify-between items-center mb-4">
-        <h3 class="text-xl font-semibold">Performance vs Benchmark</h3>
-        <div class="flex space-x-4">
+        <div>
+            <h3 class="text-xl font-semibold">Performance vs Benchmark</h3>
+            <p id="analysisMode" class="text-sm text-gray-500 mt-1"></p>
+        </div>
+        <div class="flex space-x-4 items-center">
             <select id="benchmarkSelect" class="px-4 py-2 border border-gray-300 rounded-lg">
                 <option value="SPY" selected>SPY (S&P 500)</option>
                 <option value="QQQ">QQQ (Nasdaq 100)</option>
                 <option value="IWM">IWM (Russell 2000)</option>
                 <option value="DIA">DIA (Dow Jones)</option>
             </select>
-            <select id="periodSelect" class="px-4 py-2 border border-gray-300 rounded-lg">
-                <option value="1mo">1 Month</option>
-                <option value="3mo">3 Months</option>
-                <option value="6mo">6 Months</option>
-                <option value="1y" selected>1 Year</option>
-                <option value="2y">2 Years</option>
-            </select>
+            <div id="periodSelector" class="hidden">
+                <select id="periodSelect" class="px-4 py-2 border border-gray-300 rounded-lg">
+                    <option value="1mo">1 Month</option>
+                    <option value="3mo">3 Months</option>
+                    <option value="6mo">6 Months</option>
+                    <option value="1y" selected>1 Year</option>
+                    <option value="2y">2 Years</option>
+                </select>
+            </div>
+            <label class="flex items-center text-sm text-gray-600">
+                <input type="checkbox" id="showCash" class="mr-2 hidden">
+                <span id="showCashLabel" class="hidden">Show Cash</span>
+            </label>
             <button id="refreshChart" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center">
                 <span id="refreshText">Refresh</span>
                 <svg id="refreshSpinner" class="hidden animate-spin ml-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -98,7 +107,8 @@
 
     <div id="chartError" class="hidden mt-4 p-4 rounded-lg"></div>
 
-    <div id="chartStats" class="mt-6 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 hidden">
+    <!-- Primary Stats Row -->
+    <div id="chartStats" class="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4 hidden">
         <div class="bg-indigo-50 p-4 rounded-lg">
             <p class="text-sm text-gray-600">Portfolio Return</p>
             <p id="portfolioReturn" class="text-2xl font-bold text-indigo-700">-</p>
@@ -115,13 +125,29 @@
             <p class="text-sm text-gray-600">Current Value</p>
             <p id="currentValue" class="text-2xl font-bold text-blue-700">-</p>
         </div>
-        <div id="costBasisBox" class="bg-yellow-50 p-4 rounded-lg hidden">
-            <p class="text-sm text-gray-600">vs Cost Basis</p>
-            <p id="costBasisReturn" class="text-2xl font-bold text-yellow-700">-</p>
-        </div>
+    </div>
+
+    <!-- Secondary Stats Row (time-weighted only) -->
+    <div id="advancedStats" class="mt-4 grid grid-cols-2 md:grid-cols-5 gap-4 hidden">
         <div class="bg-purple-50 p-4 rounded-lg">
-            <p class="text-sm text-gray-600">Holdings Included</p>
-            <p id="holdingsIncluded" class="text-2xl font-bold text-purple-700">-</p>
+            <p class="text-sm text-gray-600">CAGR</p>
+            <p id="cagr" class="text-2xl font-bold text-purple-700">-</p>
+        </div>
+        <div class="bg-red-50 p-4 rounded-lg">
+            <p class="text-sm text-gray-600">Max Drawdown</p>
+            <p id="maxDrawdown" class="text-2xl font-bold text-red-700">-</p>
+        </div>
+        <div class="bg-yellow-50 p-4 rounded-lg">
+            <p class="text-sm text-gray-600">Avg Cash Drag</p>
+            <p id="cashDrag" class="text-2xl font-bold text-yellow-700">-</p>
+        </div>
+        <div class="bg-teal-50 p-4 rounded-lg">
+            <p class="text-sm text-gray-600">Trading Days</p>
+            <p id="tradingDays" class="text-2xl font-bold text-teal-700">-</p>
+        </div>
+        <div class="bg-orange-50 p-4 rounded-lg">
+            <p class="text-sm text-gray-600">Transactions</p>
+            <p id="transactionsCount" class="text-2xl font-bold text-orange-700">-</p>
         </div>
     </div>
 </div>
@@ -132,6 +158,7 @@
 const portfolioId = {{ portfolio.id }};
 let chart = null;
 let isLoading = false;
+let currentData = null;
 
 function setLoading(loading, text = 'Loading price data...', subtext = 'This may take a moment on first load') {
     isLoading = loading;
@@ -177,16 +204,140 @@ function formatCurrency(value) {
     }).format(value);
 }
 
+function formatPercent(value, showPlus = false) {
+    const prefix = showPlus && value > 0 ? '+' : '';
+    return `${prefix}${value}%`;
+}
+
+function drawChart(data) {
+    if (chart) chart.destroy();
+
+    const datasets = [
+        {
+            label: 'Portfolio',
+            data: data.portfolio_returns,
+            borderColor: '#4f46e5',
+            backgroundColor: 'rgba(79, 70, 229, 0.1)',
+            fill: true,
+            tension: 0.1,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            yAxisID: 'y'
+        },
+        {
+            label: data.benchmark,
+            data: data.benchmark_returns,
+            borderColor: '#9ca3af',
+            backgroundColor: 'rgba(156, 163, 175, 0.1)',
+            fill: true,
+            tension: 0.1,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            yAxisID: 'y'
+        }
+    ];
+
+    // Add cash line if available and checkbox is checked
+    const showCash = document.getElementById('showCash').checked;
+    if (showCash && data.cash_values && data.portfolio_values) {
+        // Calculate cash as percentage of portfolio
+        const cashPercent = data.cash_values.map((c, i) =>
+            data.portfolio_values[i] > 0 ? (c / data.portfolio_values[i]) * 100 : 0
+        );
+        datasets.push({
+            label: 'Cash %',
+            data: cashPercent,
+            borderColor: '#f59e0b',
+            borderDash: [5, 5],
+            backgroundColor: 'transparent',
+            fill: false,
+            tension: 0.1,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            yAxisID: 'y2'
+        });
+    }
+
+    const ctx = document.getElementById('performanceChart').getContext('2d');
+    chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.dates,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            },
+            plugins: {
+                legend: { position: 'top' },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => {
+                            const label = ctx.dataset.label;
+                            const value = ctx.parsed.y.toFixed(2);
+                            return `${label}: ${value}%`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: {
+                        maxTicksLimit: 12,
+                        maxRotation: 0
+                    }
+                },
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    ticks: {
+                        callback: (value) => value + '%'
+                    },
+                    title: {
+                        display: true,
+                        text: 'Return %'
+                    }
+                },
+                y2: {
+                    type: 'linear',
+                    display: showCash && data.cash_values,
+                    position: 'right',
+                    grid: {
+                        drawOnChartArea: false
+                    },
+                    ticks: {
+                        callback: (value) => value.toFixed(0) + '%'
+                    },
+                    title: {
+                        display: true,
+                        text: 'Cash %'
+                    },
+                    min: 0,
+                    max: 100
+                }
+            }
+        }
+    });
+}
+
 async function loadChartData() {
     if (isLoading) return;
 
     const benchmark = document.getElementById('benchmarkSelect').value;
     const period = document.getElementById('periodSelect').value;
     const statsDiv = document.getElementById('chartStats');
+    const advancedStats = document.getElementById('advancedStats');
+    const analysisMode = document.getElementById('analysisMode');
 
-    setLoading(true, 'Fetching price data...', `Loading ${period} history for ${benchmark}`);
+    setLoading(true, 'Fetching price data...', `Analyzing portfolio with ${benchmark}`);
     hideError();
     statsDiv.classList.add('hidden');
+    advancedStats.classList.add('hidden');
 
     try {
         const response = await fetch(`/api/analysis/compare/${portfolioId}?benchmark=${benchmark}&period=${period}`);
@@ -198,105 +349,59 @@ async function loadChartData() {
             throw new Error(data.error);
         }
 
-        // Update stats
-        document.getElementById('portfolioReturn').textContent = `${data.final_portfolio_return}%`;
-        document.getElementById('benchmarkReturn').textContent = `${data.final_benchmark_return}%`;
+        currentData = data;
 
-        const alpha = data.alpha !== undefined ? data.alpha : (data.final_portfolio_return - data.final_benchmark_return).toFixed(2);
+        // Determine analysis mode
+        const isTimeWeighted = data.has_transaction_history === true;
+        if (isTimeWeighted) {
+            analysisMode.textContent = `Time-weighted analysis: ${data.transactions_replayed} transactions replayed`;
+            document.getElementById('periodSelector').classList.add('hidden');
+            document.getElementById('showCash').classList.remove('hidden');
+            document.getElementById('showCashLabel').classList.remove('hidden');
+        } else {
+            analysisMode.textContent = `Snapshot analysis: assuming constant holdings over ${period}`;
+            document.getElementById('periodSelector').classList.remove('hidden');
+            document.getElementById('showCash').classList.add('hidden');
+            document.getElementById('showCashLabel').classList.add('hidden');
+        }
+
+        // Update primary stats
+        document.getElementById('portfolioReturn').textContent = formatPercent(data.final_portfolio_return);
+        document.getElementById('benchmarkReturn').textContent = formatPercent(data.final_benchmark_return);
+
+        const alpha = data.alpha;
         const alphaEl = document.getElementById('alpha');
         const alphaBox = document.getElementById('alphaBox');
-        alphaEl.textContent = `${alpha > 0 ? '+' : ''}${alpha}%`;
-        alphaBox.className = alpha >= 0
-            ? 'bg-green-50 p-4 rounded-lg'
-            : 'bg-red-50 p-4 rounded-lg';
-        alphaEl.className = alpha >= 0
-            ? 'text-2xl font-bold text-green-700'
-            : 'text-2xl font-bold text-red-700';
+        alphaEl.textContent = formatPercent(alpha, true);
+        alphaBox.className = alpha >= 0 ? 'bg-green-50 p-4 rounded-lg' : 'bg-red-50 p-4 rounded-lg';
+        alphaEl.className = alpha >= 0 ? 'text-2xl font-bold text-green-700' : 'text-2xl font-bold text-red-700';
 
-        // Current value
-        if (data.current_value) {
-            document.getElementById('currentValue').textContent = formatCurrency(data.current_value);
-        } else {
-            document.getElementById('currentValue').textContent = '-';
-        }
-
-        // Cost basis return
-        const costBasisBox = document.getElementById('costBasisBox');
-        if (data.cost_basis_return !== null && data.cost_basis_return !== undefined) {
-            document.getElementById('costBasisReturn').textContent = `${data.cost_basis_return > 0 ? '+' : ''}${data.cost_basis_return}%`;
-            costBasisBox.classList.remove('hidden');
-        } else {
-            costBasisBox.classList.add('hidden');
-        }
-
-        document.getElementById('holdingsIncluded').textContent = `${data.holdings_included || '-'}/${data.holdings_total || '-'}`;
+        document.getElementById('currentValue').textContent = data.current_value ? formatCurrency(data.current_value) : '-';
         statsDiv.classList.remove('hidden');
 
+        // Update advanced stats (time-weighted only)
+        if (isTimeWeighted) {
+            document.getElementById('cagr').textContent = formatPercent(data.cagr);
+            document.getElementById('maxDrawdown').textContent = `-${data.max_drawdown}%`;
+            document.getElementById('cashDrag').textContent = `${data.avg_cash_drag.toFixed(1)}%`;
+            document.getElementById('tradingDays').textContent = data.trading_days;
+            document.getElementById('transactionsCount').textContent = data.transactions_replayed;
+            advancedStats.classList.remove('hidden');
+        }
+
         // Draw chart
-        if (chart) chart.destroy();
+        drawChart(data);
 
-        const ctx = document.getElementById('performanceChart').getContext('2d');
-        chart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: data.dates,
-                datasets: [
-                    {
-                        label: 'Portfolio',
-                        data: data.portfolio_returns,
-                        borderColor: '#4f46e5',
-                        backgroundColor: 'rgba(79, 70, 229, 0.1)',
-                        fill: true,
-                        tension: 0.1,
-                        pointRadius: 0,
-                        pointHoverRadius: 4
-                    },
-                    {
-                        label: data.benchmark,
-                        data: data.benchmark_returns,
-                        borderColor: '#9ca3af',
-                        backgroundColor: 'rgba(156, 163, 175, 0.1)',
-                        fill: true,
-                        tension: 0.1,
-                        pointRadius: 0,
-                        pointHoverRadius: 4
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: {
-                    intersect: false,
-                    mode: 'index'
-                },
-                plugins: {
-                    legend: { position: 'top' },
-                    tooltip: {
-                        callbacks: {
-                            label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}%`
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        ticks: {
-                            maxTicksLimit: 12,
-                            maxRotation: 0
-                        }
-                    },
-                    y: {
-                        ticks: {
-                            callback: (value) => value + '%'
-                        }
-                    }
-                }
-            }
-        });
-
-        // Show missing tickers warning if any
+        // Show warnings
+        const warnings = [];
         if (data.missing_tickers && data.missing_tickers.length > 0) {
-            showError(`Note: Missing price data for: ${data.missing_tickers.join(', ')}`, true);
+            warnings.push(`Missing price data for: ${data.missing_tickers.join(', ')}`);
+        }
+        if (data.missing_price_days && data.missing_price_days > 0) {
+            warnings.push(`${data.missing_price_days} price data points interpolated`);
+        }
+        if (warnings.length > 0) {
+            showError(warnings.join('. '), true);
         }
 
     } catch (err) {
@@ -306,9 +411,13 @@ async function loadChartData() {
     }
 }
 
+// Event listeners
 document.getElementById('refreshChart').addEventListener('click', loadChartData);
 document.getElementById('benchmarkSelect').addEventListener('change', loadChartData);
 document.getElementById('periodSelect').addEventListener('change', loadChartData);
+document.getElementById('showCash').addEventListener('change', () => {
+    if (currentData) drawChart(currentData);
+});
 
 // Initial load
 loadChartData();
