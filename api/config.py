@@ -27,6 +27,3 @@ if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
-
-# Legacy config - stockr_backbone was never implemented
-STOCKR_DB_PATH = os.getenv("STOCKR_DB_PATH", "stockr_backbone/stockr.db")
