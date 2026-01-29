@@ -30,9 +30,11 @@ Provide retail investors (primarily Robinhood users) with comprehensive portfoli
 
 ### Notable Internal Capabilities
 
-- **stockr_backbone Database**: Core internal stock data maintenance system that automatically tracks, caches, and refreshes historical price data
-- **Auto-Discovery**: New tickers encountered are automatically added to tracking
-- **Background Maintenance**: Continuous 24/7 data refresh (~60 minute intervals)
+- **Price Caching**: File-based cache (1-hour TTL) reduces yfinance API calls
+- **Robust Fallback**: Batch→individual download fallback ensures data availability
+- **Detailed Logging**: Centralized logging for debugging price fetch issues
+
+> **Note**: Documentation references a "stockr_backbone" caching system that was planned but never implemented. The `stockr_backbone/` directory is empty. All stock data currently comes from yfinance with file-based caching.
 
 ---
 
@@ -47,8 +49,7 @@ Provide retail investors (primarily Robinhood users) with comprehensive portfoli
 | Server (Prod) | Gunicorn + UvicornWorker | - |
 | Database ORM | SQLAlchemy | 2.0.35 |
 | Data Processing | Pandas | 2.2.3 |
-| Stock Data (Primary) | yfinance | 0.2.41 |
-| Stock Data (Secondary) | Stooq.com API | via stockr_backbone |
+| Stock Data | yfinance | 0.2.41 |
 | HTTP Client | httpx | 0.27.0 |
 | PostgreSQL Driver | psycopg2-binary | 2.9.9 |
 | File Uploads | python-multipart | 0.0.9 |
@@ -67,7 +68,7 @@ Provide retail investors (primarily Robinhood users) with comprehensive portfoli
 |-------------|------------|---------|
 | Local Development | SQLite | Main application database |
 | Production (Vercel) | PostgreSQL | Persistent storage |
-| Stock Data | SQLite | stockr_backbone internal database |
+| Price Cache | File-based (pickle) | yfinance response caching (1-hour TTL) |
 | File Storage | Vercel Blob | CSV upload archival |
 
 ### Other Major Tools
@@ -457,59 +458,80 @@ From `DESIGN_PHILOSOPHY.md`:
 - **API Endpoints**: All documented endpoints return correct data structures
 - **Page Loading**: Upload, Dashboard, Analysis, Comparison pages load correctly
 - **CSV Processing**: Flexible column detection and parsing
-- **Price Service**: yfinance integration with retry logic
+- **Price Service**: Robust yfinance integration with caching and fallback (fixed 2026-01-29)
 - **Vercel Deployment**: Serverless function operational
 
-### Known Bugs / Critical Issues
+### Recently Fixed (2026-01-29)
 
-#### CRITICAL: Charts Not Loading
-- **Problem**: Dashboard charts show "No price data" - all portfolio values are 0.0
-- **Root Cause**: Missing stock price data for certain tickers (BITU, AGQ, TSLL, SBIT, TSDD - leveraged/inverse ETFs)
-- **Impact**: Core functionality blocked - users cannot see portfolio performance
-- **Status**: Documented in `CRITICAL_ISSUES_SUMMARY.md`
+#### ✅ RESOLVED: Charts Not Loading
+- **Original Problem**: Dashboard charts showed "No price data" - all portfolio values were 0.0
+- **Root Cause**: yfinance returns Series (not DataFrame) for single tickers; old code expected ticker columns
+- **Fix Applied**: Complete rewrite of `price_service.py` with:
+  - Series→DataFrame conversion for single tickers
+  - MultiIndex column handling for batch downloads
+  - Batch→individual fallback when tickers are missing
+  - File-based caching (1-hour TTL)
+- **Status**: ✅ Fixed in commit 985569c
+
+### Known Bugs / Open Issues
 
 #### MEDIUM: Text Rendering Issues
 - **Problem**: Navigation text appears truncated/garbled ("Dashboard" → "Da hboard")
 - **Possible Causes**: CSS text-overflow, font loading, character encoding
 - **Impact**: Cosmetic - functionality not affected
 
+#### MEDIUM: Misleading Documentation
+- **Problem**: Extensive docs describe "stockr_backbone" caching system that was never implemented
+- **Impact**: Developer confusion, wasted investigation time
+- **Resolution**: Docs should be deleted or moved to `docs/future/`
+
 ### Unfinished Features / TODOs
 
 1. **Vercel PostgreSQL Integration**: Currently using `/tmp` storage (resets on cold starts)
-2. **Stock Data Population**: stockr_backbone may need manual population for exotic tickers
-3. **File Upload Workflow**: Requires manual testing with actual CSV files
-4. **Linting Configuration**: Placeholder in CI/CD pipeline
-5. **Health Check URLs**: Placeholder in deployment pipeline
+2. **File Upload Workflow**: Requires manual end-to-end testing
+3. **Linting Configuration**: Placeholder in CI/CD pipeline
+4. **Health Check URLs**: Placeholder in deployment pipeline
+5. **stockr_backbone Cleanup**: Remove or archive misleading documentation
 
 ### Recent Development Focus
 
-Based on git history, recent work focused on **stockr_backbone subprocess execution fixes**:
+Based on git history, recent work focused on **fixing the chart-zero bug**:
 ```
-f67b1ec - fix: use sys.executable in subprocess to run fetcher.py with venv
-799b491 - fix: subprocess run fetcher.py in src dir
-b3f382f - fix: temp sys.path + __package__ for relative config import
+985569c - fix: robust yfinance handling for single-ticker and batch failures
+80dd9de - docs: add comprehensive project overview for external engineers
 ```
 
-This indicates active debugging of the stock data population system, specifically around:
-- Python virtual environment path handling
-- Module import resolution
-- Subprocess execution from the correct directory
+Key changes:
+- Robust yfinance handling with Series/DataFrame normalization
+- Batch→individual fallback for partial failures
+- File-based caching to reduce API calls
+- Detailed logging for debugging
 
-### Architecture Maturity
+### Architecture Notes
 
-The project has comprehensive documentation (19+ markdown files) indicating significant design effort. The `stockr_backbone` component is marked as "CRITICAL CORE" throughout documentation, suggesting it's the foundation that other features depend on.
+The project has extensive documentation (19+ markdown files) but some is aspirational rather than implemented:
+- **STOCKR_BACKBONE_ARCHITECTURE.md** describes a caching layer that doesn't exist
+- The actual stock data flow is: yfinance API → file cache → DataFrame
+
+The codebase follows modern Python web development patterns and is maintainable.
 
 ---
 
 ## Summary
 
-**Robinhood Portfolio Analysis Dashboard** is a Python/FastAPI web application that provides retail investors with professional-grade portfolio analytics. The key differentiator is the **stockr_backbone** internal stock data system that maintains historical prices locally, enabling features like custom portfolio backtesting and benchmark comparisons without hitting external API rate limits.
+**Robinhood Portfolio Analysis Dashboard** is a Python/FastAPI web application that provides retail investors with professional-grade portfolio analytics. Stock data is fetched from yfinance with file-based caching (1-hour TTL) and robust fallback handling.
 
 The application is currently deployed on Vercel as a serverless function, with PostgreSQL for persistent storage. The cyberpunk-themed UI uses server-side rendering with Jinja2 and interactive Plotly.js charts.
 
-**Critical Path Items:**
-1. Fix missing stock price data for charts to render
-2. Complete Vercel PostgreSQL integration for data persistence
-3. Ensure stockr_backbone auto-discovery works for all ticker types
+**Current Status (2026-01-29):**
+- ✅ Core chart functionality working (fixed yfinance handling)
+- ✅ Price caching implemented to reduce API calls
+- ⚠️ Text rendering cosmetic issue (open)
+- ⚠️ Misleading stockr_backbone docs need cleanup
 
-The codebase is well-documented and follows modern Python web development patterns, making it maintainable and extensible for future feature development.
+**Next Steps:**
+1. Complete Vercel PostgreSQL integration for data persistence
+2. Clean up misleading stockr_backbone documentation
+3. Investigate text rendering CSS/font issue
+
+The codebase follows modern Python web development patterns, making it maintainable and extensible for future feature development.

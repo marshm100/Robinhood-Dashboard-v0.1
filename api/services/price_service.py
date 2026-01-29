@@ -1,15 +1,75 @@
+import hashlib
 import logging
-import pandas as pd
-import yfinance as yf
+import os
+import pickle
+import time
+from pathlib import Path
 from typing import List
 
+import pandas as pd
+import yfinance as yf
+
 logger = logging.getLogger(__name__)
+
+# Cache configuration
+CACHE_DIR = Path(os.getenv("PRICE_CACHE_DIR", "/tmp/yfinance_cache"))
+CACHE_TTL_SECONDS = int(os.getenv("PRICE_CACHE_TTL", "3600"))  # 1 hour default
+
+
+def _get_cache_key(tickers: List[str], period: str) -> str:
+    """Generate a unique cache key for the ticker set and period."""
+    key_str = f"{','.join(sorted(tickers))}_{period}"
+    return hashlib.md5(key_str.encode()).hexdigest()
+
+
+def _load_from_cache(cache_key: str) -> pd.DataFrame | None:
+    """Try to load cached price data."""
+    try:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cache_file = CACHE_DIR / f"{cache_key}.pkl"
+
+        if not cache_file.exists():
+            return None
+
+        # Check if cache is still fresh
+        file_age = time.time() - cache_file.stat().st_mtime
+        if file_age > CACHE_TTL_SECONDS:
+            logger.debug(f"Cache expired ({file_age:.0f}s old): {cache_key}")
+            cache_file.unlink(missing_ok=True)
+            return None
+
+        with open(cache_file, "rb") as f:
+            data = pickle.load(f)
+
+        logger.info(f"Cache hit: {cache_key} ({file_age:.0f}s old)")
+        return data
+
+    except Exception as e:
+        logger.warning(f"Cache load failed: {e}")
+        return None
+
+
+def _save_to_cache(cache_key: str, data: pd.DataFrame) -> None:
+    """Save price data to cache."""
+    try:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cache_file = CACHE_DIR / f"{cache_key}.pkl"
+
+        with open(cache_file, "wb") as f:
+            pickle.dump(data, f)
+
+        logger.debug(f"Cache saved: {cache_key}")
+
+    except Exception as e:
+        logger.warning(f"Cache save failed: {e}")
+
 
 def get_historical_prices(tickers: List[str], period: str = "1y") -> pd.DataFrame:
     """
     Fetch historical close prices for given tickers.
     Returns a DataFrame with Date index and ticker columns, even for single tickers.
     Falls back to individual downloads on batch failure.
+    Uses file-based caching to reduce API calls.
     """
     if not tickers:
         return pd.DataFrame()
@@ -18,6 +78,12 @@ def get_historical_prices(tickers: List[str], period: str = "1y") -> pd.DataFram
     tickers = sorted(set(t.upper().strip() for t in tickers if t and t.strip()))
     if not tickers:
         return pd.DataFrame()
+
+    # Try cache first
+    cache_key = _get_cache_key(tickers, period)
+    cached_data = _load_from_cache(cache_key)
+    if cached_data is not None and not cached_data.empty:
+        return cached_data
 
     logger.info(f"Fetching prices for {len(tickers)} tickers: {tickers[:5]}{'...' if len(tickers) > 5 else ''}")
 
@@ -65,6 +131,7 @@ def get_historical_prices(tickers: List[str], period: str = "1y") -> pd.DataFram
     # Try batch first
     prices_df = batch_download()
     if prices_df is not None and not prices_df.empty:
+        _save_to_cache(cache_key, prices_df)
         return prices_df
 
     # Fallback: individual downloads
@@ -109,6 +176,10 @@ def get_historical_prices(tickers: List[str], period: str = "1y") -> pd.DataFram
     prices_df = prices_df.dropna(how="all").ffill().bfill()
 
     logger.info(f"Individual fallback complete: {len(successful_tickers)}/{len(tickers)} tickers succeeded")
+
+    # Cache the result
+    _save_to_cache(cache_key, prices_df)
+
     return prices_df
 
 
