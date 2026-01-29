@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}{{ portfolio.name }} - Portfolio Details{% endblock %}
+{% block content %}
+<div class="mb-8 flex justify-between items-center">
+    <div>
+        <h2 class="text-3xl font-bold">{{ portfolio.name }}</h2>
+        <p class="text-gray-600">Created: {{ portfolio.created_at.strftime('%Y-%m-%d') }} | ID: {{ portfolio.id }}</p>
+    </div>
+    <div class="space-x-4">
+        <a href="/upload?portfolio_id={{ portfolio.id }}" class="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition">
+            Upload CSV
+        </a>
+        <a href="/portfolios" class="px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition">
+            Back to Portfolios
+        </a>
+    </div>
+</div>
+
+<!-- Holdings Table -->
+<div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+    <h3 class="text-xl font-semibold mb-4">Holdings ({{ holdings|length }} positions)</h3>
+
+    {% if holdings %}
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Ticker</th>
+                    <th class="px-4 py-3 text-right text-sm font-semibold text-gray-700">Shares</th>
+                    <th class="px-4 py-3 text-right text-sm font-semibold text-gray-700">Cost Basis</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+                {% for holding in holdings %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 font-medium text-indigo-600">{{ holding.ticker }}</td>
+                    <td class="px-4 py-3 text-right">{{ "%.2f"|format(holding.shares) }}</td>
+                    <td class="px-4 py-3 text-right">
+                        {% if holding.cost_basis %}
+                        ${{ "%.2f"|format(holding.cost_basis) }}
+                        {% else %}
+                        <span class="text-gray-400">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="text-center py-12 text-gray-500">
+        <p class="text-lg mb-4">No holdings yet.</p>
+        <a href="/upload?portfolio_id={{ portfolio.id }}" class="text-indigo-600 hover:underline">Upload a CSV to add holdings</a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Performance Chart -->
+{% if holdings %}
+<div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <h3 class="text-xl font-semibold">Performance vs Benchmark</h3>
+        <div class="flex space-x-4">
+            <select id="benchmarkSelect" class="px-4 py-2 border border-gray-300 rounded-lg">
+                <option value="SPY" selected>SPY (S&P 500)</option>
+                <option value="QQQ">QQQ (Nasdaq 100)</option>
+                <option value="IWM">IWM (Russell 2000)</option>
+                <option value="DIA">DIA (Dow Jones)</option>
+            </select>
+            <select id="periodSelect" class="px-4 py-2 border border-gray-300 rounded-lg">
+                <option value="1mo">1 Month</option>
+                <option value="3mo">3 Months</option>
+                <option value="6mo">6 Months</option>
+                <option value="1y" selected>1 Year</option>
+                <option value="2y">2 Years</option>
+            </select>
+            <button id="refreshChart" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+                Refresh
+            </button>
+        </div>
+    </div>
+
+    <div id="chartContainer" class="h-96 relative">
+        <div id="chartLoading" class="absolute inset-0 flex items-center justify-center bg-gray-50">
+            <div class="text-gray-500">Loading chart data...</div>
+        </div>
+        <canvas id="performanceChart"></canvas>
+    </div>
+
+    <div id="chartError" class="hidden mt-4 p-4 bg-red-100 text-red-700 rounded-lg"></div>
+
+    <div id="chartStats" class="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4 hidden">
+        <div class="bg-indigo-50 p-4 rounded-lg">
+            <p class="text-sm text-gray-600">Portfolio Return</p>
+            <p id="portfolioReturn" class="text-2xl font-bold text-indigo-700">—</p>
+        </div>
+        <div class="bg-gray-50 p-4 rounded-lg">
+            <p class="text-sm text-gray-600">Benchmark Return</p>
+            <p id="benchmarkReturn" class="text-2xl font-bold text-gray-700">—</p>
+        </div>
+        <div class="bg-green-50 p-4 rounded-lg">
+            <p class="text-sm text-gray-600">Alpha</p>
+            <p id="alpha" class="text-2xl font-bold text-green-700">—</p>
+        </div>
+        <div class="bg-purple-50 p-4 rounded-lg">
+            <p class="text-sm text-gray-600">Holdings Included</p>
+            <p id="holdingsIncluded" class="text-2xl font-bold text-purple-700">—</p>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+{% if holdings %}
+const portfolioId = {{ portfolio.id }};
+let chart = null;
+
+async function loadChartData() {
+    const benchmark = document.getElementById('benchmarkSelect').value;
+    const period = document.getElementById('periodSelect').value;
+    const loading = document.getElementById('chartLoading');
+    const errorDiv = document.getElementById('chartError');
+    const statsDiv = document.getElementById('chartStats');
+
+    loading.classList.remove('hidden');
+    errorDiv.classList.add('hidden');
+    statsDiv.classList.add('hidden');
+
+    try {
+        const response = await fetch(`/api/analysis/compare/${portfolioId}?benchmark=${benchmark}&period=${period}`);
+        const data = await response.json();
+
+        loading.classList.add('hidden');
+
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
+        // Update stats
+        document.getElementById('portfolioReturn').textContent = `${data.final_portfolio_return}%`;
+        document.getElementById('benchmarkReturn').textContent = `${data.final_benchmark_return}%`;
+        const alpha = (data.final_portfolio_return - data.final_benchmark_return).toFixed(2);
+        document.getElementById('alpha').textContent = `${alpha > 0 ? '+' : ''}${alpha}%`;
+        document.getElementById('holdingsIncluded').textContent = `${data.holdings_included || '—'}/${data.holdings_total || '—'}`;
+        statsDiv.classList.remove('hidden');
+
+        // Draw chart
+        if (chart) chart.destroy();
+
+        const ctx = document.getElementById('performanceChart').getContext('2d');
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: data.dates,
+                datasets: [
+                    {
+                        label: 'Portfolio',
+                        data: data.portfolio_returns,
+                        borderColor: '#4f46e5',
+                        backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                        fill: true,
+                        tension: 0.1
+                    },
+                    {
+                        label: data.benchmark,
+                        data: data.benchmark_returns,
+                        borderColor: '#9ca3af',
+                        backgroundColor: 'rgba(156, 163, 175, 0.1)',
+                        fill: true,
+                        tension: 0.1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top' },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}%`
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        ticks: {
+                            callback: (value) => value + '%'
+                        }
+                    }
+                }
+            }
+        });
+
+        // Show missing tickers warning if any
+        if (data.missing_tickers && data.missing_tickers.length > 0) {
+            errorDiv.className = 'mt-4 p-4 bg-yellow-100 text-yellow-700 rounded-lg';
+            errorDiv.textContent = `Note: Missing price data for: ${data.missing_tickers.join(', ')}`;
+            errorDiv.classList.remove('hidden');
+        }
+
+    } catch (err) {
+        loading.classList.add('hidden');
+        errorDiv.className = 'mt-4 p-4 bg-red-100 text-red-700 rounded-lg';
+        errorDiv.textContent = `Error loading chart: ${err.message}`;
+        errorDiv.classList.remove('hidden');
+    }
+}
+
+document.getElementById('refreshChart').addEventListener('click', loadChartData);
+document.getElementById('benchmarkSelect').addEventListener('change', loadChartData);
+document.getElementById('periodSelect').addEventListener('change', loadChartData);
+
+// Initial load
+loadChartData();
+{% endif %}
+</script>
+{% endblock %}
