@@ -1,17 +1,20 @@
 """
-Price service with persistent database caching.
+Price service with persistent database caching and resilient fetching.
 
 Fetches historical prices from yfinance and caches them in PostgreSQL/SQLite
 for persistent storage across serverless function invocations.
+
+Handles partial data gracefully for leveraged/newer ETFs with limited history.
 """
 import logging
 from datetime import date, datetime, timedelta
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, NamedTuple
+from dataclasses import dataclass, field
 
 import pandas as pd
 import yfinance as yf
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, desc
 
 from api.database import SessionLocal
 from api.models.portfolio import HistoricalPrice
@@ -26,7 +29,21 @@ PERIOD_DAYS = {
     "1y": 365,
     "2y": 730,
     "5y": 1825,
+    "max": 3650,  # ~10 years
 }
+
+# Fallback periods to try if longer periods fail
+PERIOD_FALLBACKS = ["5y", "2y", "1y", "6mo", "3mo", "1mo"]
+
+
+@dataclass
+class PriceResult:
+    """Result from get_historical_prices with metadata."""
+    df: pd.DataFrame
+    missing_tickers: List[str] = field(default_factory=list)
+    partial_tickers: Dict[str, str] = field(default_factory=dict)  # ticker -> "data since YYYY-MM-DD"
+    failed_tickers: List[str] = field(default_factory=list)
+    is_partial: bool = False
 
 
 def _period_to_date_range(period: str) -> Tuple[date, date]:
@@ -63,7 +80,6 @@ def _load_from_db_cache(
     ).all()
 
     if not prices:
-        # Generate all expected dates for missing calculation
         all_dates = pd.date_range(start=start_date, end=end_date, freq='B').date
         missing = {t: list(all_dates) for t in tickers}
         return pd.DataFrame(), missing
@@ -75,7 +91,6 @@ def _load_from_db_cache(
             data[price.ticker] = {}
         data[price.ticker][price.date] = price.close_price
 
-    # Build DataFrame
     df = pd.DataFrame(data)
     if not df.empty:
         df.index = pd.to_datetime(df.index)
@@ -97,6 +112,45 @@ def _load_from_db_cache(
     return df, missing
 
 
+def _get_latest_cached_price(db: Session, ticker: str) -> Optional[Tuple[date, float]]:
+    """Get the most recent cached price for a ticker."""
+    latest = db.query(HistoricalPrice).filter(
+        HistoricalPrice.ticker == ticker
+    ).order_by(desc(HistoricalPrice.date)).first()
+
+    if latest:
+        return (latest.date, latest.close_price)
+    return None
+
+
+def _get_current_price(ticker: str) -> Optional[float]:
+    """Fetch current price for a ticker using yfinance."""
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+
+        # Try various price fields
+        for field in ['regularMarketPrice', 'currentPrice', 'previousClose', 'open']:
+            if field in info and info[field]:
+                price = float(info[field])
+                if price > 0:
+                    logger.info(f"Got current price for {ticker}: ${price:.2f}")
+                    return price
+
+        # Fallback: try to get from recent history
+        hist = stock.history(period="5d")
+        if not hist.empty and 'Close' in hist.columns:
+            price = float(hist['Close'].iloc[-1])
+            if price > 0:
+                logger.info(f"Got recent price for {ticker} from history: ${price:.2f}")
+                return price
+
+    except Exception as e:
+        logger.warning(f"Failed to get current price for {ticker}: {e}")
+
+    return None
+
+
 def _save_to_db_cache(db: Session, ticker: str, prices: Dict[date, float]) -> int:
     """Save prices to database cache. Returns count of new records."""
     if not prices:
@@ -104,7 +158,6 @@ def _save_to_db_cache(db: Session, ticker: str, prices: Dict[date, float]) -> in
 
     count = 0
     for price_date, close_price in prices.items():
-        # Check if already exists (upsert logic)
         existing = db.query(HistoricalPrice).filter(
             and_(
                 HistoricalPrice.ticker == ticker,
@@ -127,127 +180,265 @@ def _save_to_db_cache(db: Session, ticker: str, prices: Dict[date, float]) -> in
     return count
 
 
-def _fetch_from_yfinance(
-    tickers: List[str],
+def _fetch_single_ticker(
+    ticker: str,
     start_date: date,
-    end_date: date
-) -> pd.DataFrame:
+    end_date: date,
+    fallback_periods: bool = True
+) -> Tuple[Optional[pd.DataFrame], Optional[str]]:
     """
-    Fetch prices from yfinance for given tickers and date range.
-    Handles batch download with fallback to individual downloads.
+    Fetch historical prices for a single ticker with period fallbacks.
+
+    Returns:
+        - DataFrame with prices (or None if completely failed)
+        - Error message if failed (or None if success)
     """
-    if not tickers:
-        return pd.DataFrame()
+    # Calculate days requested
+    days_requested = (end_date - start_date).days
 
-    logger.info(f"Fetching from yfinance: {len(tickers)} tickers, {start_date} to {end_date}")
+    # Determine which periods to try
+    if fallback_periods:
+        periods_to_try = []
+        for period in PERIOD_FALLBACKS:
+            period_days = PERIOD_DAYS.get(period, 365)
+            if period_days <= days_requested * 1.5:  # Allow some buffer
+                periods_to_try.append(period)
+        if not periods_to_try:
+            periods_to_try = ["1mo"]
+    else:
+        periods_to_try = [None]  # Use explicit dates
 
-    def batch_download() -> Optional[pd.DataFrame]:
+    last_error = None
+
+    for period in periods_to_try:
         try:
-            data = yf.download(
-                tickers=tickers,
-                start=start_date,
-                end=end_date + timedelta(days=1),  # end is exclusive
-                auto_adjust=True,
-                progress=False,
-                threads=True,
-            )
-
-            if data.empty:
-                return None
-
-            # Handle MultiIndex columns (multiple tickers)
-            if isinstance(data.columns, pd.MultiIndex):
-                data = data["Close"]
-            elif "Close" in data.columns:
-                data = data["Close"]
-
-            # Handle single-ticker Series case
-            if isinstance(data, pd.Series):
-                data = data.to_frame(name=tickers[0])
-
-            return data
-
-        except Exception as e:
-            logger.error(f"Batch download failed: {e}")
-            return None
-
-    # Try batch first
-    prices_df = batch_download()
-    if prices_df is not None and not prices_df.empty:
-        logger.info(f"Batch download succeeded: {len(prices_df)} rows")
-        return prices_df
-
-    # Fallback: individual downloads
-    logger.info("Falling back to individual ticker downloads")
-    individual_dfs = []
-
-    for ticker in tickers:
-        try:
-            df = yf.download(
-                tickers=ticker,
-                start=start_date,
-                end=end_date + timedelta(days=1),
-                auto_adjust=True,
-                progress=False,
-            )
+            if period:
+                df = yf.download(
+                    tickers=ticker,
+                    period=period,
+                    auto_adjust=True,
+                    progress=False,
+                )
+            else:
+                df = yf.download(
+                    tickers=ticker,
+                    start=start_date,
+                    end=end_date + timedelta(days=1),
+                    auto_adjust=True,
+                    progress=False,
+                )
 
             if df.empty:
-                logger.warning(f"No data for {ticker}")
+                last_error = f"Empty data for period {period}"
                 continue
 
+            # Extract Close prices
             if "Close" in df.columns:
                 close_data = df["Close"]
+            elif isinstance(df.columns, pd.MultiIndex):
+                close_data = df["Close"][ticker] if ticker in df["Close"].columns else df.iloc[:, 0]
             else:
                 close_data = df.iloc[:, 0]
 
-            ticker_df = close_data.to_frame(name=ticker)
-            individual_dfs.append(ticker_df)
-            logger.debug(f"Individual download: {ticker} ({len(ticker_df)} rows)")
+            result_df = close_data.to_frame(name=ticker)
+
+            if len(result_df) > 0:
+                logger.debug(f"Fetched {ticker}: {len(result_df)} rows (period={period})")
+                return result_df, None
 
         except Exception as e:
-            logger.error(f"Failed to download {ticker}: {e}")
+            last_error = str(e)
+            logger.debug(f"Failed to fetch {ticker} with period {period}: {e}")
+            continue
+
+    return None, last_error or "No data available"
+
+
+def _fetch_from_yfinance_resilient(
+    tickers: List[str],
+    start_date: date,
+    end_date: date,
+    db: Session
+) -> Tuple[pd.DataFrame, List[str], Dict[str, str]]:
+    """
+    Fetch prices from yfinance with resilient handling.
+
+    Returns:
+        - DataFrame with all available prices
+        - List of completely failed tickers
+        - Dict of partial tickers -> earliest date string
+    """
+    if not tickers:
+        return pd.DataFrame(), [], {}
+
+    logger.info(f"Fetching from yfinance: {len(tickers)} tickers, {start_date} to {end_date}")
+
+    individual_dfs = []
+    failed_tickers = []
+    partial_tickers = {}
+
+    # Try batch download first for efficiency
+    batch_success = set()
+    try:
+        batch_data = yf.download(
+            tickers=tickers if len(tickers) > 1 else tickers[0],
+            start=start_date,
+            end=end_date + timedelta(days=1),
+            auto_adjust=True,
+            progress=False,
+            threads=True,
+        )
+
+        if not batch_data.empty:
+            # Handle MultiIndex columns
+            if isinstance(batch_data.columns, pd.MultiIndex):
+                close_data = batch_data["Close"]
+            elif "Close" in batch_data.columns:
+                close_data = batch_data["Close"]
+                if isinstance(close_data, pd.Series):
+                    close_data = close_data.to_frame(name=tickers[0])
+            else:
+                close_data = batch_data
+
+            if isinstance(close_data, pd.Series):
+                close_data = close_data.to_frame(name=tickers[0])
+
+            for ticker in tickers:
+                if ticker in close_data.columns:
+                    ticker_data = close_data[[ticker]].dropna()
+                    if len(ticker_data) > 0:
+                        individual_dfs.append(ticker_data)
+                        batch_success.add(ticker)
+
+                        # Check if partial data
+                        first_date = ticker_data.index[0].date()
+                        if first_date > start_date + timedelta(days=5):
+                            partial_tickers[ticker] = first_date.isoformat()
+                            logger.info(f"{ticker}: partial data available from {first_date}")
+
+            logger.info(f"Batch download: {len(batch_success)}/{len(tickers)} tickers succeeded")
+
+    except Exception as e:
+        logger.warning(f"Batch download failed: {e}, falling back to individual")
+
+    # Individual downloads for remaining tickers
+    remaining = [t for t in tickers if t not in batch_success]
+
+    for ticker in remaining:
+        df, error = _fetch_single_ticker(ticker, start_date, end_date, fallback_periods=True)
+
+        if df is not None and not df.empty:
+            individual_dfs.append(df)
+
+            # Check if partial data
+            first_date = df.index[0].date()
+            if first_date > start_date + timedelta(days=5):
+                partial_tickers[ticker] = first_date.isoformat()
+                logger.info(f"{ticker}: partial data from {first_date}")
+        else:
+            # Try to get current price as fallback
+            current_price = _get_current_price(ticker)
+            if current_price:
+                # Create a single-row DataFrame with today's price
+                today_df = pd.DataFrame(
+                    {ticker: [current_price]},
+                    index=pd.DatetimeIndex([datetime.now()])
+                )
+                individual_dfs.append(today_df)
+                partial_tickers[ticker] = date.today().isoformat()
+                logger.info(f"{ticker}: using current price ${current_price:.2f} as fallback")
+
+                # Save to cache
+                _save_to_db_cache(db, ticker, {date.today(): current_price})
+            else:
+                # Check if we have any cached price at all
+                cached = _get_latest_cached_price(db, ticker)
+                if cached:
+                    cached_date, cached_price = cached
+                    today_df = pd.DataFrame(
+                        {ticker: [cached_price]},
+                        index=pd.DatetimeIndex([datetime.now()])
+                    )
+                    individual_dfs.append(today_df)
+                    partial_tickers[ticker] = cached_date.isoformat()
+                    logger.info(f"{ticker}: using cached price from {cached_date}")
+                else:
+                    failed_tickers.append(ticker)
+                    logger.warning(f"{ticker}: completely failed - {error}")
 
     if not individual_dfs:
-        return pd.DataFrame()
+        return pd.DataFrame(), failed_tickers, partial_tickers
 
-    return pd.concat(individual_dfs, axis=1)
+    # Combine all DataFrames
+    result_df = pd.concat(individual_dfs, axis=1)
+
+    return result_df, failed_tickers, partial_tickers
 
 
-def get_historical_prices(tickers: List[str], period: str = "1y") -> pd.DataFrame:
+def get_historical_prices(
+    tickers: List[str],
+    period: str = "1y",
+    return_metadata: bool = False
+) -> pd.DataFrame | PriceResult:
     """
     Fetch historical close prices for given tickers with persistent DB caching.
 
-    Returns a DataFrame with Date index and ticker columns.
-    Uses PostgreSQL/SQLite for persistent caching across serverless invocations.
+    Resilient handling for leveraged/newer ETFs with limited history:
+    - Tries batch download, falls back to individual
+    - Uses period fallbacks (5y → 2y → 1y → 6mo)
+    - Gets current price for tickers with no history
+    - Never fails completely - always returns available data
+
+    Args:
+        tickers: List of ticker symbols
+        period: Time period (1mo, 3mo, 6mo, 1y, 2y, 5y, max)
+        return_metadata: If True, return PriceResult with metadata
+
+    Returns:
+        DataFrame with Date index and ticker columns (or PriceResult if return_metadata=True)
     """
     if not tickers:
+        if return_metadata:
+            return PriceResult(df=pd.DataFrame())
         return pd.DataFrame()
 
     # Clean and dedupe tickers
     tickers = sorted(set(t.upper().strip() for t in tickers if t and t.strip()))
     if not tickers:
+        if return_metadata:
+            return PriceResult(df=pd.DataFrame())
         return pd.DataFrame()
 
     start_date, end_date = _period_to_date_range(period)
     logger.info(f"Price request: {len(tickers)} tickers, period={period} ({start_date} to {end_date})")
 
     db = SessionLocal()
+    missing_tickers = []
+    partial_tickers = {}
+    failed_tickers = []
+
     try:
         # Step 1: Load from DB cache
         cached_df, missing_dates = _load_from_db_cache(db, tickers, start_date, end_date)
 
-        # If we have complete cache, return it
+        # If we have complete cache for all tickers, return it
         if not missing_dates:
             logger.info(f"Full cache hit: {len(tickers)} tickers")
-            cached_df = cached_df.dropna(how="all").ffill().bfill()
-            return cached_df
+            result_df = cached_df.dropna(how="all").ffill().bfill()
+            if return_metadata:
+                return PriceResult(df=result_df)
+            return result_df
 
-        # Step 2: Fetch missing data from yfinance
+        # Step 2: Fetch missing data from yfinance with resilient handling
         tickers_to_fetch = list(missing_dates.keys())
         logger.info(f"Fetching {len(tickers_to_fetch)} tickers with missing data")
 
-        # Fetch full range for simplicity (yfinance doesn't support sparse date queries)
-        fresh_df = _fetch_from_yfinance(tickers_to_fetch, start_date, end_date)
+        fresh_df, failed, partial = _fetch_from_yfinance_resilient(
+            tickers_to_fetch, start_date, end_date, db
+        )
+
+        failed_tickers = failed
+        partial_tickers = partial
 
         # Step 3: Save new data to DB cache
         if not fresh_df.empty:
@@ -270,8 +461,20 @@ def get_historical_prices(tickers: List[str], period: str = "1y") -> pd.DataFram
         elif fresh_df.empty:
             result_df = cached_df
         else:
-            # Combine: fresh data takes precedence
             result_df = cached_df.combine_first(fresh_df)
+
+        # Step 5: Handle missing tickers - fill with constants if we have any price
+        for ticker in tickers:
+            if ticker not in result_df.columns:
+                # Try to get any cached price
+                cached = _get_latest_cached_price(db, ticker)
+                if cached:
+                    _, price = cached
+                    result_df[ticker] = price
+                    partial_tickers[ticker] = "latest cached"
+                    logger.info(f"Filled {ticker} with cached price: ${price:.2f}")
+                else:
+                    missing_tickers.append(ticker)
 
         # Clean the data
         if not result_df.empty:
@@ -279,18 +482,103 @@ def get_historical_prices(tickers: List[str], period: str = "1y") -> pd.DataFram
 
         # Log final stats
         available = set(result_df.columns) if not result_df.empty else set()
-        missing = set(tickers) - available
-        if missing:
-            logger.warning(f"Missing price data for: {missing}")
+        still_missing = set(tickers) - available
+        if still_missing:
+            missing_tickers = list(still_missing)
+            logger.warning(f"Still missing price data for: {missing_tickers}")
 
-        logger.info(f"Returning {len(result_df)} rows for {len(available)}/{len(tickers)} tickers")
+        is_partial = bool(partial_tickers or missing_tickers or failed_tickers)
+
+        logger.info(
+            f"Returning {len(result_df)} rows for {len(available)}/{len(tickers)} tickers "
+            f"(partial={len(partial_tickers)}, failed={len(failed_tickers)})"
+        )
+
+        if return_metadata:
+            return PriceResult(
+                df=result_df,
+                missing_tickers=missing_tickers,
+                partial_tickers=partial_tickers,
+                failed_tickers=failed_tickers,
+                is_partial=is_partial
+            )
         return result_df
 
     except Exception as e:
         logger.error(f"Price fetch error: {e}")
+        import traceback
+        traceback.print_exc()
         db.rollback()
-        # Fallback to direct yfinance on DB error
-        return _fetch_from_yfinance(tickers, start_date, end_date)
+
+        # Emergency fallback - try direct yfinance
+        try:
+            fresh_df, failed, partial = _fetch_from_yfinance_resilient(
+                tickers, start_date, end_date, db
+            )
+            if return_metadata:
+                return PriceResult(
+                    df=fresh_df,
+                    missing_tickers=failed,
+                    partial_tickers=partial,
+                    failed_tickers=failed,
+                    is_partial=True
+                )
+            return fresh_df
+        except:
+            if return_metadata:
+                return PriceResult(df=pd.DataFrame(), missing_tickers=tickers, is_partial=True)
+            return pd.DataFrame()
+
+    finally:
+        db.close()
+
+
+def refresh_prices_for_portfolio(portfolio_id: int, force: bool = False) -> Dict:
+    """
+    Refresh historical prices for all holdings in a portfolio.
+
+    Args:
+        portfolio_id: Portfolio ID
+        force: If True, clear cache and re-fetch all
+
+    Returns:
+        Dict with refresh stats
+    """
+    from api.models.portfolio import Holding
+
+    db = SessionLocal()
+    try:
+        # Get all tickers for this portfolio
+        holdings = db.query(Holding).filter(
+            Holding.portfolio_id == portfolio_id
+        ).all()
+
+        tickers = list(set(h.ticker.upper() for h in holdings if h.ticker))
+
+        if not tickers:
+            return {"status": "error", "message": "No holdings found"}
+
+        # Optionally clear cache
+        if force:
+            for ticker in tickers:
+                db.query(HistoricalPrice).filter(
+                    HistoricalPrice.ticker == ticker
+                ).delete()
+            db.commit()
+            logger.info(f"Cleared price cache for {len(tickers)} tickers")
+
+        # Fetch fresh prices
+        result = get_historical_prices(tickers, period="5y", return_metadata=True)
+
+        return {
+            "status": "success",
+            "tickers_requested": len(tickers),
+            "tickers_fetched": len(result.df.columns) if not result.df.empty else 0,
+            "missing_tickers": result.missing_tickers,
+            "partial_tickers": result.partial_tickers,
+            "failed_tickers": result.failed_tickers,
+            "data_points": len(result.df) * len(result.df.columns) if not result.df.empty else 0,
+        }
 
     finally:
         db.close()
@@ -298,25 +586,24 @@ def get_historical_prices(tickers: List[str], period: str = "1y") -> pd.DataFram
 
 def get_single_ticker_prices(ticker: str, period: str = "1y") -> Dict[str, float]:
     """Get prices for a single ticker as a date->price dictionary."""
-    df = get_historical_prices([ticker], period)
+    result = get_historical_prices([ticker], period, return_metadata=True)
     ticker = ticker.upper().strip()
 
-    if df.empty:
+    if result.df.empty:
         logger.warning(f"No price data for {ticker}")
         return {}
 
-    if ticker not in df.columns:
-        # Try case-insensitive match
-        matching = [c for c in df.columns if c.upper() == ticker]
+    if ticker not in result.df.columns:
+        matching = [c for c in result.df.columns if c.upper() == ticker]
         if matching:
             ticker = matching[0]
         else:
-            logger.warning(f"Ticker {ticker} not found in columns: {list(df.columns)}")
+            logger.warning(f"Ticker {ticker} not found in columns: {list(result.df.columns)}")
             return {}
 
     return {
-        date.strftime("%Y-%m-%d"): float(price)
-        for date, price in df[ticker].items()
+        dt.strftime("%Y-%m-%d"): float(price)
+        for dt, price in result.df[ticker].items()
         if pd.notna(price)
     }
 
@@ -348,22 +635,30 @@ def get_price_on_date(ticker: str, target_date: date) -> Optional[float]:
                 HistoricalPrice.date >= target_date - timedelta(days=5),
                 HistoricalPrice.date <= target_date + timedelta(days=5)
             )
-        ).order_by(
-            # Order by distance from target date
-            HistoricalPrice.date
-        ).all()
+        ).order_by(HistoricalPrice.date).all()
 
         if nearby:
-            # Find closest date
             closest = min(nearby, key=lambda p: abs((p.date - target_date).days))
             return closest.close_price
 
         # Not in cache - fetch from yfinance
-        df = _fetch_from_yfinance([ticker], target_date - timedelta(days=10), target_date + timedelta(days=5))
-        if df.empty or ticker not in df.columns:
+        df, error = _fetch_single_ticker(
+            ticker,
+            target_date - timedelta(days=10),
+            target_date + timedelta(days=5),
+            fallback_periods=False
+        )
+
+        if df is None or df.empty or ticker not in df.columns:
+            # Try current price
+            current = _get_current_price(ticker)
+            if current:
+                _save_to_db_cache(db, ticker, {date.today(): current})
+                db.commit()
+                return current
             return None
 
-        # Save to cache and return
+        # Save to cache
         ticker_prices = {
             d.date(): float(p)
             for d, p in df[ticker].items()
@@ -372,7 +667,6 @@ def get_price_on_date(ticker: str, target_date: date) -> Optional[float]:
         _save_to_db_cache(db, ticker, ticker_prices)
         db.commit()
 
-        # Find closest to target date
         if ticker_prices:
             closest_date = min(ticker_prices.keys(), key=lambda d: abs((d - target_date).days))
             return ticker_prices[closest_date]

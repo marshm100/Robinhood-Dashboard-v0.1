@@ -7,6 +7,7 @@ from api.services.analysis_service import (
     calculate_time_weighted_performance,
     calculate_portfolio_metrics,
 )
+from api.services.price_service import refresh_prices_for_portfolio
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 
@@ -176,3 +177,31 @@ def get_transactions(
             for t in transactions
         ]
     }
+
+
+@router.post("/refresh-prices/{portfolio_id}")
+def refresh_portfolio_prices(
+    portfolio_id: int,
+    force: bool = Query(False, description="Force re-fetch even if cached"),
+    db: Session = Depends(get_db)
+):
+    """
+    Refresh historical prices for all holdings in a portfolio.
+
+    Use this to update price data for newer ETFs or after market close.
+
+    Args:
+        portfolio_id: Portfolio ID
+        force: If True, clears cache and re-fetches all prices
+
+    Returns:
+        Dict with refresh statistics including partial/failed tickers
+    """
+    portfolio = db.query(Portfolio).filter(Portfolio.id == portfolio_id).first()
+
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+
+    result = refresh_prices_for_portfolio(portfolio_id, force=force)
+
+    return result

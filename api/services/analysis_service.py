@@ -3,6 +3,8 @@ Portfolio analysis service.
 
 Provides time-weighted performance calculation using transaction replay,
 comparing against benchmarks like SPY, QQQ, etc.
+
+Handles partial/missing price data gracefully for leveraged/newer ETFs.
 """
 import logging
 from datetime import date, timedelta
@@ -15,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from api.models.portfolio import Holding, Transaction
 from api.database import SessionLocal
-from .price_service import get_historical_prices
+from .price_service import get_historical_prices, PriceResult
 
 logger = logging.getLogger(__name__)
 
@@ -28,11 +30,11 @@ def calculate_time_weighted_performance(
     """
     Calculate accurate time-weighted portfolio performance using transaction replay.
 
-    This function:
-    1. Loads all transactions for the portfolio
-    2. Sorts by date and replays them chronologically
-    3. Values positions daily using historical prices
-    4. Computes performance metrics (CAGR, max drawdown, alpha, cash drag)
+    Handles partial/missing price data gracefully:
+    - Uses latest available price for tickers with limited history
+    - Fills forward from last known price
+    - Uses cost basis as fallback estimate
+    - Always returns a result (never fails on partial data)
 
     Args:
         portfolio_id: Portfolio ID to analyze
@@ -40,7 +42,7 @@ def calculate_time_weighted_performance(
         db: Optional database session
 
     Returns:
-        Dict with dates, portfolio values, returns, and metrics
+        Dict with dates, portfolio values, returns, metrics, and data quality info
     """
     close_db = False
     if db is None:
@@ -74,20 +76,34 @@ def calculate_time_weighted_performance(
 
         logger.info(f"Fetching prices for {len(all_tickers)} tickers from {start_date} to {end_date}")
 
-        # Fetch historical prices for all tickers
-        prices_df = get_historical_prices(all_tickers, period="5y")
+        # Fetch historical prices with metadata
+        price_result = get_historical_prices(all_tickers, period="5y", return_metadata=True)
+        prices_df = price_result.df
+
+        # Track data quality issues
+        partial_tickers = price_result.partial_tickers.copy()
+        failed_tickers = price_result.failed_tickers.copy()
+        missing_prices: Dict[str, List[date]] = {}
 
         if prices_df.empty:
-            return {"error": "Unable to fetch price data"}
+            return {
+                "error": "Unable to fetch any price data",
+                "failed_tickers": failed_tickers,
+                "partial_tickers": partial_tickers,
+            }
 
         # Check benchmark availability
         benchmark_upper = benchmark.upper()
         if benchmark_upper not in prices_df.columns:
-            return {"error": f"Benchmark {benchmark} not available"}
+            logger.error(f"Benchmark {benchmark} not available")
+            return {
+                "error": f"Benchmark {benchmark} not available",
+                "failed_tickers": failed_tickers,
+                "partial_tickers": partial_tickers,
+            }
 
         # Build price lookup: ticker -> date -> price
         price_lookup: Dict[str, Dict[date, float]] = {}
-        missing_prices: Dict[str, List[date]] = {}
 
         for ticker in all_tickers:
             if ticker in prices_df.columns:
@@ -129,15 +145,12 @@ def calculate_time_weighted_performance(
                     # Adjust positions
                     if t.ticker and t.quantity:
                         if t.trans_type in ["BUY", "CDIV"]:
-                            # Add shares
                             positions[t.ticker] = positions.get(t.ticker, 0) + t.quantity
                             cost_basis[t.ticker] = cost_basis.get(t.ticker, 0) + abs(t.amount)
                         elif t.trans_type == "SELL":
-                            # Remove shares
                             if t.ticker in positions:
                                 positions[t.ticker] = max(0, positions[t.ticker] - t.quantity)
                         elif t.trans_type == "SPLIT":
-                            # Stock split - quantity is new total
                             positions[t.ticker] = t.quantity
 
             # Value positions
@@ -146,34 +159,35 @@ def calculate_time_weighted_performance(
                 if shares <= 0:
                     continue
 
-                # Get price for this date
                 price = None
-                if ticker in price_lookup:
-                    # Try exact date
-                    if current_date in price_lookup[ticker]:
-                        price = price_lookup[ticker][current_date]
-                        last_known_prices[ticker] = price
-                    else:
-                        # Try nearby dates (forward fill)
-                        for days_back in range(1, 10):
-                            lookup_date = current_date - timedelta(days=days_back)
-                            if lookup_date in price_lookup[ticker]:
-                                price = price_lookup[ticker][lookup_date]
-                                last_known_prices[ticker] = price
-                                break
 
-                # Fallback to last known
+                # Try exact date
+                if ticker in price_lookup and current_date in price_lookup[ticker]:
+                    price = price_lookup[ticker][current_date]
+                    last_known_prices[ticker] = price
+
+                # Try nearby dates (forward fill)
+                if price is None and ticker in price_lookup:
+                    for days_back in range(1, 10):
+                        lookup_date = current_date - timedelta(days=days_back)
+                        if lookup_date in price_lookup[ticker]:
+                            price = price_lookup[ticker][lookup_date]
+                            last_known_prices[ticker] = price
+                            break
+
+                # Fallback to last known price
                 if price is None and ticker in last_known_prices:
                     price = last_known_prices[ticker]
 
+                # Last resort: use cost basis estimate
                 if price is None:
-                    # Track missing price
                     if ticker not in missing_prices:
                         missing_prices[ticker] = []
                     missing_prices[ticker].append(current_date)
-                    # Use cost basis as fallback estimate
+
                     if ticker in cost_basis and positions.get(ticker, 0) > 0:
                         price = cost_basis[ticker] / positions[ticker]
+                        logger.debug(f"Using cost basis for {ticker}: ${price:.2f}")
 
                 if price:
                     position_value += shares * price
@@ -188,8 +202,8 @@ def calculate_time_weighted_performance(
         cash_values = np.array(daily_cash)
 
         # Handle edge cases
-        if len(values) == 0 or values[0] == 0:
-            return {"error": "Portfolio has no value at start date"}
+        if len(values) == 0:
+            return {"error": "No data points generated"}
 
         # Filter out leading zeros (before first deposit)
         first_nonzero = 0
@@ -202,18 +216,15 @@ def calculate_time_weighted_performance(
         cash_values = cash_values[first_nonzero:]
         dates = dates[first_nonzero:]
 
-        if len(values) < 2:
+        if len(values) < 2 or values[0] == 0:
             return {"error": "Insufficient data for performance calculation"}
 
-        # Calculate portfolio returns (percentage from first day)
+        # Calculate portfolio returns
         portfolio_returns = (values / values[0] - 1) * 100
 
-        # Get benchmark returns for same period
-        benchmark_dates = [d for d in dates if d in price_lookup.get(benchmark_upper, {})]
-        if not benchmark_dates:
-            return {"error": f"No benchmark data available for {benchmark}"}
+        # Get benchmark returns
+        benchmark_prices = [price_lookup.get(benchmark_upper, {}).get(d) for d in dates]
 
-        benchmark_prices = [price_lookup[benchmark_upper].get(d) for d in dates]
         # Forward fill missing benchmark prices
         last_price = None
         for i in range(len(benchmark_prices)):
@@ -222,10 +233,14 @@ def calculate_time_weighted_performance(
             else:
                 last_price = benchmark_prices[i]
 
-        # Filter dates where we have both portfolio and benchmark
+        # Filter to valid dates
         valid_indices = [i for i, p in enumerate(benchmark_prices) if p is not None]
         if not valid_indices:
-            return {"error": "No overlapping dates between portfolio and benchmark"}
+            return {
+                "error": f"No benchmark data available for {benchmark}",
+                "partial_tickers": partial_tickers,
+                "failed_tickers": failed_tickers,
+            }
 
         first_valid = valid_indices[0]
         benchmark_prices = benchmark_prices[first_valid:]
@@ -250,7 +265,7 @@ def calculate_time_weighted_performance(
         alpha = round(final_portfolio_return - final_benchmark_return, 2)
 
         # CAGR calculation
-        years = len(dates) / 252  # Trading days per year
+        years = len(dates) / 252
         if years > 0 and values[0] > 0:
             cagr = ((values[-1] / values[0]) ** (1 / years) - 1) * 100
         else:
@@ -265,7 +280,7 @@ def calculate_time_weighted_performance(
             drawdown = (peak - v) / peak * 100 if peak > 0 else 0
             max_drawdown = max(max_drawdown, drawdown)
 
-        # Cash drag (average cash % of portfolio)
+        # Cash drag
         cash_percentages = []
         for i in range(len(values)):
             if values[i] > 0:
@@ -274,7 +289,12 @@ def calculate_time_weighted_performance(
 
         # Count missing price days
         total_missing = sum(len(dates_list) for dates_list in missing_prices.values())
-        missing_tickers = list(missing_prices.keys())
+        missing_tickers_list = list(set(list(missing_prices.keys()) + failed_tickers))
+
+        # Determine earliest data date
+        earliest_data = None
+        if dates:
+            earliest_data = dates[0].isoformat()
 
         # Format for response
         dates_str = [d.isoformat() for d in dates]
@@ -296,15 +316,20 @@ def calculate_time_weighted_performance(
             "current_cash": round(float(cash_values[-1]), 2),
             "transactions_replayed": len(transactions),
             "trading_days": len(dates),
-            "missing_price_days": total_missing,
-            "missing_tickers": missing_tickers[:10],  # Limit to first 10
             "has_transaction_history": True,
+            # Data quality info
+            "missing_price_days": total_missing,
+            "missing_tickers": missing_tickers_list[:10],
+            "partial_tickers": partial_tickers,
+            "failed_tickers": failed_tickers,
+            "is_partial": bool(partial_tickers or failed_tickers or total_missing > 0),
+            "earliest_data": earliest_data,
         }
 
         logger.info(
             f"Time-weighted analysis complete: {len(transactions)} transactions, "
             f"portfolio={final_portfolio_return:.2f}%, benchmark={final_benchmark_return:.2f}%, "
-            f"alpha={alpha:.2f}%"
+            f"alpha={alpha:.2f}%, partial={len(partial_tickers)}, failed={len(failed_tickers)}"
         )
 
         return result
@@ -328,8 +353,7 @@ def calculate_portfolio_returns(
     """
     Calculate portfolio time-series returns vs benchmark using current holdings snapshot.
 
-    This is a simpler calculation that assumes positions were held for the entire period.
-    For accurate time-weighted returns using transaction history, use calculate_time_weighted_performance.
+    Handles partial/missing price data gracefully for leveraged/newer ETFs.
 
     Args:
         holdings: List of Holding objects with ticker, shares, cost_basis
@@ -337,7 +361,7 @@ def calculate_portfolio_returns(
         period: Time period (1mo, 3mo, 6mo, 1y, 2y)
 
     Returns:
-        Dict with dates, portfolio_returns, benchmark_returns, and stats
+        Dict with dates, portfolio_returns, benchmark_returns, stats, and data quality info
     """
     # Validate holdings
     valid_holdings = [h for h in holdings if h.shares and h.shares > 0]
@@ -350,27 +374,40 @@ def calculate_portfolio_returns(
 
     logger.info(f"Snapshot analysis: {len(tickers)} tickers, benchmark={benchmark}, period={period}")
 
-    # Fetch price data
-    prices_df = get_historical_prices(all_tickers, period=period)
+    # Fetch price data with metadata
+    price_result = get_historical_prices(all_tickers, period=period, return_metadata=True)
+    prices_df = price_result.df
+
+    # Track data quality
+    partial_tickers = price_result.partial_tickers.copy()
+    failed_tickers = price_result.failed_tickers.copy()
 
     if prices_df.empty:
-        logger.error("Price fetch returned empty DataFrame")
-        return {"error": "Unable to fetch price data"}
+        return {
+            "error": "Unable to fetch any price data",
+            "failed_tickers": failed_tickers,
+            "partial_tickers": partial_tickers,
+        }
 
     # Check which tickers we got
     available_tickers = set(prices_df.columns)
-    missing_tickers = set(tickers) - available_tickers
+    missing_tickers = list(set(tickers) - available_tickers)
     if missing_tickers:
         logger.warning(f"Missing price data for tickers: {missing_tickers}")
 
     benchmark_upper = benchmark.upper()
     if benchmark_upper not in prices_df.columns:
         logger.error(f"Benchmark {benchmark} not in price data columns: {list(prices_df.columns)}")
-        return {"error": f"Unable to fetch benchmark data for {benchmark}"}
+        return {
+            "error": f"Unable to fetch benchmark data for {benchmark}",
+            "failed_tickers": failed_tickers,
+            "partial_tickers": partial_tickers,
+        }
 
-    # Compute daily portfolio value using share weights
+    # Compute daily portfolio value
     portfolio_value = pd.Series(0.0, index=prices_df.index)
     included_holdings = []
+    skipped_holdings = []
     total_cost_basis = Decimal("0")
 
     for h in valid_holdings:
@@ -381,40 +418,58 @@ def calculate_portfolio_returns(
             if h.cost_basis:
                 total_cost_basis += Decimal(str(h.cost_basis))
         else:
+            skipped_holdings.append(h.ticker)
             logger.warning(f"Skipping {h.ticker}: no price data available")
 
     if not included_holdings:
-        logger.error("No holdings had available price data")
-        return {"error": "No price data available for any holdings"}
+        return {
+            "error": "No price data available for any holdings",
+            "skipped_holdings": skipped_holdings,
+            "failed_tickers": failed_tickers,
+            "partial_tickers": partial_tickers,
+        }
 
-    # Check for zero initial value
+    # Handle zero initial value by finding first non-zero
+    first_valid_idx = 0
+    for i, val in enumerate(portfolio_value):
+        if val > 0 and not pd.isna(val):
+            first_valid_idx = i
+            break
+
+    if first_valid_idx > 0:
+        portfolio_value = portfolio_value.iloc[first_valid_idx:]
+        prices_df = prices_df.iloc[first_valid_idx:]
+
     if portfolio_value.iloc[0] == 0 or pd.isna(portfolio_value.iloc[0]):
-        logger.error("Initial portfolio value is zero or NaN")
-        return {"error": "Initial portfolio value is zero - check holdings data"}
+        return {
+            "error": "Initial portfolio value is zero - check holdings data",
+            "skipped_holdings": skipped_holdings,
+        }
 
-    # Calculate percentage returns from start of period
+    # Calculate returns
     portfolio_returns = (portfolio_value / portfolio_value.iloc[0] - 1) * 100
     benchmark_returns = (prices_df[benchmark_upper] / prices_df[benchmark_upper].iloc[0] - 1) * 100
 
     # Format dates
     dates = prices_df.index.strftime("%Y-%m-%d").tolist()
 
-    # Calculate additional metrics
+    # Calculate metrics
     final_portfolio_return = round(float(portfolio_returns.iloc[-1]), 2)
     final_benchmark_return = round(float(benchmark_returns.iloc[-1]), 2)
     alpha = round(final_portfolio_return - final_benchmark_return, 2)
 
-    # Current portfolio value
     current_value = round(float(portfolio_value.iloc[-1]), 2)
     initial_value = round(float(portfolio_value.iloc[0]), 2)
 
-    # Calculate vs cost basis if available
     cost_basis_return = None
     if total_cost_basis > 0:
         cost_basis_return = round(
             float((Decimal(str(current_value)) / total_cost_basis - 1) * 100),
             2
         )
+
+    # Determine earliest data date
+    earliest_data = dates[0] if dates else None
 
     result = {
         "dates": dates,
@@ -430,13 +485,20 @@ def calculate_portfolio_returns(
         "cost_basis_return": cost_basis_return,
         "holdings_included": len(included_holdings),
         "holdings_total": len(valid_holdings),
-        "missing_tickers": list(missing_tickers) if missing_tickers else [],
         "has_transaction_history": False,
+        # Data quality info
+        "missing_tickers": missing_tickers + failed_tickers,
+        "partial_tickers": partial_tickers,
+        "failed_tickers": failed_tickers,
+        "skipped_holdings": skipped_holdings,
+        "is_partial": bool(partial_tickers or failed_tickers or missing_tickers),
+        "earliest_data": earliest_data,
     }
 
     logger.info(
         f"Snapshot analysis complete: portfolio={final_portfolio_return}%, "
-        f"benchmark={final_benchmark_return}%, alpha={alpha}%"
+        f"benchmark={final_benchmark_return}%, alpha={alpha}%, "
+        f"partial={len(partial_tickers)}, failed={len(failed_tickers)}"
     )
     return result
 
@@ -457,19 +519,25 @@ def calculate_portfolio_metrics(holdings: List[Holding]) -> dict:
 
     tickers = [h.ticker.upper() for h in valid_holdings]
 
-    # Get current prices (use 1mo to get recent data)
-    prices_df = get_historical_prices(tickers, period="1mo")
+    # Get current prices with metadata
+    price_result = get_historical_prices(tickers, period="1mo", return_metadata=True)
+    prices_df = price_result.df
 
     if prices_df.empty:
-        return {"error": "Unable to fetch current prices"}
+        return {
+            "error": "Unable to fetch current prices",
+            "failed_tickers": price_result.failed_tickers,
+        }
 
     holdings_data = []
     total_value = Decimal("0")
     total_cost_basis = Decimal("0")
+    missing_holdings = []
 
     for h in valid_holdings:
         ticker_upper = h.ticker.upper()
         if ticker_upper not in prices_df.columns:
+            missing_holdings.append(h.ticker)
             continue
 
         # Get most recent price
@@ -482,6 +550,7 @@ def calculate_portfolio_metrics(holdings: List[Holding]) -> dict:
             "current_price": round(current_price, 2),
             "position_value": round(position_value, 2),
             "cost_basis": h.cost_basis,
+            "is_partial": ticker_upper in price_result.partial_tickers,
         }
 
         if h.cost_basis and h.cost_basis > 0:
@@ -493,6 +562,12 @@ def calculate_portfolio_metrics(holdings: List[Holding]) -> dict:
 
         total_value += Decimal(str(position_value))
         holdings_data.append(holding_info)
+
+    if not holdings_data:
+        return {
+            "error": "No holdings with available price data",
+            "missing_holdings": missing_holdings,
+        }
 
     # Calculate allocation percentages
     for h in holdings_data:
@@ -509,6 +584,8 @@ def calculate_portfolio_metrics(holdings: List[Holding]) -> dict:
         "total_cost_basis": round(float(total_cost_basis), 2) if total_cost_basis > 0 else None,
         "holdings_count": len(holdings_data),
         "holdings": holdings_data,
+        "missing_holdings": missing_holdings,
+        "partial_tickers": price_result.partial_tickers,
     }
 
     if total_cost_basis > 0:

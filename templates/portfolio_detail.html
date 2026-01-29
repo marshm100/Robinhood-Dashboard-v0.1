@@ -63,7 +63,7 @@
             <h3 class="text-xl font-semibold">Performance vs Benchmark</h3>
             <p id="analysisMode" class="text-sm text-gray-500 mt-1"></p>
         </div>
-        <div class="flex space-x-4 items-center">
+        <div class="flex space-x-4 items-center flex-wrap gap-2">
             <select id="benchmarkSelect" class="px-4 py-2 border border-gray-300 rounded-lg">
                 <option value="SPY" selected>SPY (S&P 500)</option>
                 <option value="QQQ">QQQ (Nasdaq 100)</option>
@@ -83,6 +83,12 @@
                 <input type="checkbox" id="showCash" class="mr-2 hidden">
                 <span id="showCashLabel" class="hidden">Show Cash</span>
             </label>
+            <button id="refreshPrices" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition flex items-center" title="Refresh price data for all holdings">
+                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+                <span id="refreshPricesText">Refresh Prices</span>
+            </button>
             <button id="refreshChart" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center">
                 <span id="refreshText">Refresh</span>
                 <svg id="refreshSpinner" class="hidden animate-spin ml-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -90,6 +96,21 @@
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
             </button>
+        </div>
+    </div>
+
+    <!-- Partial Data Warning Banner -->
+    <div id="partialDataBanner" class="hidden mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+        <div class="flex items-start">
+            <svg class="w-5 h-5 text-yellow-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            <div class="flex-1">
+                <p class="font-medium text-yellow-800">Partial Historical Data</p>
+                <p id="partialDataMessage" class="text-sm text-yellow-700 mt-1">Some ETFs have limited price history. Chart uses available data with latest prices for newer positions.</p>
+                <div id="partialTickersList" class="mt-2 text-sm text-yellow-600"></div>
+                <p id="earliestDataNote" class="mt-2 text-xs text-yellow-600"></p>
+            </div>
         </div>
     </div>
 
@@ -195,6 +216,59 @@ function hideError() {
     document.getElementById('chartError').classList.add('hidden');
 }
 
+function showPartialDataBanner(data) {
+    const banner = document.getElementById('partialDataBanner');
+    const message = document.getElementById('partialDataMessage');
+    const tickersList = document.getElementById('partialTickersList');
+    const earliestNote = document.getElementById('earliestDataNote');
+
+    const partialTickers = data.partial_tickers || {};
+    const failedTickers = data.failed_tickers || [];
+    const missingTickers = data.missing_tickers || [];
+
+    const hasIssues = Object.keys(partialTickers).length > 0 || failedTickers.length > 0 || missingTickers.length > 0;
+
+    if (!hasIssues) {
+        banner.classList.add('hidden');
+        return;
+    }
+
+    banner.classList.remove('hidden');
+
+    // Build message
+    const issues = [];
+    if (Object.keys(partialTickers).length > 0) {
+        issues.push(`${Object.keys(partialTickers).length} ticker(s) with limited history`);
+    }
+    if (failedTickers.length > 0) {
+        issues.push(`${failedTickers.length} ticker(s) with no data available`);
+    }
+
+    message.textContent = `Some positions have limited price history (common for leveraged/newer ETFs like BITU, TSLL, NVDU). Chart shows available data with latest prices for recent positions.`;
+
+    // Build tickers list
+    const tickerDetails = [];
+    for (const [ticker, since] of Object.entries(partialTickers)) {
+        tickerDetails.push(`${ticker} (since ${since})`);
+    }
+    if (failedTickers.length > 0) {
+        tickerDetails.push(...failedTickers.map(t => `${t} (no data)`));
+    }
+
+    if (tickerDetails.length > 0) {
+        tickersList.innerHTML = `<span class="font-medium">Affected:</span> ${tickerDetails.slice(0, 5).join(', ')}${tickerDetails.length > 5 ? ` +${tickerDetails.length - 5} more` : ''}`;
+    } else {
+        tickersList.innerHTML = '';
+    }
+
+    // Earliest data note
+    if (data.earliest_data) {
+        earliestNote.textContent = `Chart data available from ${data.earliest_data}`;
+    } else {
+        earliestNote.textContent = '';
+    }
+}
+
 function formatCurrency(value) {
     return new Intl.NumberFormat('en-US', {
         style: 'currency',
@@ -240,7 +314,6 @@ function drawChart(data) {
     // Add cash line if available and checkbox is checked
     const showCash = document.getElementById('showCash').checked;
     if (showCash && data.cash_values && data.portfolio_values) {
-        // Calculate cash as percentage of portfolio
         const cashPercent = data.cash_values.map((c, i) =>
             data.portfolio_values[i] > 0 ? (c / data.portfolio_values[i]) * 100 : 0
         );
@@ -325,6 +398,43 @@ function drawChart(data) {
     });
 }
 
+async function refreshPrices() {
+    const btn = document.getElementById('refreshPrices');
+    const btnText = document.getElementById('refreshPricesText');
+
+    btn.disabled = true;
+    btnText.textContent = 'Refreshing...';
+
+    try {
+        const response = await fetch(`/api/analysis/refresh-prices/${portfolioId}?force=true`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            btnText.textContent = 'Done!';
+            setTimeout(() => {
+                btnText.textContent = 'Refresh Prices';
+                btn.disabled = false;
+                loadChartData(); // Reload the chart with fresh data
+            }, 1000);
+        } else {
+            btnText.textContent = 'Error';
+            setTimeout(() => {
+                btnText.textContent = 'Refresh Prices';
+                btn.disabled = false;
+            }, 2000);
+        }
+    } catch (err) {
+        console.error('Refresh error:', err);
+        btnText.textContent = 'Error';
+        setTimeout(() => {
+            btnText.textContent = 'Refresh Prices';
+            btn.disabled = false;
+        }, 2000);
+    }
+}
+
 async function loadChartData() {
     if (isLoading) return;
 
@@ -338,6 +448,7 @@ async function loadChartData() {
     hideError();
     statsDiv.classList.add('hidden');
     advancedStats.classList.add('hidden');
+    document.getElementById('partialDataBanner').classList.add('hidden');
 
     try {
         const response = await fetch(`/api/analysis/compare/${portfolioId}?benchmark=${benchmark}&period=${period}`);
@@ -350,6 +461,9 @@ async function loadChartData() {
         }
 
         currentData = data;
+
+        // Show partial data banner if needed
+        showPartialDataBanner(data);
 
         // Determine analysis mode
         const isTimeWeighted = data.has_transaction_history === true;
@@ -392,18 +506,6 @@ async function loadChartData() {
         // Draw chart
         drawChart(data);
 
-        // Show warnings
-        const warnings = [];
-        if (data.missing_tickers && data.missing_tickers.length > 0) {
-            warnings.push(`Missing price data for: ${data.missing_tickers.join(', ')}`);
-        }
-        if (data.missing_price_days && data.missing_price_days > 0) {
-            warnings.push(`${data.missing_price_days} price data points interpolated`);
-        }
-        if (warnings.length > 0) {
-            showError(warnings.join('. '), true);
-        }
-
     } catch (err) {
         setLoading(false);
         showError(`Error loading chart: ${err.message}`);
@@ -413,6 +515,7 @@ async function loadChartData() {
 
 // Event listeners
 document.getElementById('refreshChart').addEventListener('click', loadChartData);
+document.getElementById('refreshPrices').addEventListener('click', refreshPrices);
 document.getElementById('benchmarkSelect').addEventListener('change', loadChartData);
 document.getElementById('periodSelect').addEventListener('change', loadChartData);
 document.getElementById('showCash').addEventListener('change', () => {
