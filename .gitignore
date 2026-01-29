@@ -138,6 +138,11 @@ dmypy.json
 *.db
 *.sqlite
 *.sqlite3
+data/*.db
+!data/.gitkeep
+
+# Price cache (yfinance)
+yfinance_cache/
 
 # Upload directories
 uploads/

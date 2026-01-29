@@ -9,9 +9,24 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 
-DATABASE_URL = os.getenv("POSTGRES_URL", os.getenv("DATABASE_URL", "sqlite:////tmp/portfolio.db"))
-# Vercel injects POSTGRES_URL; fallback to SQLite local
+# Database configuration
+# Priority order for Vercel PostgreSQL:
+# 1. POSTGRES_URL_NON_POOLING - Best for serverless (no connection pooling)
+# 2. POSTGRES_URL - Standard Vercel Postgres URL
+# 3. DATABASE_URL - Generic database URL
+# 4. SQLite fallback - Local development only
+DATABASE_URL = (
+    os.getenv("POSTGRES_URL_NON_POOLING") or
+    os.getenv("POSTGRES_URL") or
+    os.getenv("DATABASE_URL") or
+    "sqlite:///./data/portfolio.db"  # Local dev - persistent in project dir
+)
+
+# Vercel Postgres URLs use 'postgres://' but SQLAlchemy needs 'postgresql://'
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
 
+# Legacy config - stockr_backbone was never implemented
 STOCKR_DB_PATH = os.getenv("STOCKR_DB_PATH", "stockr_backbone/stockr.db")
