@@ -1,12 +1,16 @@
 import pandas as pd
 from typing import List
+from sqlalchemy.orm import Session
+
 from api.models.portfolio import Holding
-from .price_service import get_historical_prices
+from .stock_price_service import get_prices_dataframe
+
 
 def calculate_portfolio_returns(
     holdings: List[Holding],
+    db: Session,
     benchmark: str = "SPY",
-    period: str = "1y"
+    period: str = "1y",
 ) -> dict:
     valid_holdings = [h for h in holdings if h.shares > 0]
     if not valid_holdings:
@@ -16,7 +20,7 @@ def calculate_portfolio_returns(
     all_tickers = tickers + [benchmark]
 
     print(f"Analysis request: tickers={tickers}, benchmark={benchmark}, period={period}")
-    prices_df = get_historical_prices(all_tickers, period=period)
+    prices_df = get_prices_dataframe(all_tickers, db, period=period)
     if prices_df.empty or benchmark not in prices_df.columns:
         print("Price fetch returned empty - insufficient data")
         return {"error": "Insufficient price data"}

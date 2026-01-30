@@ -275,6 +275,53 @@ def get_close_price_on_date(
 
 
 # ---------------------------------------------------------------------------
+# DataFrame output (drop-in replacement for price_service.get_historical_prices)
+# ---------------------------------------------------------------------------
+
+PERIOD_DAYS = {
+    "1mo": 30, "3mo": 90, "6mo": 180,
+    "1y": 365, "2y": 730, "5y": 1825, "max": 3650,
+}
+
+
+def get_prices_dataframe(
+    tickers: List[str],
+    db: Session,
+    period: str = "1y",
+):
+    """
+    Cache-first replacement for ``price_service.get_historical_prices()``.
+
+    Returns a :class:`pandas.DataFrame` with **Close** prices where
+    columns = tickers (uppercased), index = ``DatetimeIndex``, matching
+    the exact shape that ``analysis_service`` expects.
+    """
+    import pandas as pd
+
+    days = PERIOD_DAYS.get(period, 365)
+    start_date = date.today() - timedelta(days=days)
+
+    series: Dict[str, "pd.Series"] = {}
+    for ticker in tickers:
+        t = ticker.strip().upper()
+        prices = get_prices(t, db, start_date=start_date)
+        if prices:
+            df = pd.DataFrame(prices)
+            df["date"] = pd.to_datetime(df["date"])
+            df = df.set_index("date")
+            series[t] = df["close"]
+
+    if not series:
+        return pd.DataFrame()
+
+    result = pd.DataFrame(series)
+    # Forward-fill then back-fill to align tickers with slightly different
+    # trading calendars, matching the old yfinance-based service behaviour.
+    result = result.dropna(how="all").ffill().bfill()
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Ticker discovery
 # ---------------------------------------------------------------------------
 
