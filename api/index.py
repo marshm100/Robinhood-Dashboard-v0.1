@@ -73,9 +73,6 @@ app.include_router(upload_router)
 from api.routes.cron import router as cron_router
 app.include_router(cron_router)
 
-from api.routes.debug import router as debug_router
-app.include_router(debug_router)
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("index:app", host="0.0.0.0", port=8000, reload=True)
