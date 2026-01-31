@@ -1,3 +1,4 @@
+import logging
 from datetime import date, datetime
 from typing import Optional
 
@@ -6,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from api.database import get_db
 from api.services.stock_price_service import get_prices, fetch_and_store
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/stockr", tags=["stockr"])
 
@@ -51,3 +54,24 @@ def trigger_fetch(
     """Manually trigger a fetch for a specific ticker."""
     added = fetch_and_store(ticker, db, incremental=incremental)
     return {"ticker": ticker.upper(), "records_added": added}
+
+
+@router.get("/prime-cache/{ticker}")
+def prime_cache(ticker: str, db: Session = Depends(get_db)):
+    """
+    GET-friendly full historical fetch for a ticker.
+    Forces incremental=False so the entire history is pulled on first use.
+    Curl-friendly: GET /api/stockr/prime-cache/BITU
+    """
+    symbol = ticker.strip().upper()
+    try:
+        added = fetch_and_store(symbol, db, incremental=False)
+        logger.info("prime-cache %s: %d records added", symbol, added)
+        return {
+            "ticker": symbol,
+            "records_added": added,
+            "source": "stooq with yfinance fallback",
+        }
+    except Exception as exc:
+        logger.error("prime-cache %s failed: %s", symbol, exc)
+        return {"ticker": symbol, "records_added": 0, "error": str(exc)}
