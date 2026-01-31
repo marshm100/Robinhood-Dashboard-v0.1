@@ -51,9 +51,14 @@ async def portfolios_list(request: Request, db: Session = Depends(get_db)):
 
 @app.on_event("startup")
 def startup():
+    import logging
+    logger = logging.getLogger(__name__)
     print("App starting - Vercel serverless")
     from api.database import init_db
     init_db()
+    internal_routes = [r.path for r in app.routes if hasattr(r, "path") and "/internal" in r.path]
+    logger.info("Mounted /internal routes: %s", internal_routes)
+    print(f"Mounted /internal routes: {internal_routes}")
 
 from api.routes.health import router as health_router
 app.include_router(health_router)

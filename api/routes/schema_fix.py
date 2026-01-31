@@ -23,6 +23,12 @@ REQUIRED_HP_COLUMNS = {"id", "stock_id", "date", "open", "high", "low", "close",
 REQUIRED_STOCK_COLUMNS = {"id", "symbol"}
 
 
+@router.get("/ping")
+def ping():
+    """Minimal test: if this returns, the schema_fix router is mounted."""
+    return {"status": "internal_router_ok", "message": "If you see this, /api/internal prefix is mounted"}
+
+
 @router.get("/schema-fix/stock-cache")
 def fix_stock_cache_schema(db: Session = Depends(get_db)):
     """
