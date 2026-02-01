@@ -17,7 +17,6 @@ from typing import Dict, List, Optional
 
 import httpx
 from sqlalchemy import distinct, func
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.models.portfolio import HistoricalPrice, Holding, Stock
@@ -264,42 +263,64 @@ def fetch_and_store(symbol: str, db: Session, incremental: bool = True) -> dict:
     records_added = 0
 
     if not incremental:
-        # FULL FETCH (prime-cache): skip per-row duplicate SELECT entirely.
-        # Flush any pending state so our inserts start clean, then use
-        # individual add() + commit in batches, relying on the DB unique
-        # constraint (stock_id, date) to reject real duplicates.
-        db.flush()
-        for cand in candidates:
-            hp = HistoricalPrice(
-                stock_id=stock.id,
-                date=cand["date"],
-                open=cand["open"],
-                high=cand["high"],
-                low=cand["low"],
-                close=cand["close"],
-                volume=cand["volume"],
-            )
-            try:
-                db.add(hp)
-                db.flush()
-                records_added += 1
-            except IntegrityError:
-                db.rollback()
-                # Re-fetch stock after rollback (session state cleared)
-                stock = _get_or_create_stock(db, symbol)
-                skip_reasons["duplicate"] = skip_reasons.get("duplicate", 0) + 1
-                if len(sample_skipped_dates) < 10:
-                    sample_skipped_dates.append(cand["date"].isoformat())
-                if skip_reasons["duplicate"] <= 5:
-                    logger.debug(
-                        "%s: duplicate on date %s (IntegrityError, expected for reprimes)",
-                        symbol, cand["date"],
-                    )
+        # FULL FETCH (prime-cache): batch INSERT … ON CONFLICT DO NOTHING.
+        # No per-row SELECT, no per-row flush.  The DB unique constraint
+        # (uq_stock_date) silently skips rows that already exist.
+        db.flush()  # flush any pending ORM state (e.g. new Stock row)
 
-        if records_added:
-            db.commit()
+        # Dialect-specific insert with on_conflict_do_nothing
+        dialect_name = db.bind.dialect.name
+        if dialect_name == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as dialect_insert
+        else:
+            from sqlalchemy.dialects.sqlite import insert as dialect_insert
+
+        rows = [
+            {
+                "stock_id": stock.id,
+                "date": cand["date"],
+                "open": cand["open"],
+                "high": cand["high"],
+                "low": cand["low"],
+                "close": cand["close"],
+                "volume": cand["volume"],
+            }
+            for cand in candidates
+        ]
+
+        logger.info(
+            "Batch insert for full fetch %s: candidates=%d, existing_before=%d",
+            symbol, len(rows), existing_count,
+        )
+
+        # Insert in chunks of 500 to stay within DB parameter limits
+        CHUNK = 500
+        for i in range(0, len(rows), CHUNK):
+            chunk = rows[i : i + CHUNK]
+            stmt = dialect_insert(HistoricalPrice.__table__).values(chunk)
+            stmt = stmt.on_conflict_do_nothing(
+                index_elements=["stock_id", "date"],
+            )
+            result_proxy = db.execute(stmt)
+            records_added += result_proxy.rowcount
+
+        db.commit()
+
+        db_ignored = len(candidates) - records_added
+        if db_ignored > 0:
+            skip_reasons["db_ignored_duplicate"] = db_ignored
+            # Sample a few dates that were already present
+            if existing_count > 0:
+                existing_dates = (
+                    db.query(HistoricalPrice.date)
+                    .filter(HistoricalPrice.stock_id == stock.id)
+                    .order_by(HistoricalPrice.date.desc())
+                    .limit(10)
+                    .all()
+                )
+                sample_skipped_dates = [d.isoformat() for (d,) in existing_dates]
     else:
-        # INCREMENTAL: per-row duplicate check is fine (small number of rows)
+        # INCREMENTAL: per-row duplicate check (small row counts expected)
         for cand in candidates:
             exists = (
                 db.query(HistoricalPrice.id)
