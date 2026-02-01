@@ -55,7 +55,7 @@ def portfolio_detail(
     request: Request,
     portfolio_id: int,
     benchmark: str = "SPY",
-    period: str = "1y",
+    period: str = "all",
     db: Session = Depends(get_db),
 ):
     portfolio = (

@@ -73,7 +73,9 @@ def calculate_portfolio_returns(
     all_tickers = tickers + [benchmark]
 
     print(f"Analysis request: tickers={tickers}, benchmark={benchmark}, period={period}")
-    prices_df = get_historical_prices(all_tickers, period=period)
+    # Map user-facing "all" to yfinance's "max" period
+    yf_period = "max" if period == "all" else period
+    prices_df = get_historical_prices(all_tickers, period=yf_period)
     if prices_df.empty or benchmark not in prices_df.columns:
         print("Price fetch returned empty - insufficient data")
         return {"error": "Insufficient price data"}

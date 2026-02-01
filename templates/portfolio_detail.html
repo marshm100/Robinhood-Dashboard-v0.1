@@ -28,16 +28,46 @@
 </div>
 
 {% else %}
-{# ── Period selector ─────────────────────────────────────────────── #}
-<div class="mb-8 flex gap-2">
-    {% for p in ["3mo", "6mo", "1y", "2y", "5y"] %}
-    <a href="/portfolio/{{ portfolio.id }}?period={{ p }}&benchmark={{ analysis.benchmark }}"
-       class="px-4 py-2 rounded-lg text-sm font-medium transition
-              {% if analysis.period == p %}bg-indigo-600 text-white{% else %}bg-white text-gray-700 hover:bg-gray-100 shadow-sm{% endif %}">
-        {{ p }}
-    </a>
-    {% endfor %}
+{# ── Controls: period tabs + benchmark dropdown ──────────────────── #}
+<div class="mb-6 flex flex-wrap items-center gap-4">
+    <div class="flex gap-2 flex-wrap">
+        {% set periods = [("all", "All"), ("3mo", "3M"), ("6mo", "6M"), ("1y", "1Y"), ("2y", "2Y"), ("5y", "5Y")] %}
+        {% for key, label in periods %}
+        <a href="/portfolio/{{ portfolio.id }}?period={{ key }}&benchmark={{ analysis.benchmark }}"
+           class="px-4 py-2 rounded-lg text-sm font-medium transition
+                  {% if analysis.period == key %}bg-indigo-600 text-white{% else %}bg-white text-gray-700 hover:bg-gray-100 shadow-sm{% endif %}">
+            {{ label }}
+        </a>
+        {% endfor %}
+    </div>
+    <div class="flex items-center gap-2 ml-auto">
+        <label class="text-sm text-gray-500">Benchmark</label>
+        <select id="benchmark-select"
+                class="text-sm bg-white border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+            {% set benchmarks = [
+                ("SPY",   "S&P 500 (SPY)"),
+                ("QQQ",   "Nasdaq 100 (QQQ)"),
+                ("DIA",   "Dow 30 (DIA)"),
+                ("IWM",   "Russell 2000 (IWM)"),
+                ("EFA",   "Int'l Developed (EFA)"),
+                ("EEM",   "Emerging Mkts (EEM)"),
+                ("GLD",   "Gold (GLD)"),
+                ("TLT",   "20Y+ Treasury (TLT)"),
+                ("BND",   "Total Bond (BND)"),
+            ] %}
+            {% for val, label in benchmarks %}
+            <option value="{{ val }}" {% if analysis.benchmark == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
 </div>
+
+{# ── Short history warning ───────────────────────────────────────── #}
+{% if analysis["dates"] | length < 30 %}
+<div class="mb-6 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-amber-800 text-sm">
+    Limited price history available ({{ analysis["dates"] | length }} trading days) — some metrics may show N/A.
+</div>
+{% endif %}
 
 {# ── Key metrics cards ───────────────────────────────────────────── #}
 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-4">
@@ -313,6 +343,13 @@
             },
         });
     }
+
+    /* ── 4. Benchmark dropdown navigation ────────────────────────── */
+    document.getElementById('benchmark-select').addEventListener('change', function() {
+        const url = new URL(window.location);
+        url.searchParams.set('benchmark', this.value);
+        window.location = url;
+    });
 })();
 </script>
 {% endif %}
