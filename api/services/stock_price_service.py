@@ -17,6 +17,7 @@ from typing import Dict, List, Optional
 
 import httpx
 from sqlalchemy import distinct, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.models.portfolio import HistoricalPrice, Holding, Stock
@@ -124,15 +125,33 @@ def fetch_and_store(symbol: str, db: Session, incremental: bool = True) -> dict:
     Fetch daily OHLCV for *symbol* from Stooq (primary) or yfinance (fallback),
     store new rows in DB.
 
-    Returns dict: {"records_added": int, "source": str, "skip_reasons": dict}
+    Returns dict: {"records_added": int, "source": str, "skip_reasons": dict,
+                    "total_csv_rows": int, "sample_skipped_dates": list}
     """
-    result = {"records_added": 0, "source": "none", "skip_reasons": {}}
+    result: Dict = {
+        "records_added": 0,
+        "source": "none",
+        "skip_reasons": {},
+        "total_csv_rows": 0,
+        "sample_skipped_dates": [],
+    }
     symbol = symbol.strip().upper()
     if not symbol or not symbol.replace(".", "").replace("-", "").isalnum():
         result["skip_reasons"]["invalid_symbol"] = 1
         return result
 
     stock = _get_or_create_stock(db, symbol)
+
+    # --- Diagnostic: log stock_id and existing row count ---
+    existing_count = (
+        db.query(func.count(HistoricalPrice.id))
+        .filter(HistoricalPrice.stock_id == stock.id)
+        .scalar()
+    ) or 0
+    logger.info(
+        "fetch_and_store %s: stock_id=%s, existing_rows=%d, incremental=%s",
+        symbol, stock.id, existing_count, incremental,
+    )
 
     # Determine start date for incremental fetch
     start_date: Optional[date] = None
@@ -162,9 +181,10 @@ def fetch_and_store(symbol: str, db: Session, incremental: bool = True) -> dict:
 
     result["source"] = source
 
-    # Parse CSV and insert rows — robust, case-insensitive field handling
-    records_added = 0
+    # --- Parse CSV rows into candidate records first, then bulk-insert ---
     skip_reasons: Dict[str, int] = {}
+    sample_skipped_dates: List[str] = []
+    candidates: list = []
     reader = csv.DictReader(StringIO(csv_text))
     total_rows = 0
 
@@ -209,7 +229,7 @@ def fetch_and_store(symbol: str, db: Session, incremental: bool = True) -> dict:
             close = float(close_str)
         except (ValueError, TypeError):
             skip_reasons["close_not_numeric"] = skip_reasons.get("close_not_numeric", 0) + 1
-            if skip_reasons["close_not_numeric"] <= 5:
+            if skip_reasons.get("close_not_numeric", 0) <= 5:
                 logger.warning("%s: close not numeric: %r", symbol, close_str)
             continue
 
@@ -226,42 +246,105 @@ def fetch_and_store(symbol: str, db: Session, incremental: bool = True) -> dict:
         if total_rows <= 5:
             logger.info("%s row %d parsed close=%.4f", symbol, total_rows, close)
 
-        # Skip duplicates
-        exists = (
-            db.query(HistoricalPrice.id)
-            .filter(
-                HistoricalPrice.stock_id == stock.id,
-                HistoricalPrice.date == row_date,
-            )
-            .first()
-        )
-        if exists:
-            skip_reasons["duplicate"] = skip_reasons.get("duplicate", 0) + 1
-            continue
-
-        db.add(
-            HistoricalPrice(
-                stock_id=stock.id,
-                date=row_date,
-                open=open_,
-                high=high,
-                low=low,
-                close=close,
-                volume=volume,
-            )
-        )
-        records_added += 1
-
-    if records_added:
-        db.commit()
+        candidates.append({
+            "date": row_date,
+            "close": close,
+            "open": open_,
+            "high": high,
+            "low": low,
+            "volume": volume,
+        })
 
     logger.info(
-        "fetch_and_store %s: source=%s, total_csv_rows=%d, records_added=%d, skip_reasons=%s",
-        symbol, source, total_rows, records_added, skip_reasons,
+        "%s: parsed %d candidates from %d CSV rows (skips so far: %s)",
+        symbol, len(candidates), total_rows, skip_reasons,
+    )
+
+    # --- Insert phase: strategy depends on incremental flag ---
+    records_added = 0
+
+    if not incremental:
+        # FULL FETCH (prime-cache): skip per-row duplicate SELECT entirely.
+        # Flush any pending state so our inserts start clean, then use
+        # individual add() + commit in batches, relying on the DB unique
+        # constraint (stock_id, date) to reject real duplicates.
+        db.flush()
+        for cand in candidates:
+            hp = HistoricalPrice(
+                stock_id=stock.id,
+                date=cand["date"],
+                open=cand["open"],
+                high=cand["high"],
+                low=cand["low"],
+                close=cand["close"],
+                volume=cand["volume"],
+            )
+            try:
+                db.add(hp)
+                db.flush()
+                records_added += 1
+            except IntegrityError:
+                db.rollback()
+                # Re-fetch stock after rollback (session state cleared)
+                stock = _get_or_create_stock(db, symbol)
+                skip_reasons["duplicate"] = skip_reasons.get("duplicate", 0) + 1
+                if len(sample_skipped_dates) < 10:
+                    sample_skipped_dates.append(cand["date"].isoformat())
+                if skip_reasons["duplicate"] <= 5:
+                    logger.debug(
+                        "%s: duplicate on date %s (IntegrityError, expected for reprimes)",
+                        symbol, cand["date"],
+                    )
+
+        if records_added:
+            db.commit()
+    else:
+        # INCREMENTAL: per-row duplicate check is fine (small number of rows)
+        for cand in candidates:
+            exists = (
+                db.query(HistoricalPrice.id)
+                .filter(
+                    HistoricalPrice.stock_id == stock.id,
+                    HistoricalPrice.date == cand["date"],
+                )
+                .scalar()
+            )
+            if exists is not None:
+                skip_reasons["duplicate"] = skip_reasons.get("duplicate", 0) + 1
+                if len(sample_skipped_dates) < 10:
+                    sample_skipped_dates.append(cand["date"].isoformat())
+                if skip_reasons.get("duplicate", 0) <= 5:
+                    logger.debug(
+                        "%s: skipping duplicate date %s (existing id=%s)",
+                        symbol, cand["date"], exists,
+                    )
+                continue
+
+            db.add(
+                HistoricalPrice(
+                    stock_id=stock.id,
+                    date=cand["date"],
+                    open=cand["open"],
+                    high=cand["high"],
+                    low=cand["low"],
+                    close=cand["close"],
+                    volume=cand["volume"],
+                )
+            )
+            records_added += 1
+
+        if records_added:
+            db.commit()
+
+    logger.info(
+        "fetch_and_store %s: source=%s, total_csv_rows=%d, candidates=%d, "
+        "records_added=%d, skip_reasons=%s",
+        symbol, source, total_rows, len(candidates), records_added, skip_reasons,
     )
     result["records_added"] = records_added
     result["skip_reasons"] = skip_reasons
     result["total_csv_rows"] = total_rows
+    result["sample_skipped_dates"] = sample_skipped_dates
     return result
 
 

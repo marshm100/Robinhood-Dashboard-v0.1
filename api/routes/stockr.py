@@ -73,9 +73,11 @@ def prime_cache(ticker: str, db: Session = Depends(get_db)):
             "source": res.get("source", "stooq with yfinance fallback"),
             "total_csv_rows": res.get("total_csv_rows", 0),
         }
-        # Include skip diagnostics when nothing was added
-        if res["records_added"] == 0 and res.get("skip_reasons"):
+        # Include skip diagnostics when nothing was added or duplicates found
+        if res.get("skip_reasons"):
             response["skip_reasons"] = res["skip_reasons"]
+        if res.get("sample_skipped_dates"):
+            response["sample_skipped_dates"] = res["sample_skipped_dates"]
         return response
     except Exception as exc:
         logger.error("prime-cache %s failed: %s", symbol, exc, exc_info=True)
