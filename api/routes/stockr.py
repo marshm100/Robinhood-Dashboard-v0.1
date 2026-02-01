@@ -52,8 +52,12 @@ def trigger_fetch(
     db: Session = Depends(get_db),
 ):
     """Manually trigger a fetch for a specific ticker."""
-    added = fetch_and_store(ticker, db, incremental=incremental)
-    return {"ticker": ticker.upper(), "records_added": added}
+    result = fetch_and_store(ticker, db, incremental=incremental)
+    return {
+        "ticker": ticker.upper(),
+        "records_added": result["added"],
+        "source": result["source"],
+    }
 
 
 @router.get("/prime-cache/{ticker}")
@@ -65,13 +69,19 @@ def prime_cache(ticker: str, db: Session = Depends(get_db)):
     """
     symbol = ticker.strip().upper()
     try:
-        added = fetch_and_store(symbol, db, incremental=False)
-        logger.info("prime-cache %s: %d records added", symbol, added)
+        result = fetch_and_store(symbol, db, incremental=False)
+        logger.info(
+            "prime-cache %s: %d added from %s (parsed=%d skipped=%d)",
+            symbol, result["added"], result["source"],
+            result["parsed"], result["skipped"],
+        )
         return {
             "ticker": symbol,
-            "records_added": added,
-            "source": "stooq with yfinance fallback",
+            "records_added": result["added"],
+            "source": result["source"],
+            "parsed": result["parsed"],
+            "skipped": result["skipped"],
         }
     except Exception as exc:
         logger.error("prime-cache %s failed: %s", symbol, exc)
-        return {"ticker": symbol, "records_added": 0, "error": str(exc)}
+        return {"ticker": symbol, "records_added": 0, "source": "error", "error": str(exc)}
