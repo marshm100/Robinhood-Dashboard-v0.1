@@ -63,23 +63,27 @@
 </div>
 
 {# ── Limited history warning banner ──────────────────────────────── #}
-{% if not analysis.has_history %}
-<div class="mb-6 bg-amber-50 border border-amber-200 rounded-lg px-5 py-4 text-amber-800">
+{% if analysis.warning == "limited_history" or not analysis.has_history %}
+<div class="mb-6 bg-yellow-100 border border-yellow-400 rounded-lg px-5 py-4 text-yellow-800">
     <p class="font-medium">Limited or no historical price data available</p>
-    <p class="text-sm mt-1">This is common for newly-listed or leveraged ETFs. Current valuation and sector allocation are shown below. Returns, drawdown, and risk charts require more history.</p>
+    <p class="text-sm mt-1">This is common for recently launched or leveraged ETFs (e.g. BITU).
+        Returns, drawdown, and risk metrics are unavailable &mdash; current valuation and sector allocation are shown below.</p>
 </div>
 {% elif analysis["dates"] | length < 30 %}
-<div class="mb-6 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-amber-800 text-sm">
+<div class="mb-6 bg-yellow-100 border border-yellow-400 rounded-lg px-4 py-3 text-yellow-800 text-sm">
     Limited price history available ({{ analysis["dates"] | length }} trading days) — some metrics may show N/A.
 </div>
 {% endif %}
 
 {# ── Current value card (always shown) ───────────────────────────── #}
-{% if analysis.current_value %}
 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-6">
     <div class="bg-white rounded-lg shadow p-5">
         <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Current Value</p>
+        {% if analysis.current_value and analysis.current_value > 0 %}
         <p class="mt-2 text-2xl font-bold text-gray-900">${{ "{:,.2f}".format(analysis.current_value) }}</p>
+        {% else %}
+        <p class="mt-2 text-2xl font-bold text-gray-400">Price data unavailable</p>
+        {% endif %}
     </div>
     {% if analysis.has_history and analysis.final_portfolio_return is not none %}
     <div class="bg-white rounded-lg shadow p-5">
@@ -96,7 +100,6 @@
     </div>
     {% endif %}
 </div>
-{% endif %}
 
 {% if analysis.has_history %}
 {# ── Drawdown + risk metric cards ────────────────────────────────── #}

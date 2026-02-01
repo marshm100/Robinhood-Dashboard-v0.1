@@ -1,3 +1,4 @@
+import yfinance as yf
 import pandas as pd
 from typing import List, Optional
 from sqlalchemy.orm import Session
@@ -72,6 +73,12 @@ def calculate_portfolio_returns(
     tickers = [h.ticker for h in valid_holdings]
     all_tickers = tickers + [benchmark]
 
+    # Always include a holdings list in the response
+    holdings_list = [
+        {"ticker": h.ticker, "shares": round(float(h.shares), 6)}
+        for h in valid_holdings
+    ]
+
     print(f"Analysis request: tickers={tickers}, benchmark={benchmark}, period={period}")
     # Map user-facing "all" to yfinance's "max" period
     yf_period = "max" if period == "all" else period
@@ -90,23 +97,45 @@ def calculate_portfolio_returns(
 
     # ── Current valuation (works with even 1 row of prices) ──────────
     current_value = 0.0
+    latest_prices: dict = {}
     if not prices_df.empty:
-        last_prices = prices_df.iloc[-1]
+        last_row = prices_df.iloc[-1]
         for h in valid_holdings:
-            if h.ticker in last_prices.index:
-                current_value += float(last_prices[h.ticker]) * h.shares
+            if h.ticker in last_row.index and pd.notna(last_row[h.ticker]):
+                price = float(last_row[h.ticker])
+                latest_prices[h.ticker] = price
+                current_value += price * h.shares
 
-    # ── Sector allocation (independent of history depth) ─────────────
+    # Individual ticker fallback for any still-missing prices
+    missing_tickers = [h.ticker for h in valid_holdings if h.ticker not in latest_prices]
+    if missing_tickers:
+        print(f"Fetching individual spot prices for: {missing_tickers}")
+        for ticker_str in missing_tickers:
+            try:
+                info = yf.Ticker(ticker_str).info
+                price = (
+                    info.get("regularMarketPrice")
+                    or info.get("currentPrice")
+                    or info.get("previousClose")
+                )
+                if price:
+                    latest_prices[ticker_str] = float(price)
+                    shares = next(h.shares for h in valid_holdings if h.ticker == ticker_str)
+                    current_value += float(price) * shares
+            except Exception:
+                pass
+
+    # ── Sector allocation (uses latest_prices, works without history) ─
     sector_allocation = []
-    if db is not None and not prices_df.empty:
+    if db is not None and latest_prices:
         sector_map = get_sector_map(tickers, db)
-        last_prices = prices_df.iloc[-1]
         total_value = current_value
 
         sector_totals: dict = {}
         for h in valid_holdings:
-            if h.ticker in last_prices.index:
-                value = float(last_prices[h.ticker]) * h.shares
+            price = latest_prices.get(h.ticker)
+            if price:
+                value = price * h.shares
                 sector = sector_map.get(h.ticker, "Unknown")
                 sector_totals[sector] = sector_totals.get(sector, 0.0) + value
 
@@ -124,6 +153,9 @@ def calculate_portfolio_returns(
                 reverse=True,
             )
 
+    # ── Determine warning status ──────────────────────────────────────
+    warning = "limited_history" if not has_history else None
+
     # ── If insufficient history, return partial result ────────────────
     if not has_history:
         print(f"Insufficient history (rows={len(prices_df)}) — returning partial analysis")
@@ -136,9 +168,9 @@ def calculate_portfolio_returns(
             "final_portfolio_return": None,
             "final_benchmark_return": None,
             "drawdown": {
-                "max_drawdown_percent": 0.0,
-                "current_drawdown_percent": 0.0,
-                "longest_drawdown_days": 0,
+                "max_drawdown_percent": None,
+                "current_drawdown_percent": None,
+                "longest_drawdown_days": None,
                 "drawdown_chart_data": [],
             },
             "sector_allocation": sector_allocation,
@@ -150,6 +182,8 @@ def calculate_portfolio_returns(
             },
             "current_value": round(current_value, 2),
             "has_history": False,
+            "warning": warning,
+            "holdings_list": holdings_list,
         }
 
     # ── Full analysis (sufficient history) ────────────────────────────
@@ -222,4 +256,6 @@ def calculate_portfolio_returns(
         "risk_metrics": risk_metrics,
         "current_value": round(float(portfolio_value.iloc[-1]), 2),
         "has_history": True,
+        "warning": warning,
+        "holdings_list": holdings_list,
     }
