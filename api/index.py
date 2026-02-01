@@ -68,7 +68,8 @@ def portfolio_detail(
         raise HTTPException(status_code=404, detail="Portfolio not found")
 
     analysis = calculate_portfolio_returns(
-        portfolio.holdings, benchmark=benchmark, period=period, db=db
+        portfolio.holdings, benchmark=benchmark, period=period, db=db,
+        inception_date=portfolio.inception_date,
     )
 
     return templates.TemplateResponse(

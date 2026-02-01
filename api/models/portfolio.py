@@ -1,15 +1,16 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, Date, ForeignKey
 from sqlalchemy.orm import relationship
 from api.database import Base
 from datetime import datetime
 
 class Portfolio(Base):
     __tablename__ = "portfolios"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+    inception_date = Column(Date, nullable=True)
+
     holdings = relationship("Holding", back_populates="portfolio")
 
 class Holding(Base):

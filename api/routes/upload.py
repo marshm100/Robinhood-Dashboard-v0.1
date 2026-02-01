@@ -6,7 +6,7 @@ from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from api.database import get_db
-from api.models.portfolio import Holding
+from api.models.portfolio import Holding, Portfolio
 from api.services.blob_service import archive_upload
 
 router = APIRouter(prefix="/api/upload", tags=["upload"])
@@ -122,6 +122,21 @@ async def upload_holdings_csv(
             detail="No net stock holdings found in the CSV.",
         )
 
+    # ── Compute inception_date from activity dates in CSV ────────────
+    inception_date = None
+    df_lower = df.copy()
+    df_lower.columns = df_lower.columns.str.lower().str.strip()
+    date_col = None
+    for candidate in ("activity date", "date", "process date", "settle date"):
+        if candidate in df_lower.columns:
+            date_col = candidate
+            break
+    if date_col:
+        parsed_dates = pd.to_datetime(df_lower[date_col], errors="coerce")
+        valid_dates = parsed_dates.dropna()
+        if not valid_dates.empty:
+            inception_date = valid_dates.min()
+
     # ── Replace holdings in the portfolio ────────────────────────────
     db.query(Holding).filter(Holding.portfolio_id == portfolio_id).delete()
 
@@ -136,6 +151,11 @@ async def upload_holdings_csv(
             )
         )
         added += 1
+
+    # Update portfolio inception_date
+    portfolio = db.query(Portfolio).filter(Portfolio.id == portfolio_id).first()
+    if portfolio and inception_date is not None:
+        portfolio.inception_date = inception_date.date()
 
     db.commit()
 

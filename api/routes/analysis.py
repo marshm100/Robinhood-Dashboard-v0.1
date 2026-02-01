@@ -17,5 +17,8 @@ def compare_portfolio(
     if not portfolio:
         raise HTTPException(status_code=404, detail="Portfolio not found")
 
-    result = calculate_portfolio_returns(portfolio.holdings, benchmark, period, db=db)
+    result = calculate_portfolio_returns(
+        portfolio.holdings, benchmark, period, db=db,
+        inception_date=portfolio.inception_date,
+    )
     return result

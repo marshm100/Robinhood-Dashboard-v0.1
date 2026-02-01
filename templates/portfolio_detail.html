@@ -5,7 +5,7 @@
 <div class="flex flex-wrap items-center justify-between mb-8 gap-4">
     <div>
         <h2 class="text-3xl font-bold">{{ portfolio.name }}</h2>
-        <p class="text-gray-500 mt-1">Created {{ portfolio.created_at.strftime('%Y-%m-%d') }} &middot; {{ portfolio.holdings | length }} holdings</p>
+        <p class="text-gray-500 mt-1">Created {{ portfolio.created_at.strftime('%Y-%m-%d') }}{% if portfolio.inception_date %} &middot; First trade {{ portfolio.inception_date.strftime('%b %d, %Y') }}{% endif %} &middot; {{ portfolio.holdings | length }} holdings</p>
     </div>
     <div class="flex gap-3">
         <a href="/upload?portfolio_id={{ portfolio.id }}"
@@ -65,7 +65,7 @@
 {# ── Limited history warning banner ──────────────────────────────── #}
 {% if analysis.warning == "limited_history" or not analysis.has_history %}
 <div class="mb-6 bg-yellow-100 border border-yellow-400 rounded-lg px-5 py-4 text-yellow-800">
-    <p class="font-medium">Limited or no historical price data available</p>
+    <p class="font-medium">Limited or no historical price data available{% if portfolio.inception_date %} (starts from your first transaction on {{ portfolio.inception_date.strftime('%b %d, %Y') }}){% endif %}</p>
     <p class="text-sm mt-1">This is common for recently launched or leveraged ETFs (e.g. BITU).
         Returns, drawdown, and risk metrics are unavailable &mdash; current valuation and sector allocation are shown below.</p>
 </div>

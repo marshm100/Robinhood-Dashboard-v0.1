@@ -1,5 +1,6 @@
 import yfinance as yf
 import pandas as pd
+from datetime import date
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from api.models.portfolio import Holding
@@ -60,11 +61,39 @@ def compute_drawdown_metrics(value_series: pd.Series) -> dict:
     }
 
 
+def _fetch_spot_price(ticker_str: str) -> Optional[float]:
+    """Try .history(5d) first (most reliable), then .info as fallback."""
+    # Method 1: recent history (works for most tickers including leveraged ETFs)
+    try:
+        hist = yf.Ticker(ticker_str).history(period="5d")
+        if not hist.empty and "Close" in hist.columns:
+            price = float(hist["Close"].dropna().iloc[-1])
+            if price > 0:
+                return price
+    except Exception:
+        pass
+    # Method 2: .info dict
+    try:
+        info = yf.Ticker(ticker_str).info
+        price = (
+            info.get("regularMarketPrice")
+            or info.get("currentPrice")
+            or info.get("previousClose")
+            or info.get("lastPrice")
+        )
+        if price:
+            return float(price)
+    except Exception:
+        pass
+    return None
+
+
 def calculate_portfolio_returns(
     holdings: List[Holding],
     benchmark: str = "SPY",
     period: str = "1y",
-    db: Optional[Session] = None
+    db: Optional[Session] = None,
+    inception_date: Optional[date] = None,
 ) -> dict:
     valid_holdings = [h for h in holdings if h.shares > 0]
     if not valid_holdings:
@@ -79,21 +108,29 @@ def calculate_portfolio_returns(
         for h in valid_holdings
     ]
 
-    print(f"Analysis request: tickers={tickers}, benchmark={benchmark}, period={period}")
+    print(f"Analysis request: tickers={tickers}, benchmark={benchmark}, period={period}, inception={inception_date}")
     # Map user-facing "all" to yfinance's "max" period
     yf_period = "max" if period == "all" else period
     prices_df = get_historical_prices(all_tickers, period=yf_period)
+
+    # If main fetch failed entirely, try a short window for spot prices
+    if prices_df.empty:
+        print("Main fetch empty — trying 5d fallback for spot prices")
+        prices_df = get_historical_prices(all_tickers, period="5d")
+
+    # ── Slice to inception_date if available ──────────────────────────
+    if inception_date is not None and not prices_df.empty:
+        ts = pd.Timestamp(inception_date)
+        sliced = prices_df[prices_df.index >= ts]
+        if not sliced.empty:
+            prices_df = sliced
+            print(f"Sliced prices to inception {inception_date}: {len(prices_df)} rows remain")
 
     has_history = (
         not prices_df.empty
         and len(prices_df) >= 2
         and benchmark in prices_df.columns
     )
-
-    # If main fetch failed entirely, try a short window for spot prices
-    if prices_df.empty:
-        print("Main fetch empty — trying 5d fallback for spot prices")
-        prices_df = get_historical_prices(all_tickers, period="5d")
 
     # ── Current valuation (works with even 1 row of prices) ──────────
     current_value = 0.0
@@ -106,24 +143,18 @@ def calculate_portfolio_returns(
                 latest_prices[h.ticker] = price
                 current_value += price * h.shares
 
-    # Individual ticker fallback for any still-missing prices
-    missing_tickers = [h.ticker for h in valid_holdings if h.ticker not in latest_prices]
+    # Individual ticker fallback for any still-missing prices (portfolio + benchmark)
+    missing_tickers = [t for t in all_tickers if t not in latest_prices]
     if missing_tickers:
         print(f"Fetching individual spot prices for: {missing_tickers}")
         for ticker_str in missing_tickers:
-            try:
-                info = yf.Ticker(ticker_str).info
-                price = (
-                    info.get("regularMarketPrice")
-                    or info.get("currentPrice")
-                    or info.get("previousClose")
-                )
-                if price:
-                    latest_prices[ticker_str] = float(price)
-                    shares = next(h.shares for h in valid_holdings if h.ticker == ticker_str)
-                    current_value += float(price) * shares
-            except Exception:
-                pass
+            price = _fetch_spot_price(ticker_str)
+            if price is not None:
+                latest_prices[ticker_str] = price
+                # Add to current_value only for portfolio holdings (not benchmark)
+                holding = next((h for h in valid_holdings if h.ticker == ticker_str), None)
+                if holding:
+                    current_value += price * holding.shares
 
     # ── Sector allocation (uses latest_prices, works without history) ─
     sector_allocation = []
@@ -184,6 +215,7 @@ def calculate_portfolio_returns(
             "has_history": False,
             "warning": warning,
             "holdings_list": holdings_list,
+            "inception_date": inception_date.isoformat() if inception_date else None,
         }
 
     # ── Full analysis (sufficient history) ────────────────────────────
@@ -258,4 +290,5 @@ def calculate_portfolio_returns(
         "has_history": True,
         "warning": warning,
         "holdings_list": holdings_list,
+        "inception_date": inception_date.isoformat() if inception_date else None,
     }

@@ -80,7 +80,12 @@ def get_sector_map(tickers: List[str], db: Session) -> Dict[str, str]:
     for ticker_str in missing:
         try:
             info = yf.Ticker(ticker_str).info
-            sector = info.get("sector") or info.get("industry") or "Unknown"
+            sector = (
+                info.get("sector")
+                or info.get("industry")
+                or info.get("category")
+                or ("Exchange Traded Fund" if info.get("quoteType") == "ETF" else "Unknown")
+            )
         except Exception:
             sector = "Unknown"
 
