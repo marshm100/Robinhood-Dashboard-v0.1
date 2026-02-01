@@ -123,6 +123,45 @@ def calculate_portfolio_returns(
                 reverse=True,
             )
 
+    # Compute risk metrics from daily returns
+    daily_returns = portfolio_value.pct_change().dropna()
+
+    if len(daily_returns) < 30:
+        risk_metrics = {
+            "annualized_return": None,
+            "annualized_volatility": None,
+            "sharpe_ratio": None,
+            "sortino_ratio": None,
+        }
+    else:
+        total_days = (portfolio_value.index[-1] - portfolio_value.index[0]).days
+        total_return = portfolio_value.iloc[-1] / portfolio_value.iloc[0] - 1
+        ann_return = (
+            ((1 + total_return) ** (365 / total_days) - 1) * 100
+            if total_days > 0
+            else 0.0
+        )
+
+        ann_vol = float(daily_returns.std(ddof=0)) * (252 ** 0.5) * 100
+
+        risk_free = 4.0  # approximate current T-bill rate
+        sharpe = (ann_return - risk_free) / ann_vol if ann_vol > 0 else 0.0
+
+        downside = daily_returns[daily_returns < 0]
+        downside_dev = (
+            float(downside.std(ddof=0)) * (252 ** 0.5) * 100
+            if len(downside) > 0
+            else 0.0
+        )
+        sortino = (ann_return - risk_free) / downside_dev if downside_dev > 0 else 0.0
+
+        risk_metrics = {
+            "annualized_return": round(float(ann_return), 2),
+            "annualized_volatility": round(float(ann_vol), 2),
+            "sharpe_ratio": round(float(sharpe), 2),
+            "sortino_ratio": round(float(sortino), 2),
+        }
+
     return {
         "dates": dates,
         "portfolio_returns": portfolio_returns.round(2).tolist(),
@@ -133,4 +172,5 @@ def calculate_portfolio_returns(
         "final_benchmark_return": round(benchmark_returns.iloc[-1], 2),
         "drawdown": drawdown_metrics,
         "sector_allocation": sector_allocation,
+        "risk_metrics": risk_metrics,
     }

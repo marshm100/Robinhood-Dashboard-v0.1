@@ -40,7 +40,7 @@
 </div>
 
 {# ── Key metrics cards ───────────────────────────────────────────── #}
-<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-10">
+<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-4">
     {% set dd = analysis["drawdown"] %}
     {% set metrics = [
         ("Portfolio Return", analysis["final_portfolio_return"], "%", analysis["final_portfolio_return"] >= 0),
@@ -57,6 +57,55 @@
         </p>
     </div>
     {% endfor %}
+</div>
+
+{# ── Risk metrics cards ──────────────────────────────────────────── #}
+{% set rm = analysis["risk_metrics"] %}
+<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-10">
+    {# Annualized Return #}
+    <div class="bg-white rounded-lg shadow p-5">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Ann. Return</p>
+        {% if rm["annualized_return"] is none %}
+        <p class="mt-2 text-2xl font-bold text-gray-400">N/A</p>
+        {% else %}
+        <p class="mt-2 text-2xl font-bold {{ 'text-green-600' if rm['annualized_return'] >= 0 else 'text-red-600' }}">
+            {{ rm["annualized_return"] }}%
+        </p>
+        {% endif %}
+    </div>
+    {# Annualized Volatility #}
+    <div class="bg-white rounded-lg shadow p-5">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Ann. Volatility</p>
+        {% if rm["annualized_volatility"] is none %}
+        <p class="mt-2 text-2xl font-bold text-gray-400">N/A</p>
+        {% else %}
+        <p class="mt-2 text-2xl font-bold {{ 'text-red-600' if rm['annualized_volatility'] > 30 else 'text-gray-900' }}">
+            {{ rm["annualized_volatility"] }}%
+        </p>
+        {% endif %}
+    </div>
+    {# Sharpe Ratio #}
+    <div class="bg-white rounded-lg shadow p-5">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Sharpe Ratio</p>
+        {% if rm["sharpe_ratio"] is none %}
+        <p class="mt-2 text-2xl font-bold text-gray-400">N/A</p>
+        {% else %}
+        <p class="mt-2 text-2xl font-bold {{ 'text-green-600' if rm['sharpe_ratio'] >= 1 else ('text-yellow-600' if rm['sharpe_ratio'] >= 0 else 'text-red-600') }}">
+            {{ rm["sharpe_ratio"] }}
+        </p>
+        {% endif %}
+    </div>
+    {# Sortino Ratio #}
+    <div class="bg-white rounded-lg shadow p-5">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Sortino Ratio</p>
+        {% if rm["sortino_ratio"] is none %}
+        <p class="mt-2 text-2xl font-bold text-gray-400">N/A</p>
+        {% else %}
+        <p class="mt-2 text-2xl font-bold {{ 'text-green-600' if rm['sortino_ratio'] >= 1 else ('text-yellow-600' if rm['sortino_ratio'] >= 0 else 'text-red-600') }}">
+            {{ rm["sortino_ratio"] }}
+        </p>
+        {% endif %}
+    </div>
 </div>
 
 {# ── Returns chart ───────────────────────────────────────────────── #}
