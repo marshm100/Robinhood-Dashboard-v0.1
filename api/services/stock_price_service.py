@@ -1,11 +1,11 @@
 """
-Stock price cache service — Stooq-first with yfinance fallback.
+Stock price cache service — yfinance-primary with Stooq fallback.
 
 Integrates stockr_backbone logic directly into the main app:
 - Cache-first: always check DB before external fetch
 - Incremental updates: only fetch dates we don't already have
 - Auto-discovery: new tickers are added on first request
-- Dual source: Stooq (primary, no API key needed), yfinance (fallback)
+- Dual source: yfinance (primary, reliable on Vercel), Stooq (fallback)
 """
 
 import csv
@@ -31,18 +31,57 @@ BROWSER_UA = (
     "Chrome/120.0.0.0 Safari/537.36"
 )
 
-# If a full (non-incremental) Stooq fetch yields fewer rows than this,
-# assume something went wrong and fall through to yfinance.
-MIN_STOOQ_ROWS_FULL_FETCH = 100
+# If the primary source yields fewer rows than this on a full fetch,
+# try the fallback source.
+MIN_ROWS_FULL_FETCH = 100
 
 
 # ---------------------------------------------------------------------------
 # External fetchers
 # ---------------------------------------------------------------------------
 
+def _fetch_yfinance(symbol: str, start_date: Optional[date] = None):
+    """Primary source: fetch via yf.download, return a pandas DataFrame
+    with flat columns (Open, High, Low, Close, Volume) and DatetimeIndex,
+    or None on failure."""
+    try:
+        import pandas as pd
+        import yfinance as yf
+
+        logger.info("yfinance fetch for %s (start=%s)", symbol, start_date)
+
+        kwargs: dict = {"progress": False, "auto_adjust": True, "timeout": 30}
+        if start_date:
+            kwargs["start"] = start_date.isoformat()
+        else:
+            kwargs["period"] = "max"
+
+        df = yf.download(symbol, **kwargs)
+
+        if df.empty:
+            logger.warning("yfinance %s: empty DataFrame", symbol)
+            return None
+
+        # yf.download returns MultiIndex columns even for single ticker
+        # e.g. ('Close', 'SPY') — flatten to just 'Close'
+        if isinstance(df.columns, pd.MultiIndex):
+            logger.info("yfinance %s: flattening MultiIndex columns: %s", symbol, list(df.columns[:5]))
+            df.columns = df.columns.get_level_values(0)
+
+        logger.info(
+            "yfinance %s: shape=%s, columns=%s, date_range=%s..%s",
+            symbol, df.shape, list(df.columns),
+            df.index[0].strftime("%Y-%m-%d"), df.index[-1].strftime("%Y-%m-%d"),
+        )
+        return df
+
+    except Exception as exc:
+        logger.error("yfinance fetch FAILED for %s: %s", symbol, exc)
+        return None
+
+
 def _fetch_stooq(symbol: str, timeout: int = 30) -> Optional[str]:
-    """Fetch CSV data from Stooq.com with browser User-Agent, retries,
-    and strict validation of the returned payload."""
+    """Fallback: fetch CSV data from Stooq.com with browser User-Agent."""
     url = STOOQ_URL.format(symbol=symbol.lower())
     for attempt in range(MAX_RETRIES):
         try:
@@ -61,7 +100,6 @@ def _fetch_stooq(symbol: str, timeout: int = 30) -> Optional[str]:
                 text = resp.text
                 lines = text.strip().splitlines()
 
-                # Must look like CSV with a Date column header
                 if not lines or "Date" not in lines[0]:
                     logger.warning(
                         "Stooq %s: not CSV (header: %r)",
@@ -75,12 +113,10 @@ def _fetch_stooq(symbol: str, timeout: int = 30) -> Optional[str]:
 
                 data_rows = len(lines) - 1
                 if data_rows < 2:
-                    logger.warning(
-                        "Stooq %s: only %d data rows — too few", symbol, data_rows,
-                    )
+                    logger.warning("Stooq %s: only %d data rows", symbol, data_rows)
                     return None
 
-                logger.info("Stooq %s: %d CSV data rows received", symbol, data_rows)
+                logger.info("Stooq %s: %d CSV data rows", symbol, data_rows)
                 return text
 
         except Exception as exc:
@@ -92,41 +128,6 @@ def _fetch_stooq(symbol: str, timeout: int = 30) -> Optional[str]:
             if attempt < MAX_RETRIES - 1:
                 time.sleep(wait)
     return None
-
-
-def _fetch_yfinance(symbol: str, start_date: Optional[date] = None) -> Optional[str]:
-    """Fallback: fetch via ``yf.download`` and return Stooq-compatible CSV."""
-    try:
-        import yfinance as yf
-
-        logger.info("yfinance fallback for %s (start=%s)", symbol, start_date)
-
-        kwargs: dict = {"progress": False, "auto_adjust": True, "timeout": 30}
-        if start_date:
-            kwargs["start"] = start_date.isoformat()
-        else:
-            kwargs["period"] = "max"
-
-        df = yf.download(symbol, **kwargs)
-
-        if df.empty:
-            logger.warning("yfinance %s: empty DataFrame", symbol)
-            return None
-
-        logger.info("yfinance %s: %d rows fetched", symbol, len(df))
-
-        lines = ["Date,Open,High,Low,Close,Volume"]
-        for idx, row in df.iterrows():
-            d = idx.strftime("%Y-%m-%d")
-            lines.append(
-                f"{d},{row.get('Open', '')},{row.get('High', '')}"
-                f",{row.get('Low', '')},{row['Close']},{int(row.get('Volume', 0))}"
-            )
-        return "\n".join(lines)
-
-    except Exception as exc:
-        logger.error("yfinance fallback FAILED for %s: %s", symbol, exc)
-        return None
 
 
 # ---------------------------------------------------------------------------
@@ -158,6 +159,99 @@ def _get_or_create_stock(db: Session, symbol: str) -> Stock:
     return stock
 
 
+# ---------------------------------------------------------------------------
+# Insertion helpers — one for DataFrames (yfinance), one for CSV (Stooq)
+# ---------------------------------------------------------------------------
+
+def _insert_from_dataframe(
+    df,
+    stock: Stock,
+    db: Session,
+    start_date: Optional[date],
+) -> Tuple[int, int, int, int, int]:
+    """Insert rows from a pandas DataFrame (DatetimeIndex + OHLCV columns).
+
+    Returns ``(added, parsed, skipped_date, skipped_close, skipped_dup)``.
+    """
+    import math
+
+    added = parsed = skipped_date = skipped_close = skipped_dup = 0
+
+    for idx, row in df.iterrows():
+        parsed += 1
+
+        try:
+            row_date = idx.date() if hasattr(idx, "date") else idx
+        except Exception:
+            skipped_date += 1
+            continue
+
+        if start_date and row_date < start_date:
+            continue
+
+        close_val = row.get("Close")
+        if close_val is None or (isinstance(close_val, float) and (math.isnan(close_val) or close_val <= 0)):
+            skipped_close += 1
+            if parsed <= 3:
+                logger.warning("%s row %d: Close=%r — skipping", stock.symbol, parsed, close_val)
+            continue
+
+        close = float(close_val)
+
+        exists = (
+            db.query(HistoricalPrice.id)
+            .filter(
+                HistoricalPrice.stock_id == stock.id,
+                HistoricalPrice.date == row_date,
+            )
+            .first()
+        )
+        if exists:
+            skipped_dup += 1
+            continue
+
+        def _row_float(key):
+            v = row.get(key)
+            if v is None:
+                return None
+            try:
+                fv = float(v)
+                return fv if fv > 0 and not math.isnan(fv) else None
+            except (ValueError, TypeError):
+                return None
+
+        def _row_int(key):
+            v = row.get(key)
+            if v is None:
+                return None
+            try:
+                return int(float(v))
+            except (ValueError, TypeError):
+                return None
+
+        db.add(
+            HistoricalPrice(
+                stock_id=stock.id,
+                date=row_date,
+                open=_row_float("Open"),
+                high=_row_float("High"),
+                low=_row_float("Low"),
+                close=close,
+                volume=_row_int("Volume"),
+            )
+        )
+        added += 1
+
+        # Log first and last sample rows
+        if added == 1:
+            logger.info(
+                "%s first row: date=%s close=%.2f open=%s",
+                stock.symbol, row_date, close, _row_float("Open"),
+            )
+
+    return added, parsed, skipped_date, skipped_close, skipped_dup
+
+
 def _parse_and_insert(
     csv_text: str,
     stock: Stock,
@@ -171,8 +265,18 @@ def _parse_and_insert(
     added = parsed = skipped_date = skipped_close = skipped_dup = 0
 
     reader = csv.DictReader(StringIO(csv_text))
+
+    # Log column names from the CSV header
+    if reader.fieldnames:
+        logger.info("%s CSV columns: %s", stock.symbol, reader.fieldnames)
+
     for row in reader:
         parsed += 1
+
+        # Log first 2 raw rows for debugging
+        if parsed <= 2:
+            logger.info("%s CSV sample row %d: %s", stock.symbol, parsed, dict(row))
+
         date_str = (row.get("Date") or "").strip()
         if not date_str:
             skipped_date += 1
@@ -181,14 +285,18 @@ def _parse_and_insert(
             row_date = datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
             skipped_date += 1
+            if parsed <= 5:
+                logger.warning("%s row %d: unparseable date %r", stock.symbol, parsed, date_str)
             continue
 
         if start_date and row_date < start_date:
-            continue  # expected pre-filter, not an error
+            continue
 
         close = _safe_float(row.get("Close"))
         if close is None:
             skipped_close += 1
+            if parsed <= 5:
+                logger.warning("%s row %d: bad Close=%r", stock.symbol, parsed, row.get("Close"))
             continue
 
         exists = (
@@ -216,6 +324,12 @@ def _parse_and_insert(
         )
         added += 1
 
+        if added == 1:
+            logger.info(
+                "%s first CSV row stored: date=%s close=%.2f",
+                stock.symbol, row_date, close,
+            )
+
     return added, parsed, skipped_date, skipped_close, skipped_dup
 
 
@@ -225,8 +339,8 @@ def _parse_and_insert(
 
 def fetch_and_store(symbol: str, db: Session, incremental: bool = True) -> dict:
     """
-    Fetch daily OHLCV for *symbol* from Stooq (primary) or yfinance
-    (fallback), store new rows in DB.
+    Fetch daily OHLCV for *symbol* — yfinance primary, Stooq fallback.
+    Store new rows in DB.
 
     Returns ``{"added": int, "source": str, "parsed": int, "skipped": int}``.
     """
@@ -249,42 +363,41 @@ def fetch_and_store(symbol: str, db: Session, incremental: bool = True) -> dict:
             if start_date > date.today():
                 return {"added": 0, "source": "cache", "parsed": 0, "skipped": 0}
 
-    # ----- Stooq attempt -----
-    csv_text = _fetch_stooq(symbol)
-    source = "stooq"
+    source = "none"
     added = parsed = skipped = 0
 
-    if csv_text is not None:
-        added, parsed, sd, sc, sdup = _parse_and_insert(csv_text, stock, db, start_date)
+    # ----- PRIMARY: yfinance (DataFrame, no CSV round-trip) -----
+    yf_df = _fetch_yfinance(symbol, start_date)
+    if yf_df is not None:
+        source = "yfinance"
+        added, parsed, sd, sc, sdup = _insert_from_dataframe(yf_df, stock, db, start_date)
         skipped = sd + sc + sdup
         logger.info(
-            "%s stooq parse: parsed=%d added=%d skip_date=%d skip_close=%d skip_dup=%d",
+            "%s yfinance insert: parsed=%d added=%d skip_date=%d skip_close=%d skip_dup=%d",
             symbol, parsed, added, sd, sc, sdup,
         )
 
-        # If full fetch yielded very few new rows, Stooq probably served
-        # junk — fall through to yfinance for a second try.
-        if not incremental and added < MIN_STOOQ_ROWS_FULL_FETCH:
+        if not incremental and added < MIN_ROWS_FULL_FETCH:
             logger.warning(
-                "%s: Stooq only produced %d rows on full fetch — trying yfinance",
+                "%s: yfinance only produced %d rows on full fetch — trying Stooq",
                 symbol, added,
             )
-            csv_text = None  # trigger yfinance block below
+            yf_df = None  # trigger Stooq below
 
-    # ----- yfinance fallback -----
-    if csv_text is None:
-        yf_text = _fetch_yfinance(symbol, start_date)
-        if yf_text is not None:
-            source = "yfinance" if added == 0 else "stooq+yfinance"
-            yf_added, yf_parsed, sd, sc, sdup = _parse_and_insert(
-                yf_text, stock, db, start_date,
+    # ----- FALLBACK: Stooq (CSV text) -----
+    if yf_df is None:
+        csv_text = _fetch_stooq(symbol)
+        if csv_text is not None:
+            source = "stooq" if added == 0 else "yfinance+stooq"
+            st_added, st_parsed, sd, sc, sdup = _parse_and_insert(
+                csv_text, stock, db, start_date,
             )
             logger.info(
-                "%s yfinance parse: parsed=%d added=%d skip_date=%d skip_close=%d skip_dup=%d",
-                symbol, yf_parsed, yf_added, sd, sc, sdup,
+                "%s stooq parse: parsed=%d added=%d skip_date=%d skip_close=%d skip_dup=%d",
+                symbol, st_parsed, st_added, sd, sc, sdup,
             )
-            added += yf_added
-            parsed += yf_parsed
+            added += st_added
+            parsed += st_parsed
             skipped += sd + sc + sdup
         elif added == 0:
             logger.error("All sources failed for %s", symbol)
@@ -292,6 +405,11 @@ def fetch_and_store(symbol: str, db: Session, incremental: bool = True) -> dict:
 
     if added:
         db.commit()
+    elif source != "cache":
+        logger.warning(
+            "WARNING: No rows added for %s from %s — parsed=%d skipped=%d — check parsing",
+            symbol, source, parsed, skipped,
+        )
 
     logger.info("fetch_and_store %s DONE: %d added from %s", symbol, added, source)
     return {"added": added, "source": source, "parsed": parsed, "skipped": skipped}
@@ -317,13 +435,11 @@ def get_prices(
     stock = db.query(Stock).filter(Stock.symbol == symbol).first()
 
     if not stock:
-        # First time seeing this ticker — full fetch
         fetch_and_store(symbol, db, incremental=False)
         stock = db.query(Stock).filter(Stock.symbol == symbol).first()
         if not stock:
             return []
     else:
-        # Incremental refresh for known tickers
         fetch_and_store(symbol, db, incremental=True)
 
     query = db.query(HistoricalPrice).filter(HistoricalPrice.stock_id == stock.id)
@@ -412,8 +528,6 @@ def get_prices_dataframe(
         return pd.DataFrame()
 
     result = pd.DataFrame(series)
-    # Forward-fill then back-fill to align tickers with slightly different
-    # trading calendars, matching the old yfinance-based service behaviour.
     result = result.dropna(how="all").ffill().bfill()
     return result
 
