@@ -1,7 +1,8 @@
 import pandas as pd
-from typing import List
+from typing import List, Optional
+from sqlalchemy.orm import Session
 from api.models.portfolio import Holding
-from .price_service import get_historical_prices
+from .price_service import get_historical_prices, get_sector_map
 
 def compute_drawdown_metrics(value_series: pd.Series) -> dict:
     """
@@ -61,7 +62,8 @@ def compute_drawdown_metrics(value_series: pd.Series) -> dict:
 def calculate_portfolio_returns(
     holdings: List[Holding],
     benchmark: str = "SPY",
-    period: str = "1y"
+    period: str = "1y",
+    db: Optional[Session] = None
 ) -> dict:
     valid_holdings = [h for h in holdings if h.shares > 0]
     if not valid_holdings:
@@ -93,6 +95,34 @@ def calculate_portfolio_returns(
     # Compute real drawdown metrics from the portfolio value series
     drawdown_metrics = compute_drawdown_metrics(portfolio_value)
 
+    # Compute sector allocation from current (latest) holdings values
+    sector_allocation = []
+    if db is not None:
+        sector_map = get_sector_map(tickers, db)
+        last_prices = prices_df.iloc[-1]
+        total_value = float(portfolio_value.iloc[-1])
+
+        sector_totals: dict = {}
+        for h in valid_holdings:
+            if h.ticker in last_prices:
+                value = float(last_prices[h.ticker]) * h.shares
+                sector = sector_map.get(h.ticker, "Unknown")
+                sector_totals[sector] = sector_totals.get(sector, 0.0) + value
+
+        if total_value > 0:
+            sector_allocation = sorted(
+                [
+                    {
+                        "sector": sector,
+                        "percentage": round(val / total_value * 100, 2),
+                        "value": round(val, 2),
+                    }
+                    for sector, val in sector_totals.items()
+                ],
+                key=lambda x: x["percentage"],
+                reverse=True,
+            )
+
     return {
         "dates": dates,
         "portfolio_returns": portfolio_returns.round(2).tolist(),
@@ -102,4 +132,5 @@ def calculate_portfolio_returns(
         "final_portfolio_return": round(portfolio_returns.iloc[-1], 2),
         "final_benchmark_return": round(benchmark_returns.iloc[-1], 2),
         "drawdown": drawdown_metrics,
+        "sector_allocation": sector_allocation,
     }

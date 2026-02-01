@@ -1,6 +1,7 @@
 import yfinance as yf
 import pandas as pd
-from typing import List
+from typing import List, Dict
+from sqlalchemy.orm import Session
 import time
 
 def get_historical_prices(tickers: List[str], period: str = "1y") -> pd.DataFrame:
@@ -55,3 +56,46 @@ def get_single_ticker_prices(ticker: str, period: str = "1y") -> dict:
     if ticker not in df.columns:
         return {}
     return {date.strftime("%Y-%m-%d"): float(price) for date, price in df[ticker].items() if pd.notna(price)}
+
+
+def get_sector_map(tickers: List[str], db: Session) -> Dict[str, str]:
+    """
+    Look up sectors for tickers, fetching from yfinance and caching in the
+    stocks table when missing. Returns {ticker: sector} dict.
+    """
+    from api.models.portfolio import Stock
+
+    if not tickers:
+        return {}
+
+    # Check DB cache first
+    existing = db.query(Stock).filter(Stock.ticker.in_(tickers)).all()
+    sector_map = {s.ticker: s.sector for s in existing if s.sector}
+
+    missing = [t for t in tickers if t not in sector_map]
+    if not missing:
+        return sector_map
+
+    # Fetch sectors from yfinance for uncached tickers
+    for ticker_str in missing:
+        try:
+            info = yf.Ticker(ticker_str).info
+            sector = info.get("sector") or info.get("industry") or "Unknown"
+        except Exception:
+            sector = "Unknown"
+
+        sector_map[ticker_str] = sector
+
+        # Upsert into DB
+        stock = db.query(Stock).filter(Stock.ticker == ticker_str).first()
+        if stock:
+            stock.sector = sector
+        else:
+            db.add(Stock(ticker=ticker_str, sector=sector))
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+
+    return sector_map

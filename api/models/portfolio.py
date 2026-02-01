@@ -25,7 +25,14 @@ class Holding(Base):
 
 class Benchmark(Base):
     __tablename__ = "benchmarks"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String)
     ticker = Column(String)  # e.g., SPY for S&P 500
+
+class Stock(Base):
+    __tablename__ = "stocks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String, unique=True, index=True, nullable=False)
+    sector = Column(String, index=True, nullable=True)
