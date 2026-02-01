@@ -1,0 +1,14 @@
+/* Custom overrides — Tailwind CDN handles base styling via base.html */
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Smooth page transitions */
+main {
+    animation: fade-in 0.15s ease-in;
+}
+@keyframes fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}

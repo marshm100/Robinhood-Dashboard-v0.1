@@ -1,12 +1,10 @@
-import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from api.config import CORS_ORIGINS, DATABASE_URL
-from fastapi import Request, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
+from api.config import CORS_ORIGINS, DATABASE_URL
 from api.database import get_db
 from api.models.portfolio import Portfolio
 
@@ -21,11 +19,7 @@ app = FastAPI(
     version="1.0"
 )
 
-from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
-
 templates = Jinja2Templates(directory="templates")
-
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # CORS
@@ -37,7 +31,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Health check
+# ── UI page routes ──────────────────────────────────────────────────────
+
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request, "title": "Home"})
@@ -47,7 +42,12 @@ async def portfolios_list(request: Request, db: Session = Depends(get_db)):
     portfolios = db.query(Portfolio).all()
     return templates.TemplateResponse("portfolios.html", {"request": request, "portfolios": portfolios})
 
-# === Add routers here in next steps ===
+@app.get("/upload", response_class=HTMLResponse)
+async def upload_page(request: Request, portfolio_id: int | None = None):
+    return templates.TemplateResponse(
+        "upload.html",
+        {"request": request, "portfolio_id": portfolio_id},
+    )
 
 @app.on_event("startup")
 def startup():
