@@ -6,9 +6,15 @@
 
 {% if portfolio_id %}
 <div class="max-w-xl">
-    <p class="text-gray-600 mb-6">
-        Upload a CSV with columns <strong>ticker/symbol</strong> and <strong>shares/quantity</strong>.
-        Previous holdings for this portfolio will be replaced.
+    <p class="text-gray-600 mb-4">
+        Upload your Robinhood transaction history CSV (download from
+        <strong>Statements &rarr; History</strong> on robinhood.com).
+        The app will automatically compute your current holdings from all
+        buys, sells, and dividend reinvestments.
+    </p>
+    <p class="text-gray-500 text-sm mb-6">
+        A simple holdings CSV with <em>ticker/symbol</em> and <em>shares/quantity</em>
+        columns also works. Previous holdings for this portfolio will be replaced.
     </p>
     <form id="upload-form" action="/api/upload/{{ portfolio_id }}" method="post" enctype="multipart/form-data"
           class="bg-white p-8 rounded-lg shadow space-y-6">
@@ -47,7 +53,7 @@ document.getElementById("upload-form").addEventListener("submit", async (e) => {
         const resp = await fetch(form.action, { method: "POST", body: new FormData(form) });
         const data = await resp.json();
         if (resp.ok) {
-            successDiv.innerHTML = `Added <strong>${data.holdings_added}</strong> holdings. <a href="/portfolios" class="underline text-green-700">View portfolios</a>`;
+            successDiv.innerHTML = `Parsed <strong>${data.holdings_added}</strong> holdings (${data.format_detected === 'transaction_history' ? 'transaction history' : 'simple CSV'}). <a href="/portfolio/{{ portfolio_id }}" class="underline text-green-700 font-medium">View Analysis &rarr;</a>`;
             successDiv.classList.remove("hidden");
         } else {
             errorDiv.textContent = data.detail || "Upload failed";
