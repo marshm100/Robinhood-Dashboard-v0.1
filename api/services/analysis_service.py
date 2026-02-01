@@ -76,37 +76,36 @@ def calculate_portfolio_returns(
     # Map user-facing "all" to yfinance's "max" period
     yf_period = "max" if period == "all" else period
     prices_df = get_historical_prices(all_tickers, period=yf_period)
-    if prices_df.empty or benchmark not in prices_df.columns:
-        print("Price fetch returned empty - insufficient data")
-        return {"error": "Insufficient price data"}
 
-    # Compute daily portfolio value
-    portfolio_value = pd.Series(0.0, index=prices_df.index)
-    for h in valid_holdings:
-        if h.ticker in prices_df.columns:
-            portfolio_value += prices_df[h.ticker] * h.shares
+    has_history = (
+        not prices_df.empty
+        and len(prices_df) >= 2
+        and benchmark in prices_df.columns
+    )
 
-    if portfolio_value.iloc[0] == 0:
-        return {"error": "Initial portfolio value is zero"}
+    # If main fetch failed entirely, try a short window for spot prices
+    if prices_df.empty:
+        print("Main fetch empty — trying 5d fallback for spot prices")
+        prices_df = get_historical_prices(all_tickers, period="5d")
 
-    portfolio_returns = (portfolio_value / portfolio_value.iloc[0] - 1) * 100
-    benchmark_returns = (prices_df[benchmark] / prices_df[benchmark].iloc[0] - 1) * 100
+    # ── Current valuation (works with even 1 row of prices) ──────────
+    current_value = 0.0
+    if not prices_df.empty:
+        last_prices = prices_df.iloc[-1]
+        for h in valid_holdings:
+            if h.ticker in last_prices.index:
+                current_value += float(last_prices[h.ticker]) * h.shares
 
-    dates = prices_df.index.strftime("%Y-%m-%d").tolist()
-
-    # Compute real drawdown metrics from the portfolio value series
-    drawdown_metrics = compute_drawdown_metrics(portfolio_value)
-
-    # Compute sector allocation from current (latest) holdings values
+    # ── Sector allocation (independent of history depth) ─────────────
     sector_allocation = []
-    if db is not None:
+    if db is not None and not prices_df.empty:
         sector_map = get_sector_map(tickers, db)
         last_prices = prices_df.iloc[-1]
-        total_value = float(portfolio_value.iloc[-1])
+        total_value = current_value
 
         sector_totals: dict = {}
         for h in valid_holdings:
-            if h.ticker in last_prices:
+            if h.ticker in last_prices.index:
                 value = float(last_prices[h.ticker]) * h.shares
                 sector = sector_map.get(h.ticker, "Unknown")
                 sector_totals[sector] = sector_totals.get(sector, 0.0) + value
@@ -124,6 +123,52 @@ def calculate_portfolio_returns(
                 key=lambda x: x["percentage"],
                 reverse=True,
             )
+
+    # ── If insufficient history, return partial result ────────────────
+    if not has_history:
+        print(f"Insufficient history (rows={len(prices_df)}) — returning partial analysis")
+        return {
+            "dates": [],
+            "portfolio_returns": [],
+            "benchmark_returns": [],
+            "benchmark": benchmark,
+            "period": period,
+            "final_portfolio_return": None,
+            "final_benchmark_return": None,
+            "drawdown": {
+                "max_drawdown_percent": 0.0,
+                "current_drawdown_percent": 0.0,
+                "longest_drawdown_days": 0,
+                "drawdown_chart_data": [],
+            },
+            "sector_allocation": sector_allocation,
+            "risk_metrics": {
+                "annualized_return": None,
+                "annualized_volatility": None,
+                "sharpe_ratio": None,
+                "sortino_ratio": None,
+            },
+            "current_value": round(current_value, 2),
+            "has_history": False,
+        }
+
+    # ── Full analysis (sufficient history) ────────────────────────────
+    # Compute daily portfolio value
+    portfolio_value = pd.Series(0.0, index=prices_df.index)
+    for h in valid_holdings:
+        if h.ticker in prices_df.columns:
+            portfolio_value += prices_df[h.ticker] * h.shares
+
+    if portfolio_value.iloc[0] == 0:
+        portfolio_value.iloc[0] = portfolio_value[portfolio_value > 0].iloc[0] if (portfolio_value > 0).any() else 1.0
+
+    portfolio_returns = (portfolio_value / portfolio_value.iloc[0] - 1) * 100
+    benchmark_returns = (prices_df[benchmark] / prices_df[benchmark].iloc[0] - 1) * 100
+
+    dates = prices_df.index.strftime("%Y-%m-%d").tolist()
+
+    # Compute real drawdown metrics from the portfolio value series
+    drawdown_metrics = compute_drawdown_metrics(portfolio_value)
 
     # Compute risk metrics from daily returns
     daily_returns = portfolio_value.pct_change().dropna()
@@ -175,4 +220,6 @@ def calculate_portfolio_returns(
         "drawdown": drawdown_metrics,
         "sector_allocation": sector_allocation,
         "risk_metrics": risk_metrics,
+        "current_value": round(float(portfolio_value.iloc[-1]), 2),
+        "has_history": True,
     }

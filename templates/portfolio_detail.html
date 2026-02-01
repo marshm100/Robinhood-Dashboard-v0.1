@@ -20,7 +20,7 @@
 </div>
 
 {% if analysis.get("error") %}
-{# ── Error state ─────────────────────────────────────────────────── #}
+{# ── Hard error (no valid holdings) ──────────────────────────────── #}
 <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-red-800">
     <h3 class="font-semibold text-lg mb-1">Analysis unavailable</h3>
     <p>{{ analysis["error"] }}</p>
@@ -62,19 +62,47 @@
     </div>
 </div>
 
-{# ── Short history warning ───────────────────────────────────────── #}
-{% if analysis["dates"] | length < 30 %}
+{# ── Limited history warning banner ──────────────────────────────── #}
+{% if not analysis.has_history %}
+<div class="mb-6 bg-amber-50 border border-amber-200 rounded-lg px-5 py-4 text-amber-800">
+    <p class="font-medium">Limited or no historical price data available</p>
+    <p class="text-sm mt-1">This is common for newly-listed or leveraged ETFs. Current valuation and sector allocation are shown below. Returns, drawdown, and risk charts require more history.</p>
+</div>
+{% elif analysis["dates"] | length < 30 %}
 <div class="mb-6 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-amber-800 text-sm">
     Limited price history available ({{ analysis["dates"] | length }} trading days) — some metrics may show N/A.
 </div>
 {% endif %}
 
-{# ── Key metrics cards ───────────────────────────────────────────── #}
+{# ── Current value card (always shown) ───────────────────────────── #}
+{% if analysis.current_value %}
+<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-6">
+    <div class="bg-white rounded-lg shadow p-5">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Current Value</p>
+        <p class="mt-2 text-2xl font-bold text-gray-900">${{ "{:,.2f}".format(analysis.current_value) }}</p>
+    </div>
+    {% if analysis.has_history and analysis.final_portfolio_return is not none %}
+    <div class="bg-white rounded-lg shadow p-5">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Portfolio Return</p>
+        <p class="mt-2 text-2xl font-bold {{ 'text-green-600' if analysis.final_portfolio_return >= 0 else 'text-red-600' }}">
+            {{ analysis.final_portfolio_return }}%
+        </p>
+    </div>
+    <div class="bg-white rounded-lg shadow p-5">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Benchmark ({{ analysis.benchmark }})</p>
+        <p class="mt-2 text-2xl font-bold {{ 'text-green-600' if analysis.final_benchmark_return >= 0 else 'text-red-600' }}">
+            {{ analysis.final_benchmark_return }}%
+        </p>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if analysis.has_history %}
+{# ── Drawdown + risk metric cards ────────────────────────────────── #}
 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-4">
     {% set dd = analysis["drawdown"] %}
     {% set metrics = [
-        ("Portfolio Return", analysis["final_portfolio_return"], "%", analysis["final_portfolio_return"] >= 0),
-        ("Benchmark (" ~ analysis["benchmark"] ~ ")", analysis["final_benchmark_return"], "%", analysis["final_benchmark_return"] >= 0),
         ("Max Drawdown", dd["max_drawdown_percent"], "%", false),
         ("Current Drawdown", dd["current_drawdown_percent"], "%", dd["current_drawdown_percent"] >= -0.01),
         ("Longest Drawdown", dd["longest_drawdown_days"], " days", true),
@@ -82,7 +110,7 @@
     {% for label, value, suffix, is_positive in metrics %}
     <div class="bg-white rounded-lg shadow p-5">
         <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">{{ label }}</p>
-        <p class="mt-2 text-2xl font-bold {% if loop.index <= 4 %}{{ 'text-green-600' if is_positive else 'text-red-600' }}{% else %}text-gray-900{% endif %}">
+        <p class="mt-2 text-2xl font-bold {% if loop.index <= 2 %}{{ 'text-green-600' if is_positive else 'text-red-600' }}{% else %}text-gray-900{% endif %}">
             {{ value }}{{ suffix }}
         </p>
     </div>
@@ -153,8 +181,9 @@
         <canvas id="drawdownChart"></canvas>
     </div>
 </div>
+{% endif %}
 
-{# ── Sector + Holdings side by side ─────────────────────────────── #}
+{# ── Sector + Holdings (always shown) ────────────────────────────── #}
 <div class="grid gap-8 lg:grid-cols-2 mb-10">
 
     {# Sector pie #}
@@ -210,11 +239,13 @@
 {# ── Chart.js scripts ────────────────────────────────────────────── #}
 <script>
 (function() {
+    const sectorAlloc = {{ analysis["sector_allocation"] | tojson }};
+
+    {% if analysis.has_history %}
     const dates = {{ analysis["dates"] | tojson }};
     const portfolioReturns = {{ analysis["portfolio_returns"] | tojson }};
     const benchmarkReturns = {{ analysis["benchmark_returns"] | tojson }};
     const drawdownData = {{ analysis["drawdown"]["drawdown_chart_data"] | tojson }};
-    const sectorAlloc = {{ analysis["sector_allocation"] | tojson }};
 
     /* ── Shared tooltip / scale defaults ─────────────────────────── */
     const gridColor = 'rgba(0,0,0,0.06)';
@@ -308,6 +339,7 @@
             },
         },
     });
+    {% endif %}
 
     /* ── 3. Sector doughnut chart ────────────────────────────────── */
     if (sectorAlloc.length > 0) {
