@@ -25,6 +25,10 @@ logger = logging.getLogger(__name__)
 
 STOOQ_URL = "https://stooq.com/q/d/l/?s={symbol}.us&i=d"
 MAX_RETRIES = 3
+# Minimum cached rows before we consider a ticker "fully primed".
+# Most US equities have 1000+ trading days over 4 years; ETFs like SPY
+# have 5000+.  Anything below this triggers a full (non-incremental) fetch.
+MIN_FULL_HISTORY_ROWS = 200
 
 
 # ---------------------------------------------------------------------------
@@ -419,6 +423,70 @@ def get_prices(
     ]
 
 
+def get_or_prime_prices(
+    symbol: str,
+    db: Session,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+) -> List[Dict]:
+    """
+    Like :func:`get_prices`, but guarantees a full historical prime when
+    the ticker is missing from the cache or has fewer than
+    ``MIN_FULL_HISTORY_ROWS`` rows.
+
+    This prevents the analysis layer from silently working with partial
+    data for tickers that were added to the ``stocks`` table but never
+    fully fetched.
+    """
+    symbol = symbol.strip().upper()
+
+    stock = db.query(Stock).filter(Stock.symbol == symbol).first()
+
+    if stock:
+        row_count = (
+            db.query(func.count(HistoricalPrice.id))
+            .filter(HistoricalPrice.stock_id == stock.id)
+            .scalar()
+        ) or 0
+    else:
+        row_count = 0
+
+    if row_count < MIN_FULL_HISTORY_ROWS:
+        logger.info(
+            "Priming full history for ticker %s (cached_rows=%d, threshold=%d)",
+            symbol, row_count, MIN_FULL_HISTORY_ROWS,
+        )
+        fetch_and_store(symbol, db, incremental=False)
+    else:
+        # Enough data — just do a cheap incremental top-up
+        fetch_and_store(symbol, db, incremental=True)
+
+    # Now read from the (freshly updated) cache
+    if not stock:
+        stock = db.query(Stock).filter(Stock.symbol == symbol).first()
+    if not stock:
+        return []
+
+    query = db.query(HistoricalPrice).filter(HistoricalPrice.stock_id == stock.id)
+    if start_date:
+        query = query.filter(HistoricalPrice.date >= start_date)
+    if end_date:
+        query = query.filter(HistoricalPrice.date <= end_date)
+    query = query.order_by(HistoricalPrice.date)
+
+    return [
+        {
+            "date": p.date.isoformat(),
+            "open": p.open,
+            "high": p.high,
+            "low": p.low,
+            "close": p.close,
+            "volume": p.volume,
+        }
+        for p in query.all()
+    ]
+
+
 def get_close_price_on_date(
     symbol: str, target_date: date, db: Session
 ) -> Optional[float]:
@@ -474,7 +542,7 @@ def get_prices_dataframe(
     series: Dict[str, "pd.Series"] = {}
     for ticker in tickers:
         t = ticker.strip().upper()
-        prices = get_prices(t, db, start_date=start_date)
+        prices = get_or_prime_prices(t, db, start_date=start_date)
         if prices:
             df = pd.DataFrame(prices)
             df["date"] = pd.to_datetime(df["date"])
