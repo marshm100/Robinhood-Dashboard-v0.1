@@ -61,31 +61,49 @@ def compute_drawdown_metrics(value_series: pd.Series) -> dict:
     }
 
 
-def _fetch_spot_price(ticker_str: str) -> Optional[float]:
-    """Try .history(5d) first (most reliable), then .info as fallback."""
-    # Method 1: recent history (works for most tickers including leveraged ETFs)
+def _fetch_spot_and_sector(ticker_str: str) -> tuple:
+    """
+    Fetch spot price and sector for a single ticker.
+    Returns (price: float|None, sector: str|None).
+    Tries .history(2d) first (most reliable for leveraged ETFs),
+    then .info as fallback for both price and sector.
+    """
+    price = None
+    sector = None
+    t = yf.Ticker(ticker_str)
+
+    # Method 1: recent history for price (fastest, most reliable)
     try:
-        hist = yf.Ticker(ticker_str).history(period="5d")
+        hist = t.history(period="2d")
         if not hist.empty and "Close" in hist.columns:
-            price = float(hist["Close"].dropna().iloc[-1])
-            if price > 0:
-                return price
+            val = float(hist["Close"].dropna().iloc[-1])
+            if val > 0:
+                price = val
     except Exception:
         pass
-    # Method 2: .info dict
+
+    # Method 2: .info for price fallback AND sector
     try:
-        info = yf.Ticker(ticker_str).info
-        price = (
-            info.get("regularMarketPrice")
-            or info.get("currentPrice")
-            or info.get("previousClose")
-            or info.get("lastPrice")
+        info = t.info
+        if price is None:
+            price = (
+                info.get("regularMarketPrice")
+                or info.get("currentPrice")
+                or info.get("previousClose")
+                or info.get("lastPrice")
+            )
+            if price is not None:
+                price = float(price)
+        sector = (
+            info.get("sector")
+            or info.get("industry")
+            or info.get("category")
+            or ("Exchange Traded Fund" if info.get("quoteType") == "ETF" else None)
         )
-        if price:
-            return float(price)
     except Exception:
         pass
-    return None
+
+    return price, sector
 
 
 def calculate_portfolio_returns(
@@ -151,36 +169,41 @@ def calculate_portfolio_returns(
         and benchmark in prices_df.columns
     )
 
-    # ── Current valuation (works with even 1 row of prices) ──────────
-    current_value = 0.0
+    # ── Spot prices + sectors via individual per-ticker calls ────────
+    # Always fetch individually — bulk yf.download often returns NaN for
+    # leveraged / recently-launched ETFs (BITU, AGQ, TECL, TSLL).
     latest_prices: dict = {}
-    if not prices_df.empty:
-        last_row = prices_df.iloc[-1]
-        for h in valid_holdings:
-            if h.ticker in last_row.index and pd.notna(last_row[h.ticker]):
-                price = float(last_row[h.ticker])
-                latest_prices[h.ticker] = price
-                current_value += price * h.shares
+    individual_sectors: dict = {}
+    unique_tickers = list(set(all_tickers))
+    print(f"Fetching individual spot prices & sectors for: {unique_tickers}")
+    for ticker_str in unique_tickers:
+        price, sector = _fetch_spot_and_sector(ticker_str)
+        if price is not None:
+            latest_prices[ticker_str] = price
+        if sector is not None:
+            individual_sectors[ticker_str] = sector
 
-    # Individual ticker fallback for any still-missing prices (portfolio + benchmark)
-    missing_tickers = [t for t in all_tickers if t not in latest_prices]
-    if missing_tickers:
-        print(f"Fetching individual spot prices for: {missing_tickers}")
-        for ticker_str in missing_tickers:
-            price = _fetch_spot_price(ticker_str)
-            if price is not None:
-                latest_prices[ticker_str] = price
-                # Add to current_value only for portfolio holdings (not benchmark)
-                holding = next((h for h in valid_holdings if h.ticker == ticker_str), None)
-                if holding:
-                    current_value += price * holding.shares
+    current_value = sum(
+        latest_prices.get(h.ticker, 0) * h.shares
+        for h in valid_holdings
+    )
+    print(f"Spot prices resolved: {len(latest_prices)}/{len(unique_tickers)} tickers, "
+          f"current_value=${current_value:.2f}")
 
-    # ── Sector allocation (uses latest_prices, works without history) ─
+    # ── Sector allocation ─────────────────────────────────────────────
+    # Merge DB-cached sectors with individually-fetched ones
     sector_allocation = []
-    if db is not None and latest_prices:
-        sector_map = get_sector_map(tickers, db)
-        total_value = current_value
+    if latest_prices:
+        sector_map: dict = {}
+        if db is not None:
+            sector_map = get_sector_map(tickers, db)
+        # Fill gaps with individually-fetched sectors
+        for t in tickers:
+            if t not in sector_map or sector_map[t] in (None, "Unknown"):
+                if t in individual_sectors:
+                    sector_map[t] = individual_sectors[t]
 
+        total_value = current_value
         sector_totals: dict = {}
         for h in valid_holdings:
             price = latest_prices.get(h.ticker)
