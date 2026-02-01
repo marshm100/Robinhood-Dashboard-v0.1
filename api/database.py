@@ -1,3 +1,5 @@
+import traceback
+
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from api.config import DATABASE_URL
@@ -26,8 +28,10 @@ def get_db():
 
 def init_db():
     try:
-        # Lazy import models
-        from api.models.portfolio import Portfolio, Holding, Benchmark
+        # Lazy import all models so create_all sees every table
+        from api.models.portfolio import (  # noqa: F401
+            Portfolio, Holding, Benchmark, Stock, HistoricalPrice,
+        )
         Base.metadata.create_all(bind=engine)
         print("SUCCESS: Database tables created successfully")
         # Test connection
