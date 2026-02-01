@@ -1,12 +1,13 @@
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from api.config import CORS_ORIGINS, DATABASE_URL
 from api.database import get_db
 from api.models.portfolio import Portfolio
+from api.services.analysis_service import calculate_portfolio_returns
 
 print("\n" + "="*80)
 print("VERCEL: Full app restoring – api/index.py loaded")
@@ -47,6 +48,32 @@ async def upload_page(request: Request, portfolio_id: int | None = None):
     return templates.TemplateResponse(
         "upload.html",
         {"request": request, "portfolio_id": portfolio_id},
+    )
+
+@app.get("/portfolio/{portfolio_id}", response_class=HTMLResponse)
+def portfolio_detail(
+    request: Request,
+    portfolio_id: int,
+    benchmark: str = "SPY",
+    period: str = "1y",
+    db: Session = Depends(get_db),
+):
+    portfolio = (
+        db.query(Portfolio)
+        .options(selectinload(Portfolio.holdings))
+        .filter(Portfolio.id == portfolio_id)
+        .first()
+    )
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+
+    analysis = calculate_portfolio_returns(
+        portfolio.holdings, benchmark=benchmark, period=period, db=db
+    )
+
+    return templates.TemplateResponse(
+        "portfolio_detail.html",
+        {"request": request, "portfolio": portfolio, "analysis": analysis},
     )
 
 @app.on_event("startup")
