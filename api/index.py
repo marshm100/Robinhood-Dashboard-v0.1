@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -56,6 +57,7 @@ def portfolio_detail(
     portfolio_id: int,
     benchmark: str = "SPY",
     period: str = "all",
+    track_present: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     portfolio = (
@@ -67,9 +69,17 @@ def portfolio_detail(
     if not portfolio:
         raise HTTPException(status_code=404, detail="Portfolio not found")
 
+    # Resolve track_to_present: URL param overrides DB default
+    if track_present is not None:
+        track_to_present = track_present not in ("0", "false", "off")
+    else:
+        track_to_present = bool(portfolio.track_to_present) if portfolio.track_to_present is not None else True
+
     analysis = calculate_portfolio_returns(
         portfolio.holdings, benchmark=benchmark, period=period, db=db,
         inception_date=portfolio.inception_date,
+        track_to_present=track_to_present,
+        snapshot_date=portfolio.snapshot_date,
     )
 
     return templates.TemplateResponse(

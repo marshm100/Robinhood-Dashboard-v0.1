@@ -122,8 +122,9 @@ async def upload_holdings_csv(
             detail="No net stock holdings found in the CSV.",
         )
 
-    # ── Compute inception_date from activity dates in CSV ────────────
+    # ── Compute inception_date and snapshot_date from CSV dates ──────
     inception_date = None
+    snapshot_date = None
     df_lower = df.copy()
     df_lower.columns = df_lower.columns.str.lower().str.strip()
     date_col = None
@@ -136,6 +137,7 @@ async def upload_holdings_csv(
         valid_dates = parsed_dates.dropna()
         if not valid_dates.empty:
             inception_date = valid_dates.min()
+            snapshot_date = valid_dates.max()
 
     # ── Replace holdings in the portfolio ────────────────────────────
     db.query(Holding).filter(Holding.portfolio_id == portfolio_id).delete()
@@ -152,10 +154,14 @@ async def upload_holdings_csv(
         )
         added += 1
 
-    # Update portfolio inception_date
+    # Update portfolio dates
     portfolio = db.query(Portfolio).filter(Portfolio.id == portfolio_id).first()
-    if portfolio and inception_date is not None:
-        portfolio.inception_date = inception_date.date()
+    if portfolio:
+        if inception_date is not None:
+            portfolio.inception_date = inception_date.date()
+        if snapshot_date is not None:
+            portfolio.snapshot_date = snapshot_date.date()
+        portfolio.track_to_present = True
 
     db.commit()
 

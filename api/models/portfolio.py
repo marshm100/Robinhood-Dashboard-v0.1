@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Date, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Date, ForeignKey
 from sqlalchemy.orm import relationship
 from api.database import Base
 from datetime import datetime
@@ -10,6 +10,8 @@ class Portfolio(Base):
     name = Column(String, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     inception_date = Column(Date, nullable=True)
+    snapshot_date = Column(Date, nullable=True)
+    track_to_present = Column(Boolean, default=True, nullable=False)
 
     holdings = relationship("Holding", back_populates="portfolio")
 

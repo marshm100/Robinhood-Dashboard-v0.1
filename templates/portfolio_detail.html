@@ -28,12 +28,13 @@
 </div>
 
 {% else %}
-{# ── Controls: period tabs + benchmark dropdown ──────────────────── #}
-<div class="mb-6 flex flex-wrap items-center gap-4">
+{# ── Controls: period tabs + toggle + benchmark dropdown ──────────── #}
+{% set tp = "1" if analysis.track_to_present else "0" %}
+<div class="mb-4 flex flex-wrap items-center gap-4">
     <div class="flex gap-2 flex-wrap">
         {% set periods = [("all", "All"), ("3mo", "3M"), ("6mo", "6M"), ("1y", "1Y"), ("2y", "2Y"), ("5y", "5Y")] %}
         {% for key, label in periods %}
-        <a href="/portfolio/{{ portfolio.id }}?period={{ key }}&benchmark={{ analysis.benchmark }}"
+        <a href="/portfolio/{{ portfolio.id }}?period={{ key }}&benchmark={{ analysis.benchmark }}&track_present={{ tp }}"
            class="px-4 py-2 rounded-lg text-sm font-medium transition
                   {% if analysis.period == key %}bg-indigo-600 text-white{% else %}bg-white text-gray-700 hover:bg-gray-100 shadow-sm{% endif %}">
             {{ label }}
@@ -62,6 +63,25 @@
     </div>
 </div>
 
+{# ── Track-to-present toggle + effective date ────────────────────── #}
+<div class="mb-6 flex flex-wrap items-center gap-4">
+    <label class="relative inline-flex items-center cursor-pointer">
+        <input type="checkbox" id="track-toggle" class="sr-only peer"
+               {% if analysis.track_to_present %}checked{% endif %}>
+        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2
+                    peer-focus:ring-indigo-300 rounded-full peer
+                    peer-checked:after:translate-x-full peer-checked:after:border-white
+                    after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                    after:bg-white after:border-gray-300 after:border after:rounded-full
+                    after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
+        </div>
+        <span class="ml-3 text-sm font-medium text-gray-700">Track to present day</span>
+    </label>
+    {% if analysis.effective_end_date %}
+    <span class="text-xs text-gray-500">Analysis as of {{ analysis.effective_end_date }}</span>
+    {% endif %}
+</div>
+
 {# ── Limited history warning banner ──────────────────────────────── #}
 {% if analysis.warning == "limited_history" or not analysis.has_history %}
 <div class="mb-6 bg-yellow-100 border border-yellow-400 rounded-lg px-5 py-4 text-yellow-800">
@@ -75,10 +95,12 @@
 </div>
 {% endif %}
 
-{# ── Current value card (always shown) ───────────────────────────── #}
+{# ── Value card (always shown) ─────────────────────────────────────── #}
 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-6">
     <div class="bg-white rounded-lg shadow p-5">
-        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Current Value</p>
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">
+            {{ "Current Value" if analysis.track_to_present else "Snapshot Value" }}
+        </p>
         {% if analysis.current_value and analysis.current_value > 0 %}
         <p class="mt-2 text-2xl font-bold text-gray-900">${{ "{:,.2f}".format(analysis.current_value) }}</p>
         {% else %}
@@ -383,6 +405,13 @@
     document.getElementById('benchmark-select').addEventListener('change', function() {
         const url = new URL(window.location);
         url.searchParams.set('benchmark', this.value);
+        window.location = url;
+    });
+
+    /* ── 5. Track-to-present toggle ───────────────────────────────── */
+    document.getElementById('track-toggle').addEventListener('change', function() {
+        const url = new URL(window.location);
+        url.searchParams.set('track_present', this.checked ? '1' : '0');
         window.location = url;
     });
 })();

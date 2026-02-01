@@ -94,6 +94,8 @@ def calculate_portfolio_returns(
     period: str = "1y",
     db: Optional[Session] = None,
     inception_date: Optional[date] = None,
+    track_to_present: bool = True,
+    snapshot_date: Optional[date] = None,
 ) -> dict:
     valid_holdings = [h for h in holdings if h.shares > 0]
     if not valid_holdings:
@@ -108,7 +110,8 @@ def calculate_portfolio_returns(
         for h in valid_holdings
     ]
 
-    print(f"Analysis request: tickers={tickers}, benchmark={benchmark}, period={period}, inception={inception_date}")
+    print(f"Analysis request: tickers={tickers}, benchmark={benchmark}, period={period}, "
+          f"inception={inception_date}, track_to_present={track_to_present}, snapshot={snapshot_date}")
     # Map user-facing "all" to yfinance's "max" period
     yf_period = "max" if period == "all" else period
     prices_df = get_historical_prices(all_tickers, period=yf_period)
@@ -125,6 +128,22 @@ def calculate_portfolio_returns(
         if not sliced.empty:
             prices_df = sliced
             print(f"Sliced prices to inception {inception_date}: {len(prices_df)} rows remain")
+
+    # ── Slice end at snapshot_date when NOT tracking to present ───────
+    if not track_to_present and snapshot_date is not None and not prices_df.empty:
+        end_ts = pd.Timestamp(snapshot_date)
+        sliced = prices_df[prices_df.index <= end_ts]
+        if not sliced.empty:
+            prices_df = sliced
+            print(f"Snapshot mode: sliced to {snapshot_date}, {len(prices_df)} rows remain")
+
+    # ── Compute effective end date for UI ─────────────────────────────
+    if not prices_df.empty:
+        effective_end_date = prices_df.index[-1].date().isoformat()
+    elif not track_to_present and snapshot_date:
+        effective_end_date = snapshot_date.isoformat()
+    else:
+        effective_end_date = date.today().isoformat()
 
     has_history = (
         not prices_df.empty
@@ -216,6 +235,8 @@ def calculate_portfolio_returns(
             "warning": warning,
             "holdings_list": holdings_list,
             "inception_date": inception_date.isoformat() if inception_date else None,
+            "track_to_present": track_to_present,
+            "effective_end_date": effective_end_date,
         }
 
     # ── Full analysis (sufficient history) ────────────────────────────
@@ -291,4 +312,6 @@ def calculate_portfolio_returns(
         "warning": warning,
         "holdings_list": holdings_list,
         "inception_date": inception_date.isoformat() if inception_date else None,
+        "track_to_present": track_to_present,
+        "effective_end_date": effective_end_date,
     }
