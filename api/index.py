@@ -10,19 +10,11 @@ from sqlalchemy.orm import Session
 from api.database import get_db
 from api.models.portfolio import Portfolio
 
-print("\n" + "="*80)
-print("VERCEL: Full app restoring – api/index.py loaded")
-print("DB URL:", DATABASE_URL)
-print("="*80 + "\n")
-
 app = FastAPI(
     title="Robinhood Portfolio Analysis",
     description="Full version on Vercel serverless",
     version="1.0"
 )
-
-from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
 
 templates = Jinja2Templates(directory="templates")
 
@@ -47,11 +39,8 @@ async def portfolios_list(request: Request, db: Session = Depends(get_db)):
     portfolios = db.query(Portfolio).all()
     return templates.TemplateResponse("portfolios.html", {"request": request, "portfolios": portfolios})
 
-# === Add routers here in next steps ===
-
 @app.on_event("startup")
 def startup():
-    print("App starting - Vercel serverless")
     from api.database import init_db
     init_db()
 
@@ -73,10 +62,6 @@ app.include_router(upload_router)
 from api.routes.cron import router as cron_router
 app.include_router(cron_router)
 
-from api.routes.schema_fix import router as schema_fix_router
-app.include_router(schema_fix_router)
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("index:app", host="0.0.0.0", port=8000, reload=True)
-    # Trigger Vercel redeploy

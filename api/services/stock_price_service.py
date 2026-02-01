@@ -197,9 +197,9 @@ def fetch_and_store(symbol: str, db: Session, incremental: bool = True) -> dict:
         # --- Normalize field names to lowercase, strip whitespace from values ---
         row = {k.lower().strip(): v.strip() if isinstance(v, str) else v for k, v in row.items()}
 
-        # Log first 5 raw rows for diagnostics
+        # Log first 5 raw rows for diagnostics (DEBUG to avoid noise)
         if total_rows <= 5:
-            logger.info(
+            logger.debug(
                 "%s row %d raw (source=%s): %s",
                 symbol, total_rows, source, dict(row),
             )
@@ -247,7 +247,7 @@ def fetch_and_store(symbol: str, db: Session, incremental: bool = True) -> dict:
         volume = _safe_int(row.get("volume"))
 
         if total_rows <= 5:
-            logger.info("%s row %d parsed close=%.4f", symbol, total_rows, close)
+            logger.debug("%s row %d parsed close=%.4f", symbol, total_rows, close)
 
         candidates.append({
             "date": row_date,
