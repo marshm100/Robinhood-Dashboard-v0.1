@@ -1,4 +1,5 @@
 import os
+import traceback
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.config import CORS_ORIGINS, DATABASE_URL
@@ -6,9 +7,9 @@ from fastapi import Request, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from api.database import get_db
-from api.models.portfolio import Portfolio
+from api.models.portfolio import Portfolio, Holding, Transaction
 
 print("\n" + "="*80)
 print("VERCEL: Full app restoring – api/index.py loaded")
@@ -46,6 +47,53 @@ async def home(request: Request):
 async def portfolios_list(request: Request, db: Session = Depends(get_db)):
     portfolios = db.query(Portfolio).all()
     return templates.TemplateResponse("portfolios.html", {"request": request, "portfolios": portfolios})
+
+@app.get("/portfolios/{portfolio_id}", response_class=HTMLResponse)
+async def portfolio_detail(request: Request, portfolio_id: int, db: Session = Depends(get_db)):
+    try:
+        # Load portfolio with holdings eagerly; transactions loaded separately to handle missing columns
+        portfolio = (
+            db.query(Portfolio)
+            .options(selectinload(Portfolio.holdings))
+            .filter(Portfolio.id == portfolio_id)
+            .first()
+        )
+        if not portfolio:
+            return HTMLResponse("<h1>Portfolio not found</h1>", status_code=404)
+
+        # Try loading transactions separately so holdings still work if transactions table is broken
+        transactions = []
+        try:
+            transactions = (
+                db.query(Transaction)
+                .filter(Transaction.portfolio_id == portfolio_id)
+                .order_by(Transaction.activity_date)
+                .all()
+            )
+        except Exception as tx_err:
+            print(f"WARNING: Could not load transactions for portfolio {portfolio_id}: {tx_err}")
+
+        # Run analysis
+        analysis = None
+        try:
+            from api.services.analysis_service import calculate_portfolio_returns
+            if portfolio.holdings:
+                analysis = calculate_portfolio_returns(portfolio.holdings, "SPY", "1y")
+        except Exception as analysis_err:
+            print(f"WARNING: Analysis failed for portfolio {portfolio_id}: {analysis_err}")
+
+        return templates.TemplateResponse("portfolio_detail.html", {
+            "request": request,
+            "portfolio": portfolio,
+            "transactions": transactions,
+            "analysis": analysis,
+        })
+    except Exception as e:
+        print(f"Detail route error for portfolio {portfolio_id}: {traceback.format_exc()}")
+        return HTMLResponse(
+            "<h1>Temporary error loading portfolio</h1><p>Check server logs for details.</p>",
+            status_code=500,
+        )
 
 # === Add routers here in next steps ===
 

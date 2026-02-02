@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}{{ portfolio.name }} - Portfolio Detail{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <a href="/portfolios" class="text-indigo-600 hover:underline">&larr; Back to Portfolios</a>
+</div>
+
+<h2 class="text-3xl font-bold mb-2">{{ portfolio.name }}</h2>
+<p class="text-gray-500 mb-8">Portfolio #{{ portfolio.id }} &bull; Created {{ portfolio.created_at.strftime('%Y-%m-%d') }}</p>
+
+<!-- Holdings -->
+<section class="mb-10">
+    <h3 class="text-2xl font-semibold mb-4">Holdings ({{ portfolio.holdings | length }})</h3>
+    {% if portfolio.holdings %}
+    <div class="overflow-x-auto">
+        <table class="min-w-full bg-white rounded-lg shadow">
+            <thead class="bg-gray-100">
+                <tr>
+                    <th class="px-6 py-3 text-left text-sm font-medium text-gray-600">Ticker</th>
+                    <th class="px-6 py-3 text-right text-sm font-medium text-gray-600">Shares</th>
+                    <th class="px-6 py-3 text-right text-sm font-medium text-gray-600">Cost Basis</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+                {% for h in portfolio.holdings %}
+                <tr>
+                    <td class="px-6 py-3 font-semibold">{{ h.ticker }}</td>
+                    <td class="px-6 py-3 text-right">{{ "%.4f" | format(h.shares) }}</td>
+                    <td class="px-6 py-3 text-right">{{ "$%.2f" | format(h.cost_basis) if h.cost_basis else "N/A" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-gray-500">No holdings yet. <a href="/upload?portfolio_id={{ portfolio.id }}" class="text-indigo-600 hover:underline">Upload a CSV</a> to get started.</p>
+    {% endif %}
+</section>
+
+<!-- Analysis -->
+{% if analysis and not analysis.get("error") %}
+<section class="mb-10">
+    <h3 class="text-2xl font-semibold mb-4">Performance vs {{ analysis.benchmark }}</h3>
+    <div class="grid gap-4 md:grid-cols-2 mb-6">
+        <div class="bg-white p-4 rounded-lg shadow">
+            <p class="text-sm text-gray-500">Portfolio Return ({{ analysis.period }})</p>
+            <p class="text-2xl font-bold {% if analysis.final_portfolio_return >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                {{ analysis.final_portfolio_return }}%
+            </p>
+        </div>
+        <div class="bg-white p-4 rounded-lg shadow">
+            <p class="text-sm text-gray-500">{{ analysis.benchmark }} Return ({{ analysis.period }})</p>
+            <p class="text-2xl font-bold {% if analysis.final_benchmark_return >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                {{ analysis.final_benchmark_return }}%
+            </p>
+        </div>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow">
+        <canvas id="performanceChart" height="120"></canvas>
+    </div>
+</section>
+<script>
+const ctx = document.getElementById('performanceChart').getContext('2d');
+new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: {{ analysis.dates | tojson }},
+        datasets: [
+            {
+                label: 'Portfolio',
+                data: {{ analysis.portfolio_returns | tojson }},
+                borderColor: '#4f46e5',
+                backgroundColor: 'rgba(79,70,229,0.08)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0,
+            },
+            {
+                label: '{{ analysis.benchmark }}',
+                data: {{ analysis.benchmark_returns | tojson }},
+                borderColor: '#9333ea',
+                borderDash: [5, 5],
+                fill: false,
+                tension: 0.3,
+                pointRadius: 0,
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { position: 'top' } },
+        scales: {
+            x: { display: true, ticks: { maxTicksLimit: 12 } },
+            y: { display: true, title: { display: true, text: 'Return (%)' } }
+        }
+    }
+});
+</script>
+{% elif analysis and analysis.get("error") %}
+<section class="mb-10">
+    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        <p class="text-yellow-800">Analysis unavailable: {{ analysis.error }}</p>
+    </div>
+</section>
+{% endif %}
+
+<!-- Transactions -->
+<section class="mb-10">
+    <h3 class="text-2xl font-semibold mb-4">Transactions ({{ transactions | length }})</h3>
+    {% if transactions %}
+    <div class="overflow-x-auto">
+        <table class="min-w-full bg-white rounded-lg shadow">
+            <thead class="bg-gray-100">
+                <tr>
+                    <th class="px-4 py-3 text-left text-sm font-medium text-gray-600">Date</th>
+                    <th class="px-4 py-3 text-left text-sm font-medium text-gray-600">Ticker</th>
+                    <th class="px-4 py-3 text-left text-sm font-medium text-gray-600">Type</th>
+                    <th class="px-4 py-3 text-right text-sm font-medium text-gray-600">Qty</th>
+                    <th class="px-4 py-3 text-right text-sm font-medium text-gray-600">Price</th>
+                    <th class="px-4 py-3 text-right text-sm font-medium text-gray-600">Amount</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+                {% for tx in transactions %}
+                <tr>
+                    <td class="px-4 py-2 text-sm">{{ tx.activity_date or "" }}</td>
+                    <td class="px-4 py-2 font-semibold text-sm">{{ tx.ticker or "" }}</td>
+                    <td class="px-4 py-2 text-sm">{{ tx.trans_code or "" }}</td>
+                    <td class="px-4 py-2 text-sm text-right">{{ tx.quantity if tx.quantity else "" }}</td>
+                    <td class="px-4 py-2 text-sm text-right">{{ "$%.2f" | format(tx.price) if tx.price else "" }}</td>
+                    <td class="px-4 py-2 text-sm text-right">{{ "$%.2f" | format(tx.amount) if tx.amount else "" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-gray-500">No transactions recorded for this portfolio.</p>
+    {% endif %}
+</section>
+{% endblock %}
