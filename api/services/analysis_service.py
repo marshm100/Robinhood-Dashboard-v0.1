@@ -1,8 +1,65 @@
 import pandas as pd
 import numpy as np
+import requests
+import zipfile
+import io
 from typing import List
 from api.models.portfolio import Holding
 from .price_service import get_historical_prices
+
+FF_URL = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_Factors_CSV.zip"
+
+def _fetch_ff_factors() -> pd.DataFrame | None:
+    """Download and parse Fama-French 3-factor monthly data.
+
+    Returns DataFrame indexed by period (YYYYMM int) with columns:
+    Mkt-RF, SMB, HML, RF  (all in percent, e.g. 1.5 means 1.5%).
+    Returns None on failure.
+    """
+    try:
+        resp = requests.get(FF_URL, timeout=30)
+        resp.raise_for_status()
+        with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+            csv_name = [n for n in zf.namelist() if n.endswith(".CSV") or n.endswith(".csv")][0]
+            raw = zf.read(csv_name).decode("utf-8")
+
+        # Parse the monthly section (stop before annual section)
+        lines = raw.splitlines()
+        data_rows = []
+        header_found = False
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                if header_found:
+                    break  # blank line after data = end of monthly section
+                continue
+            # Detect the header row by looking for "Mkt-RF"
+            if "Mkt-RF" in stripped and not header_found:
+                header_found = True
+                continue
+            if header_found:
+                parts = stripped.split(",")
+                if len(parts) < 4:
+                    break
+                period_str = parts[0].strip()
+                # Monthly rows are 6 digits (YYYYMM); skip annual (4 digits)
+                if not period_str.isdigit() or len(period_str) != 6:
+                    break
+                try:
+                    vals = [float(x.strip()) for x in parts[1:5]]
+                    data_rows.append([int(period_str)] + vals)
+                except ValueError:
+                    break
+
+        if not data_rows:
+            return None
+
+        df = pd.DataFrame(data_rows, columns=["period", "Mkt-RF", "SMB", "HML", "RF"])
+        df = df.set_index("period")
+        return df
+    except Exception as e:
+        print(f"FF factor fetch failed: {e}")
+        return None
 
 def calculate_portfolio_returns(
     holdings: List[Holding],
@@ -114,6 +171,85 @@ def calculate_portfolio_returns(
                 values.append(round(float(pct_line[idx]), 2))
             monte_carlo["data"][str(p)] = values
 
+    # --- Fama-French 3-Factor Regression ---
+    factor_regression = None
+    try:
+        # Resample daily portfolio value to monthly returns
+        pv_dt = portfolio_value.copy()
+        pv_dt.index = pd.to_datetime(pv_dt.index)
+        monthly_pv = pv_dt.resample("ME").last()
+        monthly_port_ret = monthly_pv.pct_change().dropna() * 100  # in percent
+
+        if len(monthly_port_ret) >= 24:
+            ff_df = _fetch_ff_factors()
+            if ff_df is not None:
+                # Build YYYYMM period index for portfolio monthly returns
+                port_periods = (monthly_port_ret.index.year * 100 +
+                                monthly_port_ret.index.month).astype(int)
+                port_monthly = pd.DataFrame({
+                    "period": port_periods.values,
+                    "port_ret": monthly_port_ret.values,
+                })
+                port_monthly = port_monthly.set_index("period")
+
+                # Inner join on period
+                merged = port_monthly.join(ff_df, how="inner")
+                merged = merged.dropna()
+
+                if len(merged) >= 24:
+                    # Excess return = portfolio return - risk-free rate
+                    y = (merged["port_ret"] - merged["RF"]).values
+                    X = merged[["Mkt-RF", "SMB", "HML"]].values
+                    # Add intercept column
+                    X_int = np.column_stack([np.ones(len(X)), X])
+
+                    # OLS via numpy least squares
+                    beta, residuals, rank, sv = np.linalg.lstsq(X_int, y, rcond=None)
+                    alpha_monthly = beta[0]
+                    mkt_beta = beta[1]
+                    smb_beta = beta[2]
+                    hml_beta = beta[3]
+
+                    # R-squared
+                    y_hat = X_int @ beta
+                    ss_res = np.sum((y - y_hat) ** 2)
+                    ss_tot = np.sum((y - np.mean(y)) ** 2)
+                    r_squared = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
+
+                    # t-statistics for coefficients
+                    n = len(y)
+                    k = X_int.shape[1]
+                    if n > k:
+                        mse = ss_res / (n - k)
+                        var_beta = mse * np.linalg.inv(X_int.T @ X_int)
+                        se_beta = np.sqrt(np.diag(var_beta))
+                        t_stats = beta / se_beta
+                    else:
+                        t_stats = np.full(k, np.nan)
+
+                    # Period covered
+                    start_period = int(merged.index.min())
+                    end_period = int(merged.index.max())
+                    start_str = f"{start_period // 100}-{start_period % 100:02d}"
+                    end_str = f"{end_period // 100}-{end_period % 100:02d}"
+
+                    factor_regression = {
+                        "alpha_annualized": round(float(alpha_monthly * 12), 2),
+                        "alpha_t_stat": round(float(t_stats[0]), 2),
+                        "market_beta": round(float(mkt_beta), 2),
+                        "market_t_stat": round(float(t_stats[1]), 2),
+                        "size_beta": round(float(smb_beta), 2),
+                        "size_t_stat": round(float(t_stats[2]), 2),
+                        "value_beta": round(float(hml_beta), 2),
+                        "value_t_stat": round(float(t_stats[3]), 2),
+                        "r_squared": round(float(r_squared), 3),
+                        "num_months": int(len(merged)),
+                        "period": f"{start_str} to {end_str}",
+                    }
+    except Exception as e:
+        print(f"Factor regression failed: {e}")
+        factor_regression = None
+
     return {
         "dates": dates,
         "portfolio_returns": portfolio_returns.round(2).tolist(),
@@ -127,4 +263,5 @@ def calculate_portfolio_returns(
         "drawdown_data": drawdown_data,
         "max_drawdown": max_drawdown,
         "monte_carlo": monte_carlo,
+        "factor_regression": factor_regression,
     }

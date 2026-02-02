@@ -115,6 +115,55 @@
     {% endif %}
 </div>
 
+<!-- Fama-French 3-Factor Regression -->
+<div class="bg-white p-6 rounded-lg shadow mb-10">
+    <h3 class="text-xl font-semibold mb-4">Factor Regression (Fama-French 3-Factor)</h3>
+    {% if analysis.factor_regression %}
+    <p class="text-gray-500 text-sm mb-4">OLS regression of monthly excess returns on Mkt-RF, SMB, HML. Period: {{ analysis.factor_regression.period }} ({{ analysis.factor_regression.num_months }} months).</p>
+    <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead>
+                <tr class="border-b-2 border-gray-200 text-left">
+                    <th class="py-2 px-4 font-semibold">Factor</th>
+                    <th class="py-2 px-4 font-semibold text-right">Coefficient</th>
+                    <th class="py-2 px-4 font-semibold text-right">t-Statistic</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="border-b border-gray-100 hover:bg-gray-50">
+                    <td class="py-2 px-4 font-medium">Alpha (annualized %)</td>
+                    <td class="py-2 px-4 text-right font-semibold {% if analysis.factor_regression.alpha_annualized >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                        {{ "%.2f" | format(analysis.factor_regression.alpha_annualized) }}%
+                    </td>
+                    <td class="py-2 px-4 text-right text-gray-600">{{ analysis.factor_regression.alpha_t_stat }}</td>
+                </tr>
+                <tr class="border-b border-gray-100 hover:bg-gray-50">
+                    <td class="py-2 px-4 font-medium">Market Beta (Mkt-RF)</td>
+                    <td class="py-2 px-4 text-right">{{ analysis.factor_regression.market_beta }}</td>
+                    <td class="py-2 px-4 text-right text-gray-600">{{ analysis.factor_regression.market_t_stat }}</td>
+                </tr>
+                <tr class="border-b border-gray-100 hover:bg-gray-50">
+                    <td class="py-2 px-4 font-medium">Size Beta (SMB)</td>
+                    <td class="py-2 px-4 text-right">{{ analysis.factor_regression.size_beta }}</td>
+                    <td class="py-2 px-4 text-right text-gray-600">{{ analysis.factor_regression.size_t_stat }}</td>
+                </tr>
+                <tr class="border-b border-gray-100 hover:bg-gray-50">
+                    <td class="py-2 px-4 font-medium">Value Beta (HML)</td>
+                    <td class="py-2 px-4 text-right">{{ analysis.factor_regression.value_beta }}</td>
+                    <td class="py-2 px-4 text-right text-gray-600">{{ analysis.factor_regression.value_t_stat }}</td>
+                </tr>
+                <tr class="border-b border-gray-100 hover:bg-gray-50 bg-gray-50">
+                    <td class="py-2 px-4 font-medium">R-squared</td>
+                    <td class="py-2 px-4 text-right font-semibold" colspan="2">{{ analysis.factor_regression.r_squared }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-gray-500 text-sm">Insufficient data for factor regression (need at least 24 months of history, or FF data unavailable).</p>
+    {% endif %}
+</div>
+
 <!-- Holdings Table -->
 <div class="bg-white p-6 rounded-lg shadow mb-10">
     <h3 class="text-xl font-semibold mb-4">Holdings</h3>
