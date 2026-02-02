@@ -1,7 +1,7 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from sqlalchemy.orm import Session
 from api.database import get_db
-from api.models.portfolio import Holding
+from api.models.portfolio import Holding, Stock
 from api.services.blob_service import archive_upload
 import pandas as pd
 from io import StringIO
@@ -36,6 +36,7 @@ async def upload_holdings_csv(portfolio_id: int, file: UploadFile = File(...), d
     db.query(Holding).filter(Holding.portfolio_id == portfolio_id).delete()
 
     added = 0
+    discovered_tickers = set()
     for _, row in df.iterrows():
         try:
             ticker = str(row[ticker_col]).upper().strip()
@@ -48,8 +49,13 @@ async def upload_holdings_csv(portfolio_id: int, file: UploadFile = File(...), d
             holding = Holding(portfolio_id=portfolio_id, ticker=ticker, shares=shares, cost_basis=cost_basis)
             db.add(holding)
             added += 1
+            discovered_tickers.add(ticker)
         except:
             continue  # skip invalid rows
+
+    # Register discovered tickers in stocks table for global price cache
+    for t in discovered_tickers:
+        db.merge(Stock(symbol=t))
 
     db.commit()
     return {

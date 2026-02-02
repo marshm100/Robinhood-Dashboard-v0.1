@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 from api.database import get_db
 from api.models.portfolio import Portfolio
 from api.services.analysis_service import calculate_portfolio_returns
+from api.services.price_service import run_daily_price_update
 
 print("\n" + "="*80)
 print("VERCEL: Full app restoring – api/index.py loaded")
@@ -73,6 +74,12 @@ async def portfolio_detail(
         "portfolio_detail.html",
         {"request": request, "portfolio": portfolio, "analysis": analysis},
     )
+
+# --- Internal cron endpoint for daily price cache update ---
+@app.get("/api/internal/daily-price-update")
+async def daily_price_update():
+    results = run_daily_price_update()
+    return results
 
 # === Add routers here in next steps ===
 
