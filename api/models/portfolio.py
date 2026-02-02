@@ -23,7 +23,8 @@ class Holding(Base):
     ticker = Column(String)
     shares = Column(Float)
     cost_basis = Column(Float)
-    
+    avg_cost = Column(Float, nullable=True)
+
     portfolio = relationship("Portfolio", back_populates="holdings")
 
 class Benchmark(Base):

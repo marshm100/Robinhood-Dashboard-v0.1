@@ -123,6 +123,39 @@
     {% endif %}
 </div>
 
+{# ── Cost basis / P&L cards (always shown) ───────────────────────────── #}
+{% set pnl = analysis.get("pnl", {}) %}
+<div class="grid gap-4 sm:grid-cols-3 mb-6">
+    <div class="bg-white rounded-lg shadow p-5">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Cost Basis</p>
+        {% if pnl.get("cost_basis") != "N/A" and pnl.get("cost_basis") is not none %}
+        <p class="mt-2 text-2xl font-bold text-gray-900">${{ "{:,.2f}".format(pnl["cost_basis"]) }}</p>
+        {% else %}
+        <p class="mt-2 text-2xl font-bold text-gray-400">N/A</p>
+        {% endif %}
+    </div>
+    <div class="bg-white rounded-lg shadow p-5">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Unrealized Gain</p>
+        {% if pnl.get("unrealized_gain") != "N/A" and pnl.get("unrealized_gain") is not none %}
+        <p class="mt-2 text-2xl font-bold {{ 'text-green-600' if pnl['unrealized_gain'] >= 0 else 'text-red-600' }}">
+            {{ "+" if pnl["unrealized_gain"] >= 0 }}${{ "{:,.2f}".format(pnl["unrealized_gain"]) }}
+        </p>
+        {% else %}
+        <p class="mt-2 text-2xl font-bold text-gray-400">N/A</p>
+        {% endif %}
+    </div>
+    <div class="bg-white rounded-lg shadow p-5">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Unrealized %</p>
+        {% if pnl.get("unrealized_pct") != "N/A" and pnl.get("unrealized_pct") is not none %}
+        <p class="mt-2 text-2xl font-bold {{ 'text-green-600' if pnl['unrealized_pct'] >= 0 else 'text-red-600' }}">
+            {{ "+" if pnl["unrealized_pct"] >= 0 }}{{ pnl["unrealized_pct"] }}%
+        </p>
+        {% else %}
+        <p class="mt-2 text-2xl font-bold text-gray-400">N/A</p>
+        {% endif %}
+    </div>
+</div>
+
 {% if analysis.has_history %}
 {# ── Drawdown + risk metric cards ────────────────────────────────── #}
 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-4">
@@ -241,6 +274,7 @@
                     <tr class="border-b text-left text-gray-500 uppercase text-xs">
                         <th class="pb-2">Ticker</th>
                         <th class="pb-2 text-right">Shares</th>
+                        <th class="pb-2 text-right">Avg Cost</th>
                         <th class="pb-2 text-right">Cost Basis</th>
                     </tr>
                 </thead>
@@ -249,6 +283,13 @@
                     <tr class="border-b last:border-0">
                         <td class="py-2 font-medium">{{ h.ticker }}</td>
                         <td class="py-2 text-right">{{ "%.2f" | format(h.shares) }}</td>
+                        <td class="py-2 text-right">
+                            {% if h.avg_cost %}
+                            <span>${{ "%.4f" | format(h.avg_cost) }}</span>
+                            {% else %}
+                            <span class="text-gray-400">N/A</span>
+                            {% endif %}
+                        </td>
                         <td class="py-2 text-right">{{ ("$%.2f" | format(h.cost_basis)) if h.cost_basis else "—" }}</td>
                     </tr>
                     {% endfor %}

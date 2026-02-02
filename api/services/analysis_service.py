@@ -133,7 +133,11 @@ def calculate_portfolio_returns(
 
     # Always include a holdings list in the response
     holdings_list = [
-        {"ticker": h.ticker, "shares": round(float(h.shares), 6)}
+        {
+            "ticker": h.ticker,
+            "shares": round(float(h.shares), 6),
+            "avg_cost": round(h.avg_cost, 4) if h.avg_cost else "N/A",
+        }
         for h in valid_holdings
     ]
 
@@ -210,6 +214,27 @@ def calculate_portfolio_returns(
     print(f"Spot prices resolved: {len(latest_prices)}/{len(unique_tickers)} tickers, "
           f"current_value=${current_value:.2f}")
 
+    # ── Cost basis & unrealized P&L ────────────────────────────────────
+    cost_basis = sum(
+        h.shares * h.avg_cost
+        for h in valid_holdings
+        if h.avg_cost and h.avg_cost > 0
+    )
+    if cost_basis > 0:
+        unrealized_gain = current_value - cost_basis
+        unrealized_pct = (unrealized_gain / cost_basis) * 100
+        pnl = {
+            "cost_basis": round(cost_basis, 2),
+            "unrealized_gain": round(unrealized_gain, 2),
+            "unrealized_pct": round(unrealized_pct, 2),
+        }
+    else:
+        pnl = {
+            "cost_basis": "N/A",
+            "unrealized_gain": "N/A",
+            "unrealized_pct": "N/A",
+        }
+
     # ── Sector allocation ─────────────────────────────────────────────
     # Merge DB-cached sectors with individually-fetched ones
     sector_allocation = []
@@ -281,6 +306,7 @@ def calculate_portfolio_returns(
             "has_history": False,
             "warning": warning,
             "holdings_list": holdings_list,
+            "pnl": pnl,
             "inception_date": inception_date.isoformat() if inception_date else None,
             "track_to_present": track_to_present,
             "effective_end_date": effective_end_date,
@@ -358,6 +384,7 @@ def calculate_portfolio_returns(
         "has_history": True,
         "warning": warning,
         "holdings_list": holdings_list,
+        "pnl": pnl,
         "inception_date": inception_date.isoformat() if inception_date else None,
         "track_to_present": track_to_present,
         "effective_end_date": effective_end_date,

@@ -33,14 +33,37 @@ def _parse_transaction_history(df: pd.DataFrame) -> pd.DataFrame:
     df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce")
     df = df.dropna(subset=["quantity"])
 
+    # Parse price column for avg cost calculation
+    if "price" in df.columns:
+        df["price"] = pd.to_numeric(df["price"], errors="coerce")
+
     # Sells become negative quantities
     is_sell = df["trans code"].str.strip().str.upper() == "SELL"
     df.loc[is_sell, "quantity"] = -df.loc[is_sell, "quantity"].abs()
+
+    # Weighted average cost from buy rows (quantity > 0 with valid price)
+    cost_tracker: dict = {}  # ticker -> {"total_cost": float, "total_bought": float}
+    for _, row in df.iterrows():
+        ticker = row["instrument"]
+        qty = row["quantity"]
+        if qty > 0 and "price" in df.columns:
+            price = row.get("price")
+            if pd.notna(price) and price > 0:
+                entry = cost_tracker.setdefault(ticker, {"total_cost": 0.0, "total_bought": 0.0})
+                entry["total_cost"] += qty * price
+                entry["total_bought"] += qty
 
     # Net per instrument
     net = df.groupby("instrument")["quantity"].sum().reset_index()
     net = net[net["quantity"] > 0.01]  # ignore dust / fully-sold positions
     net.rename(columns={"instrument": "symbol", "quantity": "shares"}, inplace=True)
+
+    # Attach weighted avg cost
+    net["avg_cost"] = net["symbol"].apply(
+        lambda t: round(cost_tracker[t]["total_cost"] / cost_tracker[t]["total_bought"], 4)
+        if t in cost_tracker and cost_tracker[t]["total_bought"] > 0
+        else None
+    )
     return net
 
 
@@ -144,12 +167,14 @@ async def upload_holdings_csv(
 
     added = 0
     for _, row in holdings_df.iterrows():
+        avg_cost_val = row.get("avg_cost") if "avg_cost" in holdings_df.columns else None
         db.add(
             Holding(
                 portfolio_id=portfolio_id,
                 ticker=row["symbol"],
                 shares=float(row["shares"]),
                 cost_basis=None,
+                avg_cost=float(avg_cost_val) if pd.notna(avg_cost_val) else None,
             )
         )
         added += 1
