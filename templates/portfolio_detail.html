@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}{{ portfolio.name }} - Portfolio Detail{% endblock %}
+{% block content %}
+
+<div class="mb-8">
+    <a href="/portfolios" class="text-indigo-600 hover:underline">&larr; Back to Portfolios</a>
+</div>
+
+<h2 class="text-3xl font-bold mb-2">{{ portfolio.name }}</h2>
+<p class="text-gray-500 mb-8">Portfolio #{{ portfolio.id }} &bull; Created {{ portfolio.created_at.strftime('%Y-%m-%d') }}</p>
+
+<!-- Holdings table -->
+{% if holdings %}
+<div class="bg-white rounded-lg shadow p-6 mb-8">
+    <h3 class="text-xl font-semibold mb-4">Current Holdings</h3>
+    <table class="w-full text-left">
+        <thead class="border-b">
+            <tr>
+                <th class="py-2">Ticker</th>
+                <th class="py-2 text-right">Shares</th>
+                <th class="py-2 text-right">Cost Basis</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for h in holdings %}
+            <tr class="border-b last:border-0">
+                <td class="py-2 font-medium">{{ h.ticker }}</td>
+                <td class="py-2 text-right">{{ "%.4f"|format(h.shares) }}</td>
+                <td class="py-2 text-right">{{ "$%.2f"|format(h.cost_basis) if h.cost_basis else "—" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p class="text-gray-500 mb-8">No holdings yet. <a href="/upload?portfolio_id={{ portfolio.id }}" class="text-indigo-600 hover:underline">Upload a CSV</a> to get started.</p>
+{% endif %}
+
+<!-- Returns line chart -->
+{% if analysis and not analysis.error is defined %}
+<div class="bg-white rounded-lg shadow p-6 mb-8">
+    <h3 class="text-xl font-semibold mb-1">Performance vs {{ analysis.benchmark }}</h3>
+    <p class="text-gray-500 text-sm mb-4">Period: {{ analysis.period }}</p>
+    <div style="position:relative;height:400px;">
+        <canvas id="returnsChart"></canvas>
+    </div>
+    <div class="mt-4 flex gap-8 text-sm">
+        <span>Portfolio: <strong class="{{ 'text-green-600' if analysis.final_portfolio_return >= 0 else 'text-red-600' }}">{{ "%+.2f"|format(analysis.final_portfolio_return) }}%</strong></span>
+        <span>{{ analysis.benchmark }}: <strong class="{{ 'text-green-600' if analysis.final_benchmark_return >= 0 else 'text-red-600' }}">{{ "%+.2f"|format(analysis.final_benchmark_return) }}%</strong></span>
+    </div>
+</div>
+
+<script>
+(function() {
+    const ctx = document.getElementById('returnsChart').getContext('2d');
+    const dates = {{ analysis.dates | tojson }};
+    const portfolioReturns = {{ analysis.portfolio_returns | tojson }};
+    const benchmarkReturns = {{ analysis.benchmark_returns | tojson }};
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: dates,
+            datasets: [
+                {
+                    label: 'Portfolio',
+                    data: portfolioReturns,
+                    borderColor: '#4f46e5',
+                    backgroundColor: 'rgba(79,70,229,0.08)',
+                    fill: true,
+                    tension: 0.2,
+                    pointRadius: 0,
+                    borderWidth: 2,
+                },
+                {
+                    label: '{{ analysis.benchmark }}',
+                    data: benchmarkReturns,
+                    borderColor: '#9ca3af',
+                    borderDash: [6, 3],
+                    fill: false,
+                    tension: 0.2,
+                    pointRadius: 0,
+                    borderWidth: 2,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            return ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(2) + '%';
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: { maxTicksLimit: 12 }
+                },
+                y: {
+                    ticks: {
+                        callback: function(v) { return v + '%'; }
+                    }
+                }
+            }
+        }
+    });
+})();
+</script>
+{% elif analysis and analysis.error is defined %}
+<div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-8">
+    <p class="text-yellow-800">Could not generate chart: {{ analysis.error }}</p>
+</div>
+{% endif %}
+
+{% endblock %}

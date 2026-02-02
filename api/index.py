@@ -6,9 +6,13 @@ from fastapi import Request, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from api.database import get_db
 from api.models.portfolio import Portfolio
+from api.services.analysis_service import (
+    calculate_portfolio_returns,
+    calculate_portfolio_returns_from_transactions,
+)
 
 print("\n" + "="*80)
 print("VERCEL: Full app restoring – api/index.py loaded")
@@ -46,6 +50,48 @@ async def home(request: Request):
 async def portfolios_list(request: Request, db: Session = Depends(get_db)):
     portfolios = db.query(Portfolio).all()
     return templates.TemplateResponse("portfolios.html", {"request": request, "portfolios": portfolios})
+
+
+@app.get("/portfolios/{portfolio_id}", response_class=HTMLResponse)
+async def portfolio_detail(
+    request: Request,
+    portfolio_id: int,
+    benchmark: str = "SPY",
+    period: str = "1y",
+    track_to_present: bool = True,
+    db: Session = Depends(get_db),
+):
+    portfolio = (
+        db.query(Portfolio)
+        .options(
+            selectinload(Portfolio.holdings),
+            selectinload(Portfolio.transactions),
+        )
+        .filter(Portfolio.id == portfolio_id)
+        .first()
+    )
+    if not portfolio:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+
+    # Run analysis — prefer transaction-based DCA series when available
+    analysis = None
+    if portfolio.transactions:
+        analysis = calculate_portfolio_returns_from_transactions(
+            portfolio.transactions, benchmark, track_to_present,
+        )
+    elif portfolio.holdings:
+        analysis = calculate_portfolio_returns(
+            portfolio.holdings, benchmark, period,
+        )
+
+    return templates.TemplateResponse("portfolio_detail.html", {
+        "request": request,
+        "portfolio": portfolio,
+        "holdings": portfolio.holdings,
+        "analysis": analysis,
+    })
+
 
 # === Add routers here in next steps ===
 
