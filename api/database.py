@@ -27,7 +27,7 @@ def get_db():
 def init_db():
     try:
         # Lazy import models
-        from api.models.portfolio import Portfolio, Holding, Benchmark
+        from api.models.portfolio import Portfolio, Holding, Benchmark, Transaction
         Base.metadata.create_all(bind=engine)
         print("SUCCESS: Database tables created successfully")
         # Test connection
