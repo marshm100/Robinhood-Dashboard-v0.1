@@ -171,6 +171,21 @@ def calculate_portfolio_returns(
                 values.append(round(float(pct_line[idx]), 2))
             monte_carlo["data"][str(p)] = values
 
+    # --- Asset Correlation Matrix ---
+    correlation_matrix = None
+    # Include holdings tickers that exist in prices_df + benchmark
+    corr_tickers = [t for t in tickers if t in prices_df.columns]
+    if benchmark in prices_df.columns and benchmark not in corr_tickers:
+        corr_tickers.append(benchmark)
+    if len(corr_tickers) >= 3:
+        asset_returns = prices_df[corr_tickers].pct_change().dropna()
+        if len(asset_returns) >= 20:
+            corr_df = asset_returns.corr().round(2)
+            correlation_matrix = {
+                "tickers": corr_tickers,
+                "matrix": corr_df.values.tolist(),
+            }
+
     # --- Fama-French 3-Factor Regression ---
     factor_regression = None
     try:
@@ -263,5 +278,6 @@ def calculate_portfolio_returns(
         "drawdown_data": drawdown_data,
         "max_drawdown": max_drawdown,
         "monte_carlo": monte_carlo,
+        "correlation_matrix": correlation_matrix,
         "factor_regression": factor_regression,
     }

@@ -164,6 +164,49 @@
     {% endif %}
 </div>
 
+<!-- Asset Correlation Matrix -->
+<div class="bg-white p-6 rounded-lg shadow mb-10">
+    <h3 class="text-xl font-semibold mb-4">Asset Correlation Matrix</h3>
+    {% if analysis.correlation_matrix %}
+    <p class="text-gray-500 text-sm mb-4">Pairwise correlations based on daily returns.</p>
+    <div class="overflow-x-auto">
+        <table class="text-sm border-collapse">
+            <thead>
+                <tr>
+                    <th class="py-2 px-3 border border-gray-200 bg-gray-50"></th>
+                    {% for t in analysis.correlation_matrix.tickers %}
+                    <th class="py-2 px-3 border border-gray-200 bg-gray-50 font-semibold text-center">{{ t }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for i in range(analysis.correlation_matrix.tickers | length) %}
+                <tr>
+                    <td class="py-2 px-3 border border-gray-200 bg-gray-50 font-semibold">{{ analysis.correlation_matrix.tickers[i] }}</td>
+                    {% for j in range(analysis.correlation_matrix.tickers | length) %}
+                    {% set val = analysis.correlation_matrix.matrix[i][j] %}
+                    {% if i == j %}
+                    <td class="py-2 px-3 border border-gray-200 text-center font-bold bg-gray-100">1.00</td>
+                    {% else %}
+                    {% set abs_val = val if val >= 0 else -val %}
+                    <td class="py-2 px-3 border border-gray-200 text-center
+                        {% if abs_val >= 0.8 %}bg-green-100 text-green-800
+                        {% elif abs_val >= 0.5 %}bg-yellow-100 text-yellow-800
+                        {% else %}bg-red-100 text-red-800{% endif %}">
+                        {{ "%.2f" | format(val) }}
+                    </td>
+                    {% endif %}
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-gray-500 text-sm">Insufficient holdings for correlation matrix (need 3+ assets with price data).</p>
+    {% endif %}
+</div>
+
 <!-- Holdings Table -->
 <div class="bg-white p-6 rounded-lg shadow mb-10">
     <h3 class="text-xl font-semibold mb-4">Holdings</h3>
