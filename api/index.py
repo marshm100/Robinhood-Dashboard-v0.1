@@ -86,8 +86,9 @@ async def daily_price_update():
 @app.on_event("startup")
 def startup():
     print("App starting - Vercel serverless")
-    from api.database import init_db
+    from api.database import init_db, backfill_discovered_tickers
     init_db()
+    backfill_discovered_tickers()
 
 from api.routes.health import router as health_router
 app.include_router(health_router)
