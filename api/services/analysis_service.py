@@ -75,6 +75,45 @@ def calculate_portfolio_returns(
             "benchmark": round(float(bench_ret), 2),
         })
 
+    # --- Drawdown (underwater chart) ---
+    peak = portfolio_value.cummax()
+    drawdown = (portfolio_value / peak - 1) * 100
+    drawdown_data = [
+        {"date": d.strftime("%Y-%m-%d"), "drawdown": round(float(v), 2)}
+        for d, v in drawdown.items()
+    ]
+    max_drawdown = round(float(drawdown.min()), 2)
+
+    # --- Monte Carlo Simulation (10-year forward projection) ---
+    monte_carlo = None
+    daily_returns = portfolio_value.pct_change().dropna()
+    if len(daily_returns) >= 30:
+        mean_daily = float(daily_returns.mean())
+        std_daily = float(daily_returns.std())
+        simulations = 10000
+        mc_years = 10
+        days = mc_years * 252
+        rng = np.random.default_rng(seed=42)
+        sim_returns = rng.normal(mean_daily, std_daily, (days, simulations))
+        sim_paths = np.cumprod(1 + sim_returns, axis=0) * float(portfolio_value.iloc[-1])
+        percentiles = [5, 25, 50, 75, 95]
+        # Sample at yearly intervals for chart data (every 252 days)
+        yearly_indices = [i for i in range(251, days, 252)]  # end of year 1..10
+        yearly_indices = [0] + yearly_indices  # prepend day 0 for start
+        monte_carlo = {
+            "current_value": round(float(portfolio_value.iloc[-1]), 2),
+            "percentiles": percentiles,
+            "years": list(range(0, mc_years + 1)),
+            "data": {},
+        }
+        for p in percentiles:
+            pct_line = np.percentile(sim_paths, p, axis=1)
+            # year 0 = current value, then yearly snapshots
+            values = [round(float(portfolio_value.iloc[-1]), 2)]
+            for idx in yearly_indices[1:]:
+                values.append(round(float(pct_line[idx]), 2))
+            monte_carlo["data"][str(p)] = values
+
     return {
         "dates": dates,
         "portfolio_returns": portfolio_returns.round(2).tolist(),
@@ -85,4 +124,7 @@ def calculate_portfolio_returns(
         "final_benchmark_return": round(benchmark_returns.iloc[-1], 2),
         "rolling_returns": rolling_returns,
         "annual_returns": annual_returns,
+        "drawdown_data": drawdown_data,
+        "max_drawdown": max_drawdown,
+        "monte_carlo": monte_carlo,
     }
