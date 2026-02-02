@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% block title %}{{ portfolio.name }} - Portfolio Detail{% endblock %}
+{% block content %}
+
+<div class="mb-8">
+    <h2 class="text-3xl font-bold mb-2">{{ portfolio.name }}</h2>
+    <p class="text-gray-600">Portfolio #{{ portfolio.id }} &bull; {{ portfolio.holdings | length }} holdings &bull; Benchmark: {{ analysis.benchmark }}</p>
+</div>
+
+{% if analysis.error is defined %}
+<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+    <strong>Error:</strong> {{ analysis.error }}
+</div>
+{% else %}
+
+<!-- Summary Cards -->
+<div class="grid gap-6 md:grid-cols-3 mb-10">
+    <div class="bg-white p-6 rounded-lg shadow">
+        <p class="text-sm text-gray-500 uppercase tracking-wide">Portfolio Return</p>
+        <p class="text-3xl font-bold {% if analysis.final_portfolio_return >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+            {{ analysis.final_portfolio_return }}%
+        </p>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow">
+        <p class="text-sm text-gray-500 uppercase tracking-wide">{{ analysis.benchmark }} Return</p>
+        <p class="text-3xl font-bold {% if analysis.final_benchmark_return >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+            {{ analysis.final_benchmark_return }}%
+        </p>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow">
+        <p class="text-sm text-gray-500 uppercase tracking-wide">Alpha (vs {{ analysis.benchmark }})</p>
+        {% set alpha = analysis.final_portfolio_return - analysis.final_benchmark_return %}
+        <p class="text-3xl font-bold {% if alpha >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+            {{ "%.2f" | format(alpha) }}%
+        </p>
+    </div>
+</div>
+
+<!-- Cumulative Returns Chart -->
+<div class="bg-white p-6 rounded-lg shadow mb-10">
+    <h3 class="text-xl font-semibold mb-4">Cumulative Returns</h3>
+    <div id="cumulative-chart" style="height: 400px;"></div>
+</div>
+
+<!-- Rolling Returns Chart -->
+<div class="bg-white p-6 rounded-lg shadow mb-10">
+    <h3 class="text-xl font-semibold mb-4">Rolling Returns (CAGR %)</h3>
+    <div id="rolling-chart" style="height: 400px;"></div>
+    {% if not analysis.rolling_returns.get('1y') and not analysis.rolling_returns.get('2y') and not analysis.rolling_returns.get('3y') %}
+    <p class="text-gray-500 text-sm mt-2">Insufficient data for rolling returns. Use a longer period (e.g. 5y or max) to see rolling CAGR.</p>
+    {% endif %}
+</div>
+
+<!-- Annual Returns Section -->
+<div class="bg-white p-6 rounded-lg shadow mb-10">
+    <h3 class="text-xl font-semibold mb-4">Annual Returns</h3>
+    {% if analysis.annual_returns %}
+    <div id="annual-chart" style="height: 400px; margin-bottom: 24px;"></div>
+
+    <!-- Annual Returns Table -->
+    <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead>
+                <tr class="border-b-2 border-gray-200 text-left">
+                    <th class="py-2 px-4 font-semibold">Year</th>
+                    <th class="py-2 px-4 font-semibold text-right">Portfolio %</th>
+                    <th class="py-2 px-4 font-semibold text-right">{{ analysis.benchmark }} %</th>
+                    <th class="py-2 px-4 font-semibold text-right">Difference</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in analysis.annual_returns %}
+                <tr class="border-b border-gray-100 hover:bg-gray-50">
+                    <td class="py-2 px-4 font-medium">{{ row.year }}</td>
+                    <td class="py-2 px-4 text-right {% if row.portfolio >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                        {{ "%.2f" | format(row.portfolio) }}%
+                    </td>
+                    <td class="py-2 px-4 text-right {% if row.benchmark >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                        {{ "%.2f" | format(row.benchmark) }}%
+                    </td>
+                    {% set diff = row.portfolio - row.benchmark %}
+                    <td class="py-2 px-4 text-right {% if diff >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                        {{ "%.2f" | format(diff) }}%
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-gray-500 text-sm">Insufficient data for annual returns. Use a longer period to see year-over-year performance.</p>
+    {% endif %}
+</div>
+
+<!-- Holdings Table -->
+<div class="bg-white p-6 rounded-lg shadow mb-10">
+    <h3 class="text-xl font-semibold mb-4">Holdings</h3>
+    <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead>
+                <tr class="border-b-2 border-gray-200 text-left">
+                    <th class="py-2 px-4 font-semibold">Ticker</th>
+                    <th class="py-2 px-4 font-semibold text-right">Shares</th>
+                    <th class="py-2 px-4 font-semibold text-right">Cost Basis</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for h in portfolio.holdings %}
+                <tr class="border-b border-gray-100 hover:bg-gray-50">
+                    <td class="py-2 px-4 font-medium">{{ h.ticker }}</td>
+                    <td class="py-2 px-4 text-right">{{ "%.4f" | format(h.shares) }}</td>
+                    <td class="py-2 px-4 text-right">{{ ("$%.2f" | format(h.cost_basis)) if h.cost_basis else "—" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    // --- Data from Jinja ---
+    const dates = {{ analysis.dates | tojson }};
+    const portfolioReturns = {{ analysis.portfolio_returns | tojson }};
+    const benchmarkReturns = {{ analysis.benchmark_returns | tojson }};
+    const benchmarkName = {{ analysis.benchmark | tojson }};
+    const rollingReturns = {{ analysis.rolling_returns | tojson }};
+    const annualReturns = {{ analysis.annual_returns | tojson }};
+
+    // --- Cumulative Returns (Highcharts line chart) ---
+    Highcharts.chart("cumulative-chart", {
+        chart: { type: "line", zoomType: "x" },
+        title: { text: null },
+        xAxis: {
+            categories: dates,
+            labels: {
+                step: Math.max(1, Math.floor(dates.length / 8)),
+                rotation: -45,
+                style: { fontSize: "11px" }
+            },
+            tickmarkPlacement: "on"
+        },
+        yAxis: {
+            title: { text: "Return (%)" },
+            labels: { format: "{value}%" }
+        },
+        tooltip: {
+            shared: true,
+            valueSuffix: "%",
+            valueDecimals: 2
+        },
+        legend: { enabled: true },
+        plotOptions: {
+            line: { marker: { enabled: false } }
+        },
+        series: [
+            { name: "Portfolio", data: portfolioReturns, color: "#4f46e5" },
+            { name: benchmarkName, data: benchmarkReturns, color: "#9333ea" }
+        ],
+        exporting: { enabled: true }
+    });
+
+    // --- Rolling Returns (Highcharts line chart) ---
+    const rollingLabels = { "1y": "1-Year", "2y": "2-Year", "3y": "3-Year" };
+    const rollingColors = { "1y": "#4f46e5", "2y": "#059669", "3y": "#dc2626" };
+    const rollingSeries = [];
+
+    for (const [key, label] of Object.entries(rollingLabels)) {
+        const data = rollingReturns[key] || [];
+        if (data.length > 0) {
+            rollingSeries.push({
+                name: label + " Rolling CAGR",
+                data: data.map(d => [d.date, d.value]),
+                color: rollingColors[key]
+            });
+        }
+    }
+
+    if (rollingSeries.length > 0) {
+        // Collect all unique dates for x-axis
+        const allDates = [...new Set(rollingSeries.flatMap(s => s.data.map(d => d[0])))].sort();
+        // Convert series data to positional
+        const positionalSeries = rollingSeries.map(s => {
+            const dateMap = Object.fromEntries(s.data);
+            return {
+                name: s.name,
+                data: allDates.map(d => dateMap[d] !== undefined ? dateMap[d] : null),
+                color: s.color,
+                connectNulls: true
+            };
+        });
+
+        Highcharts.chart("rolling-chart", {
+            chart: { type: "line", zoomType: "x" },
+            title: { text: null },
+            xAxis: {
+                categories: allDates,
+                labels: {
+                    step: Math.max(1, Math.floor(allDates.length / 8)),
+                    rotation: -45,
+                    style: { fontSize: "11px" }
+                }
+            },
+            yAxis: {
+                title: { text: "CAGR (%)" },
+                labels: { format: "{value}%" },
+                plotLines: [{ value: 0, color: "#ccc", width: 1, dashStyle: "Dash" }]
+            },
+            tooltip: {
+                shared: true,
+                valueSuffix: "%",
+                valueDecimals: 2
+            },
+            legend: { enabled: true },
+            plotOptions: {
+                line: { marker: { enabled: false } }
+            },
+            series: positionalSeries,
+            exporting: { enabled: true }
+        });
+    }
+
+    // --- Annual Returns (Highcharts column chart) ---
+    if (annualReturns.length > 0) {
+        const years = annualReturns.map(r => String(r.year));
+        const portData = annualReturns.map(r => r.portfolio);
+        const benchData = annualReturns.map(r => r.benchmark);
+
+        Highcharts.chart("annual-chart", {
+            chart: { type: "column" },
+            title: { text: null },
+            xAxis: {
+                categories: years,
+                crosshair: true
+            },
+            yAxis: {
+                title: { text: "Return (%)" },
+                labels: { format: "{value}%" },
+                plotLines: [{ value: 0, color: "#ccc", width: 1, dashStyle: "Dash" }]
+            },
+            tooltip: {
+                shared: true,
+                valueSuffix: "%",
+                valueDecimals: 2
+            },
+            plotOptions: {
+                column: {
+                    grouping: true,
+                    borderRadius: 3,
+                    borderWidth: 0
+                }
+            },
+            series: [
+                { name: "Portfolio", data: portData, color: "#4f46e5" },
+                { name: benchmarkName, data: benchData, color: "#9333ea" }
+            ],
+            exporting: { enabled: true }
+        });
+    }
+});
+</script>
+
+{% endif %}
+{% endblock %}
