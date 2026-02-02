@@ -2,10 +2,39 @@
 {% block title %}{{ portfolio.name }} - Portfolio Detail{% endblock %}
 {% block content %}
 
-<div class="mb-8">
-    <h2 class="text-3xl font-bold mb-2">{{ portfolio.name }}</h2>
-    <p class="text-gray-600">Portfolio #{{ portfolio.id }} &bull; {{ portfolio.holdings | length }} holdings &bull; Benchmark: {{ analysis.benchmark }}</p>
+<div class="mb-8 flex flex-wrap items-start justify-between gap-4">
+    <div>
+        <h2 class="text-3xl font-bold mb-2">{{ portfolio.name }}</h2>
+        <p class="text-gray-600">Portfolio #{{ portfolio.id }} &bull; {{ portfolio.holdings | length }} holdings &bull; Benchmark: {{ analysis.benchmark }}
+            {% if analysis.inflation_adjusted %}&bull; <span class="text-indigo-600 font-semibold">CPI-Adjusted (Real)</span>{% endif %}
+        </p>
+    </div>
+    {% if analysis.error is not defined %}
+    <div class="flex items-center gap-3 bg-white px-4 py-3 rounded-lg shadow text-sm">
+        <label for="inflation-toggle" class="font-medium text-gray-700 cursor-pointer select-none">Inflation Adjusted</label>
+        <input type="checkbox" id="inflation-toggle"
+               class="w-4 h-4 accent-indigo-600 cursor-pointer"
+               {% if analysis.inflation_adjusted %}checked{% endif %}>
+    </div>
+    {% endif %}
 </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    var toggle = document.getElementById("inflation-toggle");
+    if (toggle) {
+        toggle.addEventListener("change", function () {
+            var url = new URL(window.location.href);
+            if (this.checked) {
+                url.searchParams.set("inflation_adjusted", "true");
+            } else {
+                url.searchParams.delete("inflation_adjusted");
+            }
+            window.location.href = url.toString();
+        });
+    }
+});
+</script>
 
 {% if analysis.error is defined %}
 <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
@@ -13,16 +42,18 @@
 </div>
 {% else %}
 
+{% set real_tag = " (Real)" if analysis.inflation_adjusted else "" %}
+
 <!-- Summary Cards -->
 <div class="grid gap-6 md:grid-cols-4 mb-10">
     <div class="bg-white p-6 rounded-lg shadow">
-        <p class="text-sm text-gray-500 uppercase tracking-wide">Portfolio Return</p>
+        <p class="text-sm text-gray-500 uppercase tracking-wide">Portfolio Return{{ real_tag }}</p>
         <p class="text-3xl font-bold {% if analysis.final_portfolio_return >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
             {{ analysis.final_portfolio_return }}%
         </p>
     </div>
     <div class="bg-white p-6 rounded-lg shadow">
-        <p class="text-sm text-gray-500 uppercase tracking-wide">{{ analysis.benchmark }} Return</p>
+        <p class="text-sm text-gray-500 uppercase tracking-wide">{{ analysis.benchmark }} Return{{ real_tag }}</p>
         <p class="text-3xl font-bold {% if analysis.final_benchmark_return >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
             {{ analysis.final_benchmark_return }}%
         </p>
@@ -44,13 +75,13 @@
 
 <!-- Cumulative Returns Chart -->
 <div class="bg-white p-6 rounded-lg shadow mb-10">
-    <h3 class="text-xl font-semibold mb-4">Cumulative Returns</h3>
+    <h3 class="text-xl font-semibold mb-4">Cumulative Returns{{ real_tag }}</h3>
     <div id="cumulative-chart" style="height: 400px;"></div>
 </div>
 
 <!-- Rolling Returns Chart -->
 <div class="bg-white p-6 rounded-lg shadow mb-10">
-    <h3 class="text-xl font-semibold mb-4">Rolling Returns (CAGR %)</h3>
+    <h3 class="text-xl font-semibold mb-4">Rolling Returns (CAGR %){{ real_tag }}</h3>
     <div id="rolling-chart" style="height: 400px;"></div>
     {% if not analysis.rolling_returns.get('1y') and not analysis.rolling_returns.get('2y') and not analysis.rolling_returns.get('3y') %}
     <p class="text-gray-500 text-sm mt-2">Insufficient data for rolling returns. Use a longer period (e.g. 5y or max) to see rolling CAGR.</p>
@@ -59,7 +90,7 @@
 
 <!-- Annual Returns Section -->
 <div class="bg-white p-6 rounded-lg shadow mb-10">
-    <h3 class="text-xl font-semibold mb-4">Annual Returns</h3>
+    <h3 class="text-xl font-semibold mb-4">Annual Returns{{ real_tag }}</h3>
     {% if analysis.annual_returns %}
     <div id="annual-chart" style="height: 400px; margin-bottom: 24px;"></div>
 
@@ -100,7 +131,7 @@
 
 <!-- Drawdown Underwater Chart -->
 <div class="bg-white p-6 rounded-lg shadow mb-10">
-    <h3 class="text-xl font-semibold mb-4">Drawdown (Underwater)</h3>
+    <h3 class="text-xl font-semibold mb-4">Drawdown (Underwater){{ real_tag }}</h3>
     <div id="drawdown-chart" style="height: 400px;"></div>
 </div>
 
@@ -243,6 +274,8 @@ document.addEventListener("DOMContentLoaded", function () {
     const annualReturns = {{ analysis.annual_returns | tojson }};
     const drawdownData = {{ analysis.drawdown_data | tojson }};
     const monteCarlo = {{ analysis.monte_carlo | tojson }};
+    const inflationAdjusted = {{ analysis.inflation_adjusted | tojson }};
+    const realTag = inflationAdjusted ? " (Real)" : "";
 
     // --- Cumulative Returns (Highcharts line chart) ---
     Highcharts.chart("cumulative-chart", {
@@ -258,7 +291,7 @@ document.addEventListener("DOMContentLoaded", function () {
             tickmarkPlacement: "on"
         },
         yAxis: {
-            title: { text: "Return (%)" },
+            title: { text: "Return (%)" + realTag },
             labels: { format: "{value}%" }
         },
         tooltip: {
@@ -271,8 +304,8 @@ document.addEventListener("DOMContentLoaded", function () {
             line: { marker: { enabled: false } }
         },
         series: [
-            { name: "Portfolio", data: portfolioReturns, color: "#4f46e5" },
-            { name: benchmarkName, data: benchmarkReturns, color: "#9333ea" }
+            { name: "Portfolio" + realTag, data: portfolioReturns, color: "#4f46e5" },
+            { name: benchmarkName + realTag, data: benchmarkReturns, color: "#9333ea" }
         ],
         exporting: { enabled: true }
     });
@@ -368,8 +401,8 @@ document.addEventListener("DOMContentLoaded", function () {
                 }
             },
             series: [
-                { name: "Portfolio", data: portData, color: "#4f46e5" },
-                { name: benchmarkName, data: benchData, color: "#9333ea" }
+                { name: "Portfolio" + realTag, data: portData, color: "#4f46e5" },
+                { name: benchmarkName + realTag, data: benchData, color: "#9333ea" }
             ],
             exporting: { enabled: true }
         });

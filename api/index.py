@@ -54,6 +54,7 @@ async def portfolio_detail(
     portfolio_id: int,
     benchmark: str = "SPY",
     period: str = "5y",
+    inflation_adjusted: bool = False,
     db: Session = Depends(get_db),
 ):
     portfolio = (
@@ -64,7 +65,9 @@ async def portfolio_detail(
     )
     if not portfolio:
         return HTMLResponse("<h1>Portfolio not found</h1>", status_code=404)
-    analysis = calculate_portfolio_returns(portfolio.holdings, benchmark, period)
+    analysis = calculate_portfolio_returns(
+        portfolio.holdings, benchmark, period, inflation_adjusted
+    )
     return templates.TemplateResponse(
         "portfolio_detail.html",
         {"request": request, "portfolio": portfolio, "analysis": analysis},

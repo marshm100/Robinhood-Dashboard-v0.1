@@ -8,6 +8,40 @@ from api.models.portfolio import Holding
 from .price_service import get_historical_prices
 
 FF_URL = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_Factors_CSV.zip"
+CPI_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL"
+
+def _fetch_cpi_series() -> pd.Series | None:
+    """Download monthly CPI-U from FRED and return as a date-indexed Series.
+
+    Returns None on failure.
+    """
+    try:
+        resp = requests.get(CPI_URL, timeout=30)
+        resp.raise_for_status()
+        lines = resp.text.strip().splitlines()
+        # First line is header: DATE,CPIAUCSL
+        rows = []
+        for line in lines[1:]:
+            parts = line.split(",")
+            if len(parts) != 2:
+                continue
+            try:
+                date = pd.Timestamp(parts[0].strip())
+                value = float(parts[1].strip())
+                rows.append((date, value))
+            except (ValueError, TypeError):
+                continue
+        if not rows:
+            return None
+        cpi = pd.Series(
+            [r[1] for r in rows],
+            index=pd.DatetimeIndex([r[0] for r in rows]),
+            name="CPI",
+        )
+        return cpi.sort_index()
+    except Exception as e:
+        print(f"CPI fetch failed: {e}")
+        return None
 
 def _fetch_ff_factors() -> pd.DataFrame | None:
     """Download and parse Fama-French 3-factor monthly data.
@@ -64,7 +98,8 @@ def _fetch_ff_factors() -> pd.DataFrame | None:
 def calculate_portfolio_returns(
     holdings: List[Holding],
     benchmark: str = "SPY",
-    period: str = "1y"
+    period: str = "1y",
+    inflation_adjusted: bool = False,
 ) -> dict:
     valid_holdings = [h for h in holdings if h.shares > 0]
     if not valid_holdings:
@@ -73,7 +108,7 @@ def calculate_portfolio_returns(
     tickers = [h.ticker for h in valid_holdings]
     all_tickers = tickers + [benchmark]
 
-    print(f"Analysis request: tickers={tickers}, benchmark={benchmark}, period={period}")
+    print(f"Analysis request: tickers={tickers}, benchmark={benchmark}, period={period}, inflation_adjusted={inflation_adjusted}")
     prices_df = get_historical_prices(all_tickers, period=period)
     if prices_df.empty or benchmark not in prices_df.columns:
         print("Price fetch returned empty - insufficient data")
@@ -87,6 +122,23 @@ def calculate_portfolio_returns(
 
     if portfolio_value.iloc[0] == 0:
         return {"error": "Initial portfolio value is zero"}
+
+    # --- Inflation adjustment (CPI deflation) ---
+    cpi_applied = False
+    if inflation_adjusted:
+        cpi_monthly = _fetch_cpi_series()
+        if cpi_monthly is not None and len(cpi_monthly) > 0:
+            # Resample monthly CPI to daily by forward-fill
+            cpi_daily = cpi_monthly.reindex(
+                pd.to_datetime(prices_df.index)
+            ).ffill().bfill()
+            if cpi_daily.notna().sum() > 0:
+                cpi_latest = float(cpi_daily.iloc[-1])
+                deflator = cpi_latest / cpi_daily
+                # Deflate portfolio value and benchmark prices
+                portfolio_value = portfolio_value * deflator.values
+                prices_df[benchmark] = prices_df[benchmark] * deflator.values
+                cpi_applied = True
 
     portfolio_returns = (portfolio_value / portfolio_value.iloc[0] - 1) * 100
     benchmark_returns = (prices_df[benchmark] / prices_df[benchmark].iloc[0] - 1) * 100
@@ -280,4 +332,5 @@ def calculate_portfolio_returns(
         "monte_carlo": monte_carlo,
         "correlation_matrix": correlation_matrix,
         "factor_regression": factor_regression,
+        "inflation_adjusted": inflation_adjusted and cpi_applied,
     }
