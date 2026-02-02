@@ -1,5 +1,6 @@
 import yfinance as yf
 import pandas as pd
+import traceback
 from datetime import date
 from typing import List, Optional
 from sqlalchemy.orm import Session
@@ -64,44 +65,52 @@ def compute_drawdown_metrics(value_series: pd.Series) -> dict:
 def _fetch_spot_and_sector(ticker_str: str) -> tuple:
     """
     Fetch spot price and sector for a single ticker.
-    Returns (price: float|None, sector: str|None).
-    Tries .history(2d) first (most reliable for leveraged ETFs),
-    then .info as fallback for both price and sector.
+    Returns (price: float|None, sector: str).
+    Never raises — all exceptions are caught and logged.
     """
     price = None
-    sector = None
-    t = yf.Ticker(ticker_str)
+    sector = "Unknown"
 
-    # Method 1: recent history for price (fastest, most reliable)
+    try:
+        t = yf.Ticker(ticker_str)
+    except Exception as e:
+        print(f"[WARN] yf.Ticker({ticker_str}) constructor failed: {e}")
+        return None, "Unknown"
+
+    # Method 1: recent history for price (most reliable for leveraged ETFs)
     try:
         hist = t.history(period="2d")
         if not hist.empty and "Close" in hist.columns:
-            val = float(hist["Close"].dropna().iloc[-1])
-            if val > 0:
-                price = val
-    except Exception:
-        pass
+            closes = hist["Close"].dropna()
+            if len(closes) > 0:
+                val = float(closes.iloc[-1])
+                if val > 0:
+                    price = val
+    except Exception as e:
+        print(f"[WARN] history(2d) failed for {ticker_str}: {e}")
 
     # Method 2: .info for price fallback AND sector
     try:
-        info = t.info
+        info = t.info or {}
         if price is None:
-            price = (
-                info.get("regularMarketPrice")
-                or info.get("currentPrice")
-                or info.get("previousClose")
-                or info.get("lastPrice")
-            )
-            if price is not None:
-                price = float(price)
+            for key in ("regularMarketPrice", "currentPrice", "previousClose", "lastPrice"):
+                val = info.get(key)
+                if val is not None:
+                    try:
+                        price = float(val)
+                        if price > 0:
+                            break
+                        price = None
+                    except (ValueError, TypeError):
+                        continue
         sector = (
             info.get("sector")
             or info.get("industry")
             or info.get("category")
-            or ("Exchange Traded Fund" if info.get("quoteType") == "ETF" else None)
+            or ("Exchange Traded Fund" if info.get("quoteType") == "ETF" else "Unknown")
         )
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[WARN] .info failed for {ticker_str}: {e}")
 
     return price, sector
 
@@ -132,12 +141,20 @@ def calculate_portfolio_returns(
           f"inception={inception_date}, track_to_present={track_to_present}, snapshot={snapshot_date}")
     # Map user-facing "all" to yfinance's "max" period
     yf_period = "max" if period == "all" else period
-    prices_df = get_historical_prices(all_tickers, period=yf_period)
+    try:
+        prices_df = get_historical_prices(all_tickers, period=yf_period)
+    except Exception as e:
+        print(f"[ERROR] get_historical_prices failed: {e}")
+        prices_df = pd.DataFrame()
 
     # If main fetch failed entirely, try a short window for spot prices
     if prices_df.empty:
         print("Main fetch empty — trying 5d fallback for spot prices")
-        prices_df = get_historical_prices(all_tickers, period="5d")
+        try:
+            prices_df = get_historical_prices(all_tickers, period="5d")
+        except Exception as e:
+            print(f"[ERROR] 5d fallback also failed: {e}")
+            prices_df = pd.DataFrame()
 
     # ── Slice to inception_date if available ──────────────────────────
     if inception_date is not None and not prices_df.empty:
@@ -177,11 +194,14 @@ def calculate_portfolio_returns(
     unique_tickers = list(set(all_tickers))
     print(f"Fetching individual spot prices & sectors for: {unique_tickers}")
     for ticker_str in unique_tickers:
-        price, sector = _fetch_spot_and_sector(ticker_str)
-        if price is not None:
-            latest_prices[ticker_str] = price
-        if sector is not None:
-            individual_sectors[ticker_str] = sector
+        try:
+            price, sector = _fetch_spot_and_sector(ticker_str)
+            if price is not None:
+                latest_prices[ticker_str] = price
+            if sector and sector != "Unknown":
+                individual_sectors[ticker_str] = sector
+        except Exception as e:
+            print(f"[ERROR] Unexpected failure fetching {ticker_str}: {e}\n{traceback.format_exc()}")
 
     current_value = sum(
         latest_prices.get(h.ticker, 0) * h.shares
@@ -196,10 +216,14 @@ def calculate_portfolio_returns(
     if latest_prices:
         sector_map: dict = {}
         if db is not None:
-            sector_map = get_sector_map(tickers, db)
+            try:
+                sector_map = get_sector_map(tickers, db)
+            except Exception as e:
+                print(f"[ERROR] get_sector_map failed: {e}")
+                sector_map = {}
         # Fill gaps with individually-fetched sectors
         for t in tickers:
-            if t not in sector_map or sector_map[t] in (None, "Unknown"):
+            if t not in sector_map or sector_map.get(t) in (None, "Unknown"):
                 if t in individual_sectors:
                     sector_map[t] = individual_sectors[t]
 
