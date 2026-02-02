@@ -100,6 +100,7 @@ def calculate_portfolio_returns(
     benchmark: str = "SPY",
     period: str = "1y",
     inflation_adjusted: bool = False,
+    rebalance: str = "none",
 ) -> dict:
     valid_holdings = [h for h in holdings if h.shares > 0]
     if not valid_holdings:
@@ -108,7 +109,7 @@ def calculate_portfolio_returns(
     tickers = [h.ticker for h in valid_holdings]
     all_tickers = tickers + [benchmark]
 
-    print(f"Analysis request: tickers={tickers}, benchmark={benchmark}, period={period}, inflation_adjusted={inflation_adjusted}")
+    print(f"Analysis request: tickers={tickers}, benchmark={benchmark}, period={period}, inflation_adjusted={inflation_adjusted}, rebalance={rebalance}")
     prices_df = get_historical_prices(all_tickers, period=period)
     if prices_df.empty or benchmark not in prices_df.columns:
         print("Price fetch returned empty - insufficient data")
@@ -125,6 +126,7 @@ def calculate_portfolio_returns(
 
     # --- Inflation adjustment (CPI deflation) ---
     cpi_applied = False
+    deflator_values = None
     if inflation_adjusted:
         cpi_monthly = _fetch_cpi_series()
         if cpi_monthly is not None and len(cpi_monthly) > 0:
@@ -135,9 +137,10 @@ def calculate_portfolio_returns(
             if cpi_daily.notna().sum() > 0:
                 cpi_latest = float(cpi_daily.iloc[-1])
                 deflator = cpi_latest / cpi_daily
+                deflator_values = deflator.values
                 # Deflate portfolio value and benchmark prices
-                portfolio_value = portfolio_value * deflator.values
-                prices_df[benchmark] = prices_df[benchmark] * deflator.values
+                portfolio_value = portfolio_value * deflator_values
+                prices_df[benchmark] = prices_df[benchmark] * deflator_values
                 cpi_applied = True
 
     portfolio_returns = (portfolio_value / portfolio_value.iloc[0] - 1) * 100
@@ -366,6 +369,95 @@ def calculate_portfolio_returns(
         print(f"Factor regression failed: {e}")
         factor_regression = None
 
+    # --- Rebalance Frequency Simulation ---
+    rebalance_simulation = None
+    if rebalance != "none":
+        try:
+            freq_map = {"monthly": "ME", "quarterly": "QE", "annual": "YE"}
+            pd_freq = freq_map.get(rebalance)
+            reb_tickers = [h.ticker for h in valid_holdings if h.ticker in prices_df.columns]
+
+            if pd_freq and len(reb_tickers) >= 2:
+                dt_index = pd.to_datetime(prices_df.index)
+
+                # Compute initial target weights from day-0 allocation
+                initial_values = {}
+                initial_shares = {}
+                for h in valid_holdings:
+                    if h.ticker in prices_df.columns:
+                        initial_values[h.ticker] = float(prices_df[h.ticker].iloc[0]) * h.shares
+                        initial_shares[h.ticker] = h.shares
+                total_initial = sum(initial_values.values())
+
+                if total_initial > 0:
+                    target_weights = {t: v / total_initial for t, v in initial_values.items()}
+
+                    # Generate rebalance dates using pandas frequency
+                    rebal_dates = pd.date_range(
+                        start=dt_index[0], end=dt_index[-1], freq=pd_freq
+                    )
+                    # Map each rebalance date to the last trading day on or before it
+                    rebal_positions = set()
+                    for rd in rebal_dates:
+                        candidates = dt_index[dt_index <= rd]
+                        if len(candidates) > 0:
+                            pos = dt_index.get_loc(candidates[-1])
+                            rebal_positions.add(pos)
+
+                    # Simulate rebalanced portfolio
+                    current_shares = dict(initial_shares)
+                    rebalanced_values = []
+
+                    for i in range(len(prices_df)):
+                        # Daily value
+                        val = sum(
+                            current_shares[t] * float(prices_df[t].iloc[i])
+                            for t in current_shares
+                        )
+                        rebalanced_values.append(val)
+
+                        # Rebalance at end of day if this is a rebalance date
+                        if i in rebal_positions and i < len(prices_df) - 1:
+                            total_val = val
+                            for t in current_shares:
+                                price = float(prices_df[t].iloc[i])
+                                if price > 0:
+                                    current_shares[t] = (
+                                        total_val * target_weights.get(t, 0)
+                                    ) / price
+
+                    rebalanced_series = pd.Series(rebalanced_values, index=prices_df.index)
+
+                    # Apply inflation deflator if active
+                    if deflator_values is not None:
+                        rebalanced_series = rebalanced_series * deflator_values
+
+                    no_rebal_final = float(portfolio_value.iloc[-1])
+                    rebal_final = float(rebalanced_series.iloc[-1])
+                    rebal_diff = (
+                        round((rebal_final / no_rebal_final - 1) * 100, 2)
+                        if no_rebal_final > 0
+                        else None
+                    )
+
+                    rebalance_simulation = {
+                        "frequency": rebalance,
+                        "rebalance_count": len(rebal_positions),
+                        "target_weights": {
+                            t: round(w * 100, 2) for t, w in target_weights.items()
+                        },
+                        "no_rebalance_value": [round(float(v), 2) for v in portfolio_value],
+                        "rebalanced_value": [
+                            round(float(v), 2) for v in rebalanced_series
+                        ],
+                        "no_rebalance_final": round(no_rebal_final, 2),
+                        "rebalanced_final": round(rebal_final, 2),
+                        "rebalance_diff_pct": rebal_diff,
+                    }
+        except Exception as e:
+            print(f"Rebalance simulation failed: {e}")
+            rebalance_simulation = None
+
     return {
         "dates": dates,
         "portfolio_returns": portfolio_returns.round(2).tolist(),
@@ -382,5 +474,7 @@ def calculate_portfolio_returns(
         "correlation_matrix": correlation_matrix,
         "factor_regression": factor_regression,
         "timing_comparison": timing_comparison,
+        "rebalance_simulation": rebalance_simulation,
+        "rebalance": rebalance,
         "inflation_adjusted": inflation_adjusted and cpi_applied,
     }

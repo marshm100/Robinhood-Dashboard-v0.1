@@ -10,11 +10,22 @@
         </p>
     </div>
     {% if analysis.error is not defined %}
-    <div class="flex items-center gap-3 bg-white px-4 py-3 rounded-lg shadow text-sm">
-        <label for="inflation-toggle" class="font-medium text-gray-700 cursor-pointer select-none">Inflation Adjusted</label>
-        <input type="checkbox" id="inflation-toggle"
-               class="w-4 h-4 accent-indigo-600 cursor-pointer"
-               {% if analysis.inflation_adjusted %}checked{% endif %}>
+    <div class="flex flex-wrap items-center gap-3">
+        <div class="flex items-center gap-3 bg-white px-4 py-3 rounded-lg shadow text-sm">
+            <label for="inflation-toggle" class="font-medium text-gray-700 cursor-pointer select-none">Inflation Adjusted</label>
+            <input type="checkbox" id="inflation-toggle"
+                   class="w-4 h-4 accent-indigo-600 cursor-pointer"
+                   {% if analysis.inflation_adjusted %}checked{% endif %}>
+        </div>
+        <div class="flex items-center gap-3 bg-white px-4 py-3 rounded-lg shadow text-sm">
+            <label for="rebalance-select" class="font-medium text-gray-700 select-none">Rebalance</label>
+            <select id="rebalance-select" class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <option value="none" {% if analysis.rebalance == "none" %}selected{% endif %}>None</option>
+                <option value="monthly" {% if analysis.rebalance == "monthly" %}selected{% endif %}>Monthly</option>
+                <option value="quarterly" {% if analysis.rebalance == "quarterly" %}selected{% endif %}>Quarterly</option>
+                <option value="annual" {% if analysis.rebalance == "annual" %}selected{% endif %}>Annual</option>
+            </select>
+        </div>
     </div>
     {% endif %}
 </div>
@@ -29,6 +40,18 @@ document.addEventListener("DOMContentLoaded", function () {
                 url.searchParams.set("inflation_adjusted", "true");
             } else {
                 url.searchParams.delete("inflation_adjusted");
+            }
+            window.location.href = url.toString();
+        });
+    }
+    var rebalSelect = document.getElementById("rebalance-select");
+    if (rebalSelect) {
+        rebalSelect.addEventListener("change", function () {
+            var url = new URL(window.location.href);
+            if (this.value !== "none") {
+                url.searchParams.set("rebalance", this.value);
+            } else {
+                url.searchParams.delete("rebalance");
             }
             window.location.href = url.toString();
         });
@@ -182,6 +205,60 @@ document.addEventListener("DOMContentLoaded", function () {
     {% endif %}
 </div>
 
+<!-- Rebalance Frequency Simulation -->
+<div class="bg-white p-6 rounded-lg shadow mb-10">
+    <h3 class="text-xl font-semibold mb-4">Rebalance Simulation{{ real_tag }}</h3>
+    {% if analysis.rebalance_simulation %}
+    {% set rs = analysis.rebalance_simulation %}
+    <p class="text-gray-500 text-sm mb-4">
+        {{ rs.frequency | capitalize }} rebalancing to initial target weights ({{ rs.rebalance_count }} rebalances).
+    </p>
+    <div class="grid gap-4 md:grid-cols-4 mb-6">
+        <div class="bg-gray-50 p-4 rounded-lg text-center">
+            <p class="text-xs text-gray-500 uppercase tracking-wide">No Rebalance Final</p>
+            <p class="text-xl font-bold text-gray-800">${{ "{:,.2f}".format(rs.no_rebalance_final) }}</p>
+        </div>
+        <div class="bg-gray-50 p-4 rounded-lg text-center">
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Rebalanced Final</p>
+            <p class="text-xl font-bold text-indigo-600">${{ "{:,.2f}".format(rs.rebalanced_final) }}</p>
+        </div>
+        <div class="bg-gray-50 p-4 rounded-lg text-center">
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Rebalance Benefit</p>
+            {% if rs.rebalance_diff_pct is not none %}
+            <p class="text-xl font-bold {% if rs.rebalance_diff_pct >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                {{ "%.2f" | format(rs.rebalance_diff_pct) }}%
+            </p>
+            {% else %}
+            <p class="text-xl font-bold text-gray-400">N/A</p>
+            {% endif %}
+        </div>
+        <div class="bg-gray-50 p-4 rounded-lg text-center">
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Rebalance Count</p>
+            <p class="text-xl font-bold text-gray-800">{{ rs.rebalance_count }}</p>
+        </div>
+    </div>
+    <!-- Target Weights -->
+    <div class="mb-4">
+        <p class="text-xs text-gray-500 uppercase tracking-wide mb-2">Target Weights</p>
+        <div class="flex flex-wrap gap-2">
+            {% for ticker, weight in rs.target_weights.items() %}
+            <span class="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-sm font-medium">{{ ticker }}: {{ weight }}%</span>
+            {% endfor %}
+        </div>
+    </div>
+    <div id="rebalance-chart" style="height: 400px;"></div>
+    <p class="text-gray-500 text-sm mt-3">Compares buy-and-hold (no rebalance) vs periodic rebalancing back to initial allocation weights.</p>
+    {% else %}
+    <p class="text-gray-500 text-sm">
+        {% if analysis.rebalance == "none" %}
+        Select a rebalance frequency from the dropdown above to simulate periodic rebalancing.
+        {% else %}
+        Insufficient data for rebalance simulation (need 2+ holdings with price data).
+        {% endif %}
+    </p>
+    {% endif %}
+</div>
+
 <!-- Fama-French 3-Factor Regression -->
 <div class="bg-white p-6 rounded-lg shadow mb-10">
     <h3 class="text-xl font-semibold mb-4">Factor Regression (Fama-French 3-Factor)</h3>
@@ -311,6 +388,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const drawdownData = {{ analysis.drawdown_data | tojson }};
     const monteCarlo = {{ analysis.monte_carlo | tojson }};
     const timingComparison = {{ analysis.timing_comparison | tojson }};
+    const rebalanceSimulation = {{ analysis.rebalance_simulation | tojson }};
     const inflationAdjusted = {{ analysis.inflation_adjusted | tojson }};
     const realTag = inflationAdjusted ? " (Real)" : "";
 
@@ -628,6 +706,51 @@ document.addEventListener("DOMContentLoaded", function () {
             series: [
                 { name: "Lump Sum (Day-0)", data: tcLs, color: "#4f46e5", lineWidth: 2 },
                 { name: "DCA (Actual)", data: tcDca, color: "#9333ea", lineWidth: 2 }
+            ],
+            exporting: { enabled: true }
+        });
+    }
+
+    // --- Rebalance Simulation Chart ---
+    if (rebalanceSimulation) {
+        const noRebal = rebalanceSimulation.no_rebalance_value;
+        const rebal = rebalanceSimulation.rebalanced_value;
+        const freq = rebalanceSimulation.frequency;
+        const freqLabel = freq.charAt(0).toUpperCase() + freq.slice(1);
+
+        Highcharts.chart("rebalance-chart", {
+            chart: { type: "line", zoomType: "x" },
+            title: { text: null },
+            xAxis: {
+                categories: dates,
+                labels: {
+                    step: Math.max(1, Math.floor(dates.length / 8)),
+                    rotation: -45,
+                    style: { fontSize: "11px" }
+                }
+            },
+            yAxis: {
+                title: { text: "Portfolio Value ($)" + realTag },
+                labels: {
+                    formatter: function () {
+                        if (this.value >= 1000000) return "$" + (this.value / 1000000).toFixed(1) + "M";
+                        if (this.value >= 1000) return "$" + (this.value / 1000).toFixed(0) + "K";
+                        return "$" + this.value;
+                    }
+                }
+            },
+            tooltip: {
+                shared: true,
+                valuePrefix: "$",
+                valueDecimals: 2
+            },
+            legend: { enabled: true },
+            plotOptions: {
+                line: { marker: { enabled: false } }
+            },
+            series: [
+                { name: "No Rebalance (Buy & Hold)", data: noRebal, color: "#6b7280", lineWidth: 2 },
+                { name: freqLabel + " Rebalance", data: rebal, color: "#4f46e5", lineWidth: 2 }
             ],
             exporting: { enabled: true }
         });
