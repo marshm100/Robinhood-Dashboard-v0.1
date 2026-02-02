@@ -146,6 +146,42 @@ document.addEventListener("DOMContentLoaded", function () {
     {% endif %}
 </div>
 
+<!-- Timing Model (Lump Sum vs DCA) -->
+<div class="bg-white p-6 rounded-lg shadow mb-10">
+    <h3 class="text-xl font-semibold mb-4">Timing Model (Lump Sum vs DCA){{ real_tag }}</h3>
+    {% if analysis.timing_comparison %}
+    {% set tc = analysis.timing_comparison %}
+    <div class="grid gap-4 md:grid-cols-4 mb-6">
+        <div class="bg-gray-50 p-4 rounded-lg text-center">
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Total Invested</p>
+            <p class="text-xl font-bold text-gray-800">${{ "{:,.2f}".format(tc.total_invested) }}</p>
+        </div>
+        <div class="bg-gray-50 p-4 rounded-lg text-center">
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Lump Sum Final</p>
+            <p class="text-xl font-bold text-indigo-600">${{ "{:,.2f}".format(tc.lump_sum_final) }}</p>
+        </div>
+        <div class="bg-gray-50 p-4 rounded-lg text-center">
+            <p class="text-xs text-gray-500 uppercase tracking-wide">DCA Final (Actual)</p>
+            <p class="text-xl font-bold text-purple-600">${{ "{:,.2f}".format(tc.dca_final) }}</p>
+        </div>
+        <div class="bg-gray-50 p-4 rounded-lg text-center">
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Timing Difference</p>
+            {% if tc.timing_penalty_pct is not none %}
+            <p class="text-xl font-bold {% if tc.timing_penalty_pct >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                {{ "%.2f" | format(tc.timing_penalty_pct) }}%
+            </p>
+            {% else %}
+            <p class="text-xl font-bold text-gray-400">N/A</p>
+            {% endif %}
+        </div>
+    </div>
+    <div id="timing-chart" style="height: 400px;"></div>
+    <p class="text-gray-500 text-sm mt-3">Lump Sum assumes the total cost basis was invested at day-0 prices in the same allocation. DCA reflects actual share purchases at their cost basis.</p>
+    {% else %}
+    <p class="text-gray-500 text-sm">Insufficient data for timing comparison (need cost basis data on holdings).</p>
+    {% endif %}
+</div>
+
 <!-- Fama-French 3-Factor Regression -->
 <div class="bg-white p-6 rounded-lg shadow mb-10">
     <h3 class="text-xl font-semibold mb-4">Factor Regression (Fama-French 3-Factor)</h3>
@@ -274,6 +310,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const annualReturns = {{ analysis.annual_returns | tojson }};
     const drawdownData = {{ analysis.drawdown_data | tojson }};
     const monteCarlo = {{ analysis.monte_carlo | tojson }};
+    const timingComparison = {{ analysis.timing_comparison | tojson }};
     const inflationAdjusted = {{ analysis.inflation_adjusted | tojson }};
     const realTag = inflationAdjusted ? " (Real)" : "";
 
@@ -548,6 +585,49 @@ document.addEventListener("DOMContentLoaded", function () {
                     marker: { enabled: false },
                     zIndex: 2
                 }
+            ],
+            exporting: { enabled: true }
+        });
+    }
+
+    // --- Timing Model Chart (Lump Sum vs DCA) ---
+    if (timingComparison) {
+        const tcDca = timingComparison.dca_value;
+        const tcLs = timingComparison.lump_sum_value;
+
+        Highcharts.chart("timing-chart", {
+            chart: { type: "line", zoomType: "x" },
+            title: { text: null },
+            xAxis: {
+                categories: dates,
+                labels: {
+                    step: Math.max(1, Math.floor(dates.length / 8)),
+                    rotation: -45,
+                    style: { fontSize: "11px" }
+                }
+            },
+            yAxis: {
+                title: { text: "Portfolio Value ($)" + realTag },
+                labels: {
+                    formatter: function () {
+                        if (this.value >= 1000000) return "$" + (this.value / 1000000).toFixed(1) + "M";
+                        if (this.value >= 1000) return "$" + (this.value / 1000).toFixed(0) + "K";
+                        return "$" + this.value;
+                    }
+                }
+            },
+            tooltip: {
+                shared: true,
+                valuePrefix: "$",
+                valueDecimals: 2
+            },
+            legend: { enabled: true },
+            plotOptions: {
+                line: { marker: { enabled: false } }
+            },
+            series: [
+                { name: "Lump Sum (Day-0)", data: tcLs, color: "#4f46e5", lineWidth: 2 },
+                { name: "DCA (Actual)", data: tcDca, color: "#9333ea", lineWidth: 2 }
             ],
             exporting: { enabled: true }
         });

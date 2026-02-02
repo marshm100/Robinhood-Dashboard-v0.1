@@ -223,6 +223,55 @@ def calculate_portfolio_returns(
                 values.append(round(float(pct_line[idx]), 2))
             monte_carlo["data"][str(p)] = values
 
+    # --- Timing Comparison (Lump Sum vs DCA) ---
+    timing_comparison = None
+    try:
+        # Estimate total invested per holding from cost_basis (per-share) or
+        # fall back to first-date price
+        first_prices = prices_df.iloc[0]
+        holding_costs = []
+        for h in valid_holdings:
+            if h.ticker not in prices_df.columns:
+                continue
+            if h.cost_basis and h.cost_basis > 0:
+                # cost_basis is per-share cost
+                cost_i = h.cost_basis * h.shares
+            else:
+                # Fallback: assume bought at first available price
+                cost_i = float(first_prices[h.ticker]) * h.shares
+            holding_costs.append((h.ticker, h.shares, cost_i))
+
+        total_invested = sum(c for _, _, c in holding_costs)
+
+        if total_invested > 0 and len(holding_costs) > 0:
+            # Lump Sum: invest each holding's total cost at day-0 prices
+            # lump_sum_shares_i = cost_i / first_price_i
+            # lump_sum_value(t) = sum(lump_sum_shares_i * price_i(t))
+            lump_sum_value = pd.Series(0.0, index=prices_df.index)
+            for ticker, shares, cost_i in holding_costs:
+                fp = float(first_prices[ticker])
+                if fp > 0:
+                    lump_shares = cost_i / fp
+                    lump_sum_value += prices_df[ticker] * lump_shares
+
+            # DCA value is the actual portfolio_value (already computed,
+            # possibly inflation-adjusted above)
+            dca_final = float(portfolio_value.iloc[-1])
+            ls_final = float(lump_sum_value.iloc[-1])
+            timing_penalty = round((dca_final / ls_final - 1) * 100, 2) if ls_final > 0 else None
+
+            timing_comparison = {
+                "dca_value": [round(float(v), 2) for v in portfolio_value],
+                "lump_sum_value": [round(float(v), 2) for v in lump_sum_value],
+                "total_invested": round(total_invested, 2),
+                "lump_sum_final": round(ls_final, 2),
+                "dca_final": round(dca_final, 2),
+                "timing_penalty_pct": timing_penalty,
+            }
+    except Exception as e:
+        print(f"Timing comparison failed: {e}")
+        timing_comparison = None
+
     # --- Asset Correlation Matrix ---
     correlation_matrix = None
     # Include holdings tickers that exist in prices_df + benchmark
@@ -332,5 +381,6 @@ def calculate_portfolio_returns(
         "monte_carlo": monte_carlo,
         "correlation_matrix": correlation_matrix,
         "factor_regression": factor_regression,
+        "timing_comparison": timing_comparison,
         "inflation_adjusted": inflation_adjusted and cpi_applied,
     }
