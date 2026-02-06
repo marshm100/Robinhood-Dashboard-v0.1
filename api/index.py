@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from api.config import CORS_ORIGINS
 from api.database import get_db
 from api.models.portfolio import Portfolio
-from api.services.price_service import get_latest_prices, get_cached_history
+from api.services.price_service import get_latest_prices, get_cached_history, clear_fetch_errors, get_fetch_errors
 from api.services.analysis_service import calculate_portfolio_returns
 from api.routes.health import router as health_router
 from api.routes.portfolio import router as portfolio_router
@@ -67,10 +67,14 @@ async def portfolio_detail(
     common_start_date = None
     missing_tickers = []
     benchmark_unavailable = False
+    error_info = {}
 
     valid_holdings = [h for h in portfolio.holdings if h.shares and h.shares > 0]
 
     if valid_holdings:
+        # Clear error tracking for this request cycle
+        clear_fetch_errors()
+
         # Fetch latest prices for the holdings table (uses cache)
         tickers = list({h.ticker for h in valid_holdings})
         try:
@@ -98,13 +102,13 @@ async def portfolio_detail(
         # Sort by value descending (holdings with price first)
         holdings_with_values.sort(key=lambda h: h["value"] or 0, reverse=True)
 
-        # Prime benchmark cache before chart computation
+        # Aggressively prime benchmark cache (full history)
         try:
-            get_cached_history(benchmark, period=period)
+            get_cached_history(benchmark, period="max")
         except Exception:
             pass  # analysis_service handles missing benchmark gracefully
 
-        # Fetch chart data (cache-backed)
+        # Fetch chart data (cache-backed — also primes holdings)
         try:
             result = calculate_portfolio_returns(valid_holdings, benchmark=benchmark, period=period)
             if "error" in result:
@@ -116,6 +120,9 @@ async def portfolio_detail(
                 benchmark_unavailable = result.get("benchmark_unavailable", False)
         except Exception as e:
             chart_error = str(e)
+
+        # Collect fetch errors for diagnostic banners
+        error_info = get_fetch_errors()
 
     # Convert holding dicts to simple namespace for dot-access in template
     class HoldingView:
@@ -134,6 +141,7 @@ async def portfolio_detail(
         "common_start_date": common_start_date,
         "missing_tickers": missing_tickers,
         "benchmark_unavailable": benchmark_unavailable,
+        "error_info": error_info,
     }
     return templates.TemplateResponse("portfolio_detail.html", context)
 

@@ -12,7 +12,7 @@ A web application for tracking and analyzing Robinhood investment portfolios. Cr
 | Database | SQLite (dev) / PostgreSQL via [Vercel Postgres](https://vercel.com/docs/storage/vercel-postgres) (prod) |
 | ORM | [SQLAlchemy](https://www.sqlalchemy.org/) |
 | Frontend | [Jinja2](https://jinja.palletsprojects.com/) templates, [Tailwind CSS](https://tailwindcss.com/) (CDN), [Chart.js](https://www.chartjs.org/) |
-| Stock Data | [yfinance](https://github.com/ranaroussi/yfinance) with DB-backed price cache |
+| Stock Data | [Stooq](https://stooq.com/) (primary) + [yfinance](https://github.com/ranaroussi/yfinance) (fallback), DB-backed price cache |
 | File Storage | [Vercel Blob](https://vercel.com/docs/storage/vercel-blob) (CSV archive) |
 | Deployment | [Vercel](https://vercel.com/) serverless |
 
@@ -20,7 +20,7 @@ A web application for tracking and analyzing Robinhood investment portfolios. Cr
 
 - **Portfolio CRUD** -- Create, list, and inspect portfolios with their holdings
 - **Portfolio Detail View** -- Holdings table with live prices, current value, and percentage allocation; interactive Chart.js line chart comparing cumulative portfolio returns vs a configurable benchmark (SPY, QQQ, etc.) over selectable time periods (1y, 2y, 5y, all)
-- **Self-Healing Price Cache** -- Stock and DailyPrice tables automatically discover and cache historical close prices on first access; shared across all users; stale data is incrementally refreshed from yfinance with retry/backoff; eliminates "Insufficient price data" errors
+- **Self-Healing Price Cache** -- Stock and DailyPrice tables automatically discover and cache historical close prices on first access; primary source is Stooq (reliable daily CSVs, no rate limits) with yfinance as strict fallback; shared across all users; stale data is incrementally refreshed; specific user-friendly banners diagnose temporary failures (rate limits, outages); never hard-errors
 - **CSV Upload** -- Import holdings from Robinhood CSV exports; auto-detects `ticker`/`symbol` and `shares`/`quantity`/`amount` columns; new tickers are auto-registered in the cache on upload
 - **Benchmark Comparison** -- Common-timeline alignment across all holdings and benchmark; graceful info banners when history is limited or tickers are missing
 - **Blob Archiving** -- Uploaded CSVs are archived to Vercel Blob storage when `BLOB_READ_WRITE_TOKEN` is set
@@ -42,7 +42,7 @@ api/
     analysis.py         # Portfolio vs benchmark comparison
     stockr.py           # Single-ticker price lookup
   services/
-    price_service.py    # Cache-backed price fetching (yfinance + DB)
+    price_service.py    # Cache-backed price fetching (Stooq primary, yfinance fallback)
     analysis_service.py # Portfolio return calculation with common timeline
     blob_service.py     # Vercel Blob upload
 templates/
@@ -115,16 +115,23 @@ The repo includes `vercel.json` routing all requests to `api/index.py`. Push to 
 
 Set `POSTGRES_URL` in Vercel environment variables for persistent data. Without it, SQLite writes to `/tmp` and resets on cold starts.
 
-## Price Cache
+## Self-Healing Price Cache
 
-The `stocks` and `daily_prices` tables are created automatically on startup. Common benchmarks (SPY, QQQ) are pre-seeded as `Stock` rows so they exist before first use. When a ticker is accessed for the first time (via the detail page or API), the cache:
+The `stocks` and `daily_prices` tables are created automatically on startup. Common benchmarks and indices (SPY, QQQ, ^GSPC, VTI, VXUS) are pre-seeded as `Stock` rows so they exist before first use. When a ticker is accessed for the first time (via the detail page or API), the cache:
 
 1. Creates a `Stock` row if the ticker is unknown
-2. Fetches full history from yfinance (retries 3x with exponential backoff)
-3. Stores daily close prices in `daily_prices`
-4. On subsequent requests, serves from DB; only fetches incrementally if data is >1 day stale
+2. Fetches full history from **Stooq** (primary — reliable daily CSVs, no rate limits); tries plain ticker then `.us` suffix for US equities
+3. If Stooq fails, falls back to **yfinance** (5 retries with exponential backoff)
+4. Stores daily close prices in `daily_prices`; forward-fills gaps up to 5 business days
+5. On subsequent requests, serves from DB; only fetches incrementally if data is >1 day stale
 
-The benchmark ticker is always primed separately before chart computation. If benchmark data is temporarily unavailable (e.g. yfinance outage), the chart falls back to portfolio-only returns with an info banner instead of failing.
+**Resilience**: The benchmark ticker is always aggressively primed (full history) before chart computation. If any source fails, specific diagnostic banners explain the issue:
+
+- **Rate limit** — "data will update in ~15–60 minutes"
+- **Temporary outage** — "will retry automatically on next page load"
+- **No data** — "no historical price data available"
+
+The system never returns a 500 error. If the benchmark is unavailable, the chart shows portfolio returns only with an explanation. If holdings are missing, they are excluded with a warning.
 
 New tickers are auto-registered (without fetching) when a CSV is uploaded. Prices are primed lazily on first analysis.
 
@@ -149,7 +156,7 @@ A `sample_transactions.csv` is included for testing.
 | `sqlalchemy` | ORM |
 | `psycopg2-binary` | PostgreSQL driver |
 | `pandas` | CSV parsing and data manipulation |
-| `yfinance` | Historical stock prices (upstream source) |
+| `yfinance` | Historical stock prices (fallback source) |
 | `httpx` | Async HTTP client (Blob uploads) |
 | `python-multipart` | File upload support |
 | `jinja2` | HTML templating |

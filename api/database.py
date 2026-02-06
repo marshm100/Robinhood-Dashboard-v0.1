@@ -31,10 +31,10 @@ def init_db():
         Base.metadata.create_all(bind=engine)
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-        # Pre-seed common benchmark tickers so they exist before first use
+        # Pre-seed popular benchmark/index tickers so they exist before first use
         db = SessionLocal()
         try:
-            for ticker in ("SPY", "QQQ"):
+            for ticker in ("SPY", "QQQ", "^GSPC", "VTI", "VXUS"):
                 if not db.query(Stock).filter(Stock.ticker == ticker).first():
                     db.add(Stock(ticker=ticker))
             db.commit()

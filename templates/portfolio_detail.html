@@ -72,7 +72,7 @@
     </form>
 </div>
 
-{# ── Info banners ── #}
+{# ── Info banners (stackable) ── #}
 {% if missing_tickers %}
 <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4 text-yellow-800 text-sm">
     No price data available for: <strong>{{ missing_tickers | join(", ") }}</strong>.
@@ -80,13 +80,26 @@
 </div>
 {% endif %}
 
+{% if error_info %}
+{% for ticker, err_type in error_info.items() %}
+<div class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4 text-amber-800 text-sm">
+    {% if err_type == "no_data" %}
+    <strong>{{ ticker }}</strong> has no historical price data available.
+    {% elif err_type == "yfinance_rate_limit" %}
+    Price provider rate limit reached for <strong>{{ ticker }}</strong> &mdash; data will update in ~15&ndash;60 minutes.
+    {% else %}
+    Temporary issue fetching <strong>{{ ticker }}</strong> prices &mdash; will retry automatically on next page load.
+    {% endif %}
+</div>
+{% endfor %}
+{% endif %}
+
 {# ── Chart ── #}
 {% if chart_data %}
 
 {% if benchmark_unavailable %}
 <div class="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4 text-orange-800 text-sm">
-    Benchmark <strong>{{ current_benchmark }}</strong> price data is currently unavailable.
-    Showing portfolio returns only. Try again later or choose a different benchmark.
+    Benchmark <strong>{{ current_benchmark }}</strong> temporarily unavailable &mdash; showing portfolio returns only.
 </div>
 {% endif %}
 

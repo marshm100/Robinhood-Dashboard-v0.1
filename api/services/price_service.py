@@ -1,8 +1,10 @@
+import io
 import logging
 import time
 from datetime import date, datetime, timedelta
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 
+import httpx
 import pandas as pd
 import yfinance as yf
 from sqlalchemy import func
@@ -12,6 +14,59 @@ from api.models.price_cache import DailyPrice, Stock
 
 log = logging.getLogger(__name__)
 
+PERIOD_TO_DAYS = {
+    "5d": 5, "1mo": 30, "3mo": 90, "6mo": 180,
+    "1y": 365, "2y": 730, "5y": 1825, "max": 9999,
+}
+
+# ── Module-level error tracker ───────────────────────────────────────
+# Tracks the most recent fetch error per ticker for the current request cycle.
+_fetch_errors: Dict[str, str] = {}
+
+
+def get_fetch_errors() -> Dict[str, str]:
+    """Return {ticker: error_type} for tickers that had issues in recent fetches."""
+    return dict(_fetch_errors)
+
+
+def clear_fetch_errors():
+    """Reset error tracking (call at the start of a request cycle)."""
+    _fetch_errors.clear()
+
+
+# ── internal: Stooq fetch (primary source) ───────────────────────────
+
+def _fetch_stooq(ticker: str) -> Tuple[pd.DataFrame, Optional[str]]:
+    """
+    Primary source: Stooq daily CSV download.
+    Tries plain ticker first, then with .us suffix for US equities.
+    Returns (DataFrame with DatetimeIndex, error_type or None).
+    """
+    variants = [ticker.lower(), f"{ticker.lower()}.us"]
+    for variant in variants:
+        url = f"https://stooq.com/q/d/l/?s={variant}&i=d"
+        try:
+            resp = httpx.get(url, timeout=15.0, follow_redirects=True)
+            resp.raise_for_status()
+            text = resp.text.strip()
+            # Stooq returns "No data" or very short responses when ticker unknown
+            if not text or "No data" in text or len(text.splitlines()) < 3:
+                continue
+            df = pd.read_csv(io.StringIO(text))
+            if "Date" not in df.columns or "Close" not in df.columns or len(df) < 2:
+                continue
+            df["Date"] = pd.to_datetime(df["Date"])
+            df = df.set_index("Date").sort_index()
+            log.info("Stooq OK %s (variant=%s): %d rows", ticker, variant, len(df))
+            return df, None
+        except Exception as e:
+            log.warning("Stooq failed for %s (variant=%s): %s", ticker, variant, e)
+            continue
+    return pd.DataFrame(), "stooq_fail"
+
+
+# ── internal: yfinance fetch (fallback) ──────────────────────────────
+
 _YF_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -19,13 +74,15 @@ _YF_HEADERS = {
     )
 }
 
-PERIOD_TO_DAYS = {"5d": 5, "1mo": 30, "3mo": 90, "6mo": 180, "1y": 365, "2y": 730, "5y": 1825}
 
-
-# ── internal: yfinance fetch with retries ────────────────────────────
-
-def _fetch_yfinance(ticker: str, period: str = "max", max_retries: int = 3) -> pd.DataFrame:
-    """Download OHLCV from yfinance with retries + backoff. Returns DataFrame with Date index."""
+def _fetch_yfinance(
+    ticker: str, period: str = "max", max_retries: int = 5,
+) -> Tuple[pd.DataFrame, Optional[str]]:
+    """
+    Fallback source: yfinance with retries + exponential backoff.
+    Returns (DataFrame, error_type or None).
+    """
+    last_error_msg = ""
     for attempt in range(max_retries):
         try:
             log.info("yfinance fetch %s period=%s attempt=%d", ticker, period, attempt + 1)
@@ -41,12 +98,17 @@ def _fetch_yfinance(ticker: str, period: str = "max", max_retries: int = 3) -> p
             if df.empty or df.isna().all().all():
                 raise ValueError("empty result")
             log.info("yfinance OK %s: %d rows", ticker, len(df))
-            return df
+            return df, None
         except Exception as e:
+            last_error_msg = str(e).lower()
             log.warning("yfinance attempt %d failed for %s: %s", attempt + 1, ticker, e)
             if attempt < max_retries - 1:
                 time.sleep(2 ** attempt)
-    return pd.DataFrame()
+
+    # Classify the final error
+    if "429" in last_error_msg or "rate" in last_error_msg or "too many" in last_error_msg:
+        return pd.DataFrame(), "yfinance_rate_limit"
+    return pd.DataFrame(), "yfinance_error"
 
 
 # ── internal: ensure Stock row exists ────────────────────────────────
@@ -99,12 +161,14 @@ def _upsert_prices(db, ticker: str, df: pd.DataFrame) -> int:
     return len(new_rows)
 
 
-# ── public: cached historical prices ────────────────────────────────
+# ── public: cached historical prices ─────────────────────────────────
 
 def get_cached_history(ticker: str, period: str = "1y") -> pd.Series:
     """
     Return a pd.Series of close prices (indexed by date) for *ticker*.
-    Uses the DB cache; fetches from yfinance only when data is missing or stale.
+    Primary source: Stooq daily CSV. Fallback: yfinance.
+    Uses the DB cache; fetches externally only when data is missing or stale.
+    Tracks fetch errors in the module-level _fetch_errors dict.
     """
     ticker = ticker.upper().strip()
     db = SessionLocal()
@@ -112,7 +176,7 @@ def get_cached_history(ticker: str, period: str = "1y") -> pd.Series:
         stock = _ensure_stock(db, ticker)
 
         # Decide what date range we need
-        days_needed = PERIOD_TO_DAYS.get(period, 9999)  # 9999 → "max"
+        days_needed = PERIOD_TO_DAYS.get(period, 9999)
         cutoff = date.today() - timedelta(days=days_needed)
 
         # Check what we have cached
@@ -135,16 +199,25 @@ def get_cached_history(ticker: str, period: str = "1y") -> pd.Series:
         )
 
         if stale:
-            # Fetch full "max" history if we have nothing, otherwise incremental
-            fetch_period = "max" if cached_count == 0 else period
-            df = _fetch_yfinance(ticker, period=fetch_period)
+            # Primary: Stooq (returns all available history)
+            df, error_type = _fetch_stooq(ticker)
+
+            if df.empty:
+                # Fallback: yfinance
+                log.info("Stooq had no data for %s, trying yfinance fallback", ticker)
+                yf_period = "max" if cached_count == 0 else period
+                df, error_type = _fetch_yfinance(ticker, period=yf_period)
+
             if not df.empty:
                 inserted = _upsert_prices(db, ticker, df)
                 stock.last_fetched = datetime.utcnow()
                 db.commit()
                 log.info("Cache primed %s: %d new rows", ticker, inserted)
+                _fetch_errors.pop(ticker, None)  # Clear previous error on success
             else:
                 db.commit()
+                _fetch_errors[ticker] = error_type or "no_data"
+                log.warning("All sources failed for %s: error_type=%s", ticker, _fetch_errors[ticker])
 
         # Read from cache
         rows = (
@@ -162,15 +235,20 @@ def get_cached_history(ticker: str, period: str = "1y") -> pd.Series:
         )
         series.index = pd.DatetimeIndex(series.index)
 
-        # Forward-fill minor gaps (weekends already absent; fill ≤3 day gaps)
+        # Forward-fill gaps ≤5 business days; log if larger gaps remain
         full_idx = pd.bdate_range(series.index.min(), series.index.max())
-        series = series.reindex(full_idx).ffill(limit=3)
+        series = series.reindex(full_idx).ffill(limit=5)
+        gap_count = int(series.isna().sum())
+        if gap_count > 0:
+            log.warning("%s has %d unfilled gaps (>5 business days)", ticker, gap_count)
         series = series.dropna()
         return series
 
     except Exception:
         db.rollback()
-        raise
+        log.error("get_cached_history failed for %s", ticker, exc_info=True)
+        _fetch_errors[ticker] = "no_data"
+        return pd.Series(dtype=float)
     finally:
         db.close()
 

@@ -4,7 +4,7 @@ from typing import List
 import pandas as pd
 
 from api.models.portfolio import Holding
-from .price_service import get_cached_history
+from .price_service import get_cached_history, get_fetch_errors
 
 log = logging.getLogger(__name__)
 
@@ -94,5 +94,10 @@ def calculate_portfolio_returns(
         log.warning("Benchmark %s unavailable; returning portfolio-only chart", benchmark)
         result["benchmark_returns"] = []
         result["final_benchmark_return"] = None
+
+    # Include any fetch errors for API consumers
+    priming_errors = get_fetch_errors()
+    if priming_errors:
+        result["priming_errors"] = priming_errors
 
     return result
