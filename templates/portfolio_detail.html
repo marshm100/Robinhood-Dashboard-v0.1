@@ -83,6 +83,13 @@
 {# ── Chart ── #}
 {% if chart_data %}
 
+{% if benchmark_unavailable %}
+<div class="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4 text-orange-800 text-sm">
+    Benchmark <strong>{{ current_benchmark }}</strong> price data is currently unavailable.
+    Showing portfolio returns only. Try again later or choose a different benchmark.
+</div>
+{% endif %}
+
 {% if common_start_date %}
 <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 text-blue-800 text-sm">
     Chart starts from <strong>{{ common_start_date }}</strong> (earliest overlapping price history).
@@ -90,44 +97,54 @@
 {% endif %}
 
 <div class="bg-white rounded-lg shadow p-6 mb-10">
+    {% if benchmark_unavailable %}
+    <h3 class="text-lg font-semibold mb-1">Cumulative Returns: Portfolio</h3>
+    <p class="text-sm text-gray-500 mb-4">
+        Portfolio <span class="font-medium text-indigo-600">{{ chart_data.final_portfolio_return }}%</span>
+    </p>
+    {% else %}
     <h3 class="text-lg font-semibold mb-1">Cumulative Returns: Portfolio vs {{ current_benchmark }}</h3>
     <p class="text-sm text-gray-500 mb-4">
         Portfolio <span class="font-medium text-indigo-600">{{ chart_data.final_portfolio_return }}%</span>
         &nbsp;|&nbsp;
         {{ current_benchmark }} <span class="font-medium text-orange-500">{{ chart_data.final_benchmark_return }}%</span>
     </p>
+    {% endif %}
     <canvas id="returnsChart" height="100"></canvas>
 </div>
 
 <script>
 (function() {
     const ctx = document.getElementById('returnsChart').getContext('2d');
+    const datasets = [
+        {
+            label: 'Portfolio',
+            data: {{ chart_data.portfolio_returns | tojson }},
+            borderColor: '#4f46e5',
+            backgroundColor: 'rgba(79,70,229,0.08)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 0,
+            borderWidth: 2
+        }
+    ];
+    {% if not benchmark_unavailable %}
+    datasets.push({
+        label: '{{ current_benchmark }}',
+        data: {{ chart_data.benchmark_returns | tojson }},
+        borderColor: '#f97316',
+        backgroundColor: 'rgba(249,115,22,0.08)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 0,
+        borderWidth: 2
+    });
+    {% endif %}
     new Chart(ctx, {
         type: 'line',
         data: {
             labels: {{ chart_data.dates | tojson }},
-            datasets: [
-                {
-                    label: 'Portfolio',
-                    data: {{ chart_data.portfolio_returns | tojson }},
-                    borderColor: '#4f46e5',
-                    backgroundColor: 'rgba(79,70,229,0.08)',
-                    fill: true,
-                    tension: 0.3,
-                    pointRadius: 0,
-                    borderWidth: 2
-                },
-                {
-                    label: '{{ current_benchmark }}',
-                    data: {{ chart_data.benchmark_returns | tojson }},
-                    borderColor: '#f97316',
-                    backgroundColor: 'rgba(249,115,22,0.08)',
-                    fill: true,
-                    tension: 0.3,
-                    pointRadius: 0,
-                    borderWidth: 2
-                }
-            ]
+            datasets: datasets
         },
         options: {
             responsive: true,

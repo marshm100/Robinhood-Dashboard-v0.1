@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from api.config import CORS_ORIGINS
 from api.database import get_db
 from api.models.portfolio import Portfolio
-from api.services.price_service import get_latest_prices
+from api.services.price_service import get_latest_prices, get_cached_history
 from api.services.analysis_service import calculate_portfolio_returns
 from api.routes.health import router as health_router
 from api.routes.portfolio import router as portfolio_router
@@ -66,6 +66,7 @@ async def portfolio_detail(
     chart_error = None
     common_start_date = None
     missing_tickers = []
+    benchmark_unavailable = False
 
     valid_holdings = [h for h in portfolio.holdings if h.shares and h.shares > 0]
 
@@ -97,6 +98,12 @@ async def portfolio_detail(
         # Sort by value descending (holdings with price first)
         holdings_with_values.sort(key=lambda h: h["value"] or 0, reverse=True)
 
+        # Prime benchmark cache before chart computation
+        try:
+            get_cached_history(benchmark, period=period)
+        except Exception:
+            pass  # analysis_service handles missing benchmark gracefully
+
         # Fetch chart data (cache-backed)
         try:
             result = calculate_portfolio_returns(valid_holdings, benchmark=benchmark, period=period)
@@ -106,6 +113,7 @@ async def portfolio_detail(
                 chart_data = result
                 common_start_date = result.get("common_start")
                 missing_tickers = result.get("missing_tickers", [])
+                benchmark_unavailable = result.get("benchmark_unavailable", False)
         except Exception as e:
             chart_error = str(e)
 
@@ -125,6 +133,7 @@ async def portfolio_detail(
         "current_period": period,
         "common_start_date": common_start_date,
         "missing_tickers": missing_tickers,
+        "benchmark_unavailable": benchmark_unavailable,
     }
     return templates.TemplateResponse("portfolio_detail.html", context)
 

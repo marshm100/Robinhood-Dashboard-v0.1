@@ -117,12 +117,14 @@ Set `POSTGRES_URL` in Vercel environment variables for persistent data. Without 
 
 ## Price Cache
 
-The `stocks` and `daily_prices` tables are created automatically on startup. When a ticker is accessed for the first time (via the detail page or API), the cache:
+The `stocks` and `daily_prices` tables are created automatically on startup. Common benchmarks (SPY, QQQ) are pre-seeded as `Stock` rows so they exist before first use. When a ticker is accessed for the first time (via the detail page or API), the cache:
 
 1. Creates a `Stock` row if the ticker is unknown
 2. Fetches full history from yfinance (retries 3x with exponential backoff)
 3. Stores daily close prices in `daily_prices`
 4. On subsequent requests, serves from DB; only fetches incrementally if data is >1 day stale
+
+The benchmark ticker is always primed separately before chart computation. If benchmark data is temporarily unavailable (e.g. yfinance outage), the chart falls back to portfolio-only returns with an info banner instead of failing.
 
 New tickers are auto-registered (without fetching) when a CSV is uploaded. Prices are primed lazily on first analysis.
 
