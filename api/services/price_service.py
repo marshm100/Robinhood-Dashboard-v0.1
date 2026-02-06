@@ -39,10 +39,10 @@ def clear_fetch_errors():
 def _fetch_stooq(ticker: str) -> Tuple[pd.DataFrame, Optional[str]]:
     """
     Primary source: Stooq daily CSV download.
-    Tries plain ticker first, then with .us suffix for US equities.
+    Tries plain ticker, then .us and .ny suffixes for US equities.
     Returns (DataFrame with DatetimeIndex, error_type or None).
     """
-    variants = [ticker.lower(), f"{ticker.lower()}.us"]
+    variants = [ticker.lower(), f"{ticker.lower()}.us", f"{ticker.lower()}.ny"]
     for variant in variants:
         url = f"https://stooq.com/q/d/l/?s={variant}&i=d"
         try:
@@ -249,6 +249,36 @@ def get_cached_history(ticker: str, period: str = "1y") -> pd.Series:
         log.error("get_cached_history failed for %s", ticker, exc_info=True)
         _fetch_errors[ticker] = "no_data"
         return pd.Series(dtype=float)
+    finally:
+        db.close()
+
+
+# ── public: cache-only read (no external fetch) ─────────────────────
+
+def read_cached_series(ticker: str, period: str = "1y") -> pd.Series:
+    """
+    Read price series from DB cache only — no external fetching.
+    Use after route-level priming to avoid redundant external calls.
+    """
+    ticker = ticker.upper().strip()
+    days_needed = PERIOD_TO_DAYS.get(period, 9999)
+    cutoff = date.today() - timedelta(days=days_needed)
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(DailyPrice.date, DailyPrice.close)
+            .filter(DailyPrice.ticker == ticker, DailyPrice.date >= cutoff)
+            .order_by(DailyPrice.date)
+            .all()
+        )
+        if not rows:
+            return pd.Series(dtype=float)
+        series = pd.Series({r.date: r.close for r in rows}, name=ticker)
+        series.index = pd.DatetimeIndex(series.index)
+        full_idx = pd.bdate_range(series.index.min(), series.index.max())
+        series = series.reindex(full_idx).ffill(limit=5)
+        series = series.dropna()
+        return series
     finally:
         db.close()
 

@@ -4,7 +4,7 @@ from typing import List
 import pandas as pd
 
 from api.models.portfolio import Holding
-from .price_service import get_cached_history, get_fetch_errors
+from .price_service import read_cached_series, get_fetch_errors
 
 log = logging.getLogger(__name__)
 
@@ -23,15 +23,15 @@ def calculate_portfolio_returns(
 
     log.info("Analysis: tickers=%s benchmark=%s period=%s", tickers, benchmark, period)
 
-    # Fetch each ticker through the cache
+    # Read each ticker from DB cache (route-level priming already done)
     series_map: dict[str, pd.Series] = {}
     for t in all_tickers:
         try:
-            s = get_cached_history(t, period=period)
+            s = read_cached_series(t, period=period)
             if not s.empty:
                 series_map[t] = s
         except Exception:
-            log.warning("Failed to get history for %s", t, exc_info=True)
+            log.warning("Failed to read cache for %s", t, exc_info=True)
 
     benchmark_available = benchmark in series_map
 

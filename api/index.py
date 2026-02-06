@@ -75,7 +75,17 @@ async def portfolio_detail(
         # Clear error tracking for this request cycle
         clear_fetch_errors()
 
-        # Fetch latest prices for the holdings table (uses cache)
+        # Dedicated priming loop: prime ALL unique tickers (holdings + benchmark)
+        # with full history BEFORE any other processing. This is the single point
+        # where external fetches happen — everything after reads from DB cache only.
+        unique_tickers = {h.ticker for h in valid_holdings} | {benchmark}
+        for t in unique_tickers:
+            try:
+                get_cached_history(t, period="max")
+            except Exception:
+                pass  # errors tracked in _fetch_errors
+
+        # Fetch latest prices for the holdings table (cache reads after priming)
         tickers = list({h.ticker for h in valid_holdings})
         try:
             prices = get_latest_prices(tickers)
@@ -102,13 +112,7 @@ async def portfolio_detail(
         # Sort by value descending (holdings with price first)
         holdings_with_values.sort(key=lambda h: h["value"] or 0, reverse=True)
 
-        # Aggressively prime benchmark cache (full history)
-        try:
-            get_cached_history(benchmark, period="max")
-        except Exception:
-            pass  # analysis_service handles missing benchmark gracefully
-
-        # Fetch chart data (cache-backed — also primes holdings)
+        # Fetch chart data (cache-only reads — all priming already done above)
         try:
             result = calculate_portfolio_returns(valid_holdings, benchmark=benchmark, period=period)
             if "error" in result:

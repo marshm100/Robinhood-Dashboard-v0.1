@@ -117,23 +117,27 @@ Set `POSTGRES_URL` in Vercel environment variables for persistent data. Without 
 
 ## Self-Healing Price Cache
 
-The `stocks` and `daily_prices` tables are created automatically on startup. Common benchmarks and indices (SPY, QQQ, ^GSPC, VTI, VXUS) are pre-seeded as `Stock` rows so they exist before first use. When a ticker is accessed for the first time (via the detail page or API), the cache:
+The `stocks` and `daily_prices` tables are created automatically on startup. Common benchmarks and indices (SPY, QQQ, ^GSPC, VTI, VXUS) are pre-seeded as `Stock` rows so they exist before first use.
+
+**How it works**: When a portfolio detail page loads, a dedicated priming loop explicitly fetches full history for **every** unique ticker (all holdings + the benchmark) before any chart computation. This is the single point where external calls happen — all downstream analysis reads from DB cache only.
+
+For each ticker, the priming step:
 
 1. Creates a `Stock` row if the ticker is unknown
-2. Fetches full history from **Stooq** (primary — reliable daily CSVs, no rate limits); tries plain ticker then `.us` suffix for US equities
-3. If Stooq fails, falls back to **yfinance** (5 retries with exponential backoff)
+2. Fetches full history from **Stooq** (primary — reliable daily CSVs, no rate limits); tries plain ticker, then `.us` and `.ny` suffixes for US equities
+3. If Stooq fails for all variants, falls back to **yfinance** (5 retries with exponential backoff)
 4. Stores daily close prices in `daily_prices`; forward-fills gaps up to 5 business days
 5. On subsequent requests, serves from DB; only fetches incrementally if data is >1 day stale
 
-**Resilience**: The benchmark ticker is always aggressively primed (full history) before chart computation. If any source fails, specific diagnostic banners explain the issue:
+**Resilience**: Every ticker is primed in its own try/except — one failure never blocks others. Diagnostic banners appear only for genuinely unfetchable tickers:
 
 - **Rate limit** — "data will update in ~15–60 minutes"
 - **Temporary outage** — "will retry automatically on next page load"
 - **No data** — "no historical price data available"
 
-The system never returns a 500 error. If the benchmark is unavailable, the chart shows portfolio returns only with an explanation. If holdings are missing, they are excluded with a warning.
+The system never returns a 500 error. If the benchmark is unavailable, the chart shows portfolio returns only with an explanation. If some holdings are missing, they are excluded with a warning while all other holdings still chart normally.
 
-New tickers are auto-registered (without fetching) when a CSV is uploaded. Prices are primed lazily on first analysis.
+New tickers are auto-registered (without fetching) when a CSV is uploaded. Prices are primed on first detail page visit.
 
 ## CSV Format
 
