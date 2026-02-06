@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from api.database import get_db
 from api.models.portfolio import Holding
 from api.services.blob_service import archive_upload
+from api.services.price_service import register_tickers
 import pandas as pd
 from io import StringIO
 
@@ -52,6 +53,11 @@ async def upload_holdings_csv(portfolio_id: int, file: UploadFile = File(...), d
             continue  # skip invalid rows
 
     db.commit()
+
+    # Register uploaded tickers in the price cache (lazy — no fetch yet)
+    new_tickers = list({h.ticker for h in db.query(Holding.ticker).filter(Holding.portfolio_id == portfolio_id).all()})
+    register_tickers(new_tickers)
+
     return {
         "status": "success",
         "holdings_added": added,

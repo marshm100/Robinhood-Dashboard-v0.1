@@ -64,11 +64,13 @@ async def portfolio_detail(
     total_value = 0.0
     chart_data = None
     chart_error = None
+    common_start_date = None
+    missing_tickers = []
 
     valid_holdings = [h for h in portfolio.holdings if h.shares and h.shares > 0]
 
     if valid_holdings:
-        # Fetch latest prices for the holdings table
+        # Fetch latest prices for the holdings table (uses cache)
         tickers = list({h.ticker for h in valid_holdings})
         try:
             prices = get_latest_prices(tickers)
@@ -95,13 +97,15 @@ async def portfolio_detail(
         # Sort by value descending (holdings with price first)
         holdings_with_values.sort(key=lambda h: h["value"] or 0, reverse=True)
 
-        # Fetch chart data
+        # Fetch chart data (cache-backed)
         try:
             result = calculate_portfolio_returns(valid_holdings, benchmark=benchmark, period=period)
             if "error" in result:
                 chart_error = result["error"]
             else:
                 chart_data = result
+                common_start_date = result.get("common_start")
+                missing_tickers = result.get("missing_tickers", [])
         except Exception as e:
             chart_error = str(e)
 
@@ -119,6 +123,8 @@ async def portfolio_detail(
         "chart_error": chart_error,
         "current_benchmark": benchmark,
         "current_period": period,
+        "common_start_date": common_start_date,
+        "missing_tickers": missing_tickers,
     }
     return templates.TemplateResponse("portfolio_detail.html", context)
 

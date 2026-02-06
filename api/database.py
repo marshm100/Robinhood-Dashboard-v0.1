@@ -26,7 +26,8 @@ def get_db():
 
 def init_db():
     try:
-        from api.models.portfolio import Portfolio, Holding, Benchmark
+        from api.models.portfolio import Portfolio, Holding, Benchmark  # noqa: F401
+        from api.models.price_cache import Stock, DailyPrice  # noqa: F401
         Base.metadata.create_all(bind=engine)
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
