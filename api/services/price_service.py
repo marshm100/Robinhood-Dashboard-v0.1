@@ -50,6 +50,21 @@ def get_historical_prices(tickers: List[str], period: str = "1y") -> pd.DataFram
     print("yfinance all attempts failed")
     return pd.DataFrame()
 
+def get_latest_prices(tickers: List[str]) -> dict:
+    """Return {ticker: latest_close_price} for a list of tickers."""
+    if not tickers:
+        return {}
+    df = get_historical_prices(tickers, period="5d")
+    result = {}
+    for t in tickers:
+        try:
+            col = df[t] if t in df.columns else df.iloc[:, 0] if len(tickers) == 1 else None
+            if col is not None and not col.dropna().empty:
+                result[t] = round(float(col.dropna().iloc[-1]), 2)
+        except Exception:
+            pass
+    return result
+
 def get_single_ticker_prices(ticker: str, period: str = "1y") -> dict:
     df = get_historical_prices([ticker], period)
     if ticker not in df.columns:

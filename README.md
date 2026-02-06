@@ -2,7 +2,7 @@
 
 **Live**: https://robinhood-dashboard-v0-1.vercel.app/
 
-A web application for tracking and analyzing Robinhood investment portfolios. Create portfolios, upload holdings via CSV, and compare performance against benchmarks like SPY.
+A web application for tracking and analyzing Robinhood investment portfolios. Create portfolios, upload holdings via CSV, view current valuations, and compare performance against benchmarks like SPY with interactive charts.
 
 ## Tech Stack
 
@@ -19,8 +19,9 @@ A web application for tracking and analyzing Robinhood investment portfolios. Cr
 ## Features
 
 - **Portfolio CRUD** -- Create, list, and inspect portfolios with their holdings
+- **Portfolio Detail View** -- Holdings table with live prices, current value, and percentage allocation; interactive Chart.js line chart comparing cumulative portfolio returns vs a configurable benchmark (SPY, QQQ, etc.) over selectable time periods
 - **CSV Upload** -- Import holdings from Robinhood CSV exports; auto-detects `ticker`/`symbol` and `shares`/`quantity`/`amount` columns
-- **Benchmark Comparison** -- Compare portfolio cumulative returns against SPY (or any ticker) over configurable periods
+- **Benchmark Comparison** -- Compare portfolio cumulative returns against any ticker over 1y, 2y, 5y, or max periods
 - **Historical Prices** -- Fetch close prices via yfinance with retry/backoff and automatic period fallback
 - **Blob Archiving** -- Uploaded CSVs are archived to Vercel Blob storage when `BLOB_READ_WRITE_TOKEN` is set
 
@@ -28,39 +29,48 @@ A web application for tracking and analyzing Robinhood investment portfolios. Cr
 
 ```
 api/
-  index.py              # FastAPI app entry point
+  index.py              # FastAPI app + page routes (home, list, detail)
   config.py             # DATABASE_URL, CORS_ORIGINS from env
   database.py           # SQLAlchemy engine, session, init_db()
   models/
     portfolio.py        # Portfolio, Holding, Benchmark models
   routes/
     health.py           # GET /api/health
-    portfolio.py        # Portfolio and holding CRUD
+    portfolio.py        # Portfolio and holding CRUD (JSON API)
     upload.py           # CSV upload and parsing
     analysis.py         # Portfolio vs benchmark comparison
     stockr.py           # Single-ticker price lookup
   services/
-    price_service.py    # yfinance wrapper (retries, fallback)
+    price_service.py    # yfinance wrapper (retries, fallback, latest prices)
     analysis_service.py # Portfolio return calculation
     blob_service.py     # Vercel Blob upload
 templates/
   base.html             # Layout (Tailwind, Chart.js, nav)
   index.html            # Home page
-  portfolios.html       # Portfolio list
+  portfolios.html       # Portfolio list (clickable names)
+  portfolio_detail.html # Detail view: holdings table + benchmark chart
 static/
   favicon.ico
 ```
 
-## API Endpoints
+## Routes
+
+### Pages
+
+| Path | Description |
+|------|-------------|
+| `/` | Home page |
+| `/portfolios` | Portfolio list -- click a name to view details |
+| `/portfolios/{id}` | Portfolio detail -- holdings table, live valuations, benchmark comparison chart |
+
+### JSON API
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/` | Home page |
-| `GET` | `/portfolios` | Portfolio list page |
 | `GET` | `/api/health` | Health check |
 | `POST` | `/api/portfolios/` | Create portfolio (`name` query param) |
 | `GET` | `/api/portfolios/` | List all portfolios |
-| `GET` | `/api/portfolios/{id}` | Get portfolio with holdings |
+| `GET` | `/api/portfolios/{id}` | Get portfolio with holdings (JSON) |
 | `POST` | `/api/portfolios/{id}/holdings` | Add holding (`ticker`, `shares`, optional `cost_basis`) |
 | `POST` | `/api/upload/{portfolio_id}` | Upload CSV to replace holdings |
 | `GET` | `/api/analysis/compare/{portfolio_id}` | Compare vs benchmark (`benchmark`, `period` params) |

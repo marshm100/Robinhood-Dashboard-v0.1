@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}{{ portfolio.name }} - Robinhood Portfolio Dashboard{% endblock %}
+{% block content %}
+
+{# ── Header ── #}
+<div class="mb-8">
+    <a href="/portfolios" class="text-indigo-600 hover:underline text-sm">&larr; All Portfolios</a>
+    <h2 class="text-3xl font-bold mt-2">{{ portfolio.name }}</h2>
+    <p class="text-gray-500">Created {{ portfolio.created_at.strftime('%B %d, %Y') }}</p>
+</div>
+
+{% if holdings_with_values %}
+
+{# ── Holdings table ── #}
+<div class="bg-white rounded-lg shadow overflow-x-auto mb-10">
+    <table class="w-full text-left">
+        <thead class="bg-gray-100 text-gray-600 text-sm uppercase tracking-wider">
+            <tr>
+                <th class="px-6 py-3">Ticker</th>
+                <th class="px-6 py-3 text-right">Shares</th>
+                <th class="px-6 py-3 text-right">Price</th>
+                <th class="px-6 py-3 text-right">Value</th>
+                <th class="px-6 py-3 text-right">% of Portfolio</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y">
+            {% for h in holdings_with_values %}
+            <tr class="hover:bg-gray-50">
+                <td class="px-6 py-4 font-medium">{{ h.ticker }}</td>
+                <td class="px-6 py-4 text-right">{{ "%.4f"|format(h.shares) }}</td>
+                <td class="px-6 py-4 text-right">
+                    {% if h.price is not none %}${{ "%.2f"|format(h.price) }}{% else %}<span class="text-gray-400">--</span>{% endif %}
+                </td>
+                <td class="px-6 py-4 text-right">
+                    {% if h.value is not none %}${{ "{:,.2f}".format(h.value) }}{% else %}<span class="text-gray-400">--</span>{% endif %}
+                </td>
+                <td class="px-6 py-4 text-right">
+                    {% if h.pct is not none %}{{ "%.1f"|format(h.pct) }}%{% else %}<span class="text-gray-400">--</span>{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot class="bg-gray-50 font-semibold">
+            <tr>
+                <td class="px-6 py-3" colspan="3">Total</td>
+                <td class="px-6 py-3 text-right">${{ "{:,.2f}".format(total_value) }}</td>
+                <td class="px-6 py-3 text-right">100%</td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+
+{# ── Benchmark controls ── #}
+<div class="bg-white rounded-lg shadow p-6 mb-6">
+    <form method="get" class="flex flex-wrap items-end gap-4">
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Benchmark</label>
+            <input type="text" name="benchmark" value="{{ current_benchmark }}"
+                   class="border rounded-lg px-3 py-2 w-28 uppercase" placeholder="SPY">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Period</label>
+            <select name="period" class="border rounded-lg px-3 py-2">
+                {% for val, label in [("1y","1 Year"),("2y","2 Years"),("5y","5 Years"),("max","All")] %}
+                <option value="{{ val }}" {% if current_period == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+            Update Chart
+        </button>
+    </form>
+</div>
+
+{# ── Chart ── #}
+{% if chart_data %}
+<div class="bg-white rounded-lg shadow p-6 mb-10">
+    <h3 class="text-lg font-semibold mb-1">Cumulative Returns: Portfolio vs {{ current_benchmark }}</h3>
+    <p class="text-sm text-gray-500 mb-4">
+        Portfolio <span class="font-medium text-indigo-600">{{ chart_data.final_portfolio_return }}%</span>
+        &nbsp;|&nbsp;
+        {{ current_benchmark }} <span class="font-medium text-orange-500">{{ chart_data.final_benchmark_return }}%</span>
+    </p>
+    <canvas id="returnsChart" height="100"></canvas>
+</div>
+
+<script>
+(function() {
+    const ctx = document.getElementById('returnsChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: {{ chart_data.dates | tojson }},
+            datasets: [
+                {
+                    label: 'Portfolio',
+                    data: {{ chart_data.portfolio_returns | tojson }},
+                    borderColor: '#4f46e5',
+                    backgroundColor: 'rgba(79,70,229,0.08)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 0,
+                    borderWidth: 2
+                },
+                {
+                    label: '{{ current_benchmark }}',
+                    data: {{ chart_data.benchmark_returns | tojson }},
+                    borderColor: '#f97316',
+                    backgroundColor: 'rgba(249,115,22,0.08)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 0,
+                    borderWidth: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) { return ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(2) + '%'; }
+                    }
+                },
+                legend: { position: 'top' }
+            },
+            scales: {
+                x: {
+                    ticks: { maxTicksLimit: 12, maxRotation: 0 }
+                },
+                y: {
+                    ticks: { callback: function(v) { return v + '%'; } }
+                }
+            }
+        }
+    });
+})();
+</script>
+{% elif chart_error %}
+<div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-10 text-yellow-800">
+    Could not load chart data: {{ chart_error }}
+</div>
+{% endif %}
+
+{% else %}
+
+{# ── Empty state ── #}
+<div class="text-center py-16 bg-white rounded-lg shadow">
+    <p class="text-gray-500 text-lg mb-4">This portfolio has no holdings yet.</p>
+    <a href="/api/upload/{{ portfolio.id }}" class="text-indigo-600 hover:underline">Upload a CSV</a>
+    to get started.
+</div>
+
+{% endif %}
+
+{% endblock %}
