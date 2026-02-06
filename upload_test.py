@@ -1,8 +1,0 @@
-import requests
-
-portfolio_id = 1
-url = f"http://localhost:8000/api/upload/{portfolio_id}"
-files = {"file": open("temp_holdings.csv", "rb")}
-
-response = requests.post(url, files=files)
-print(response.json())

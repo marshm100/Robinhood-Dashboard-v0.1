@@ -26,14 +26,9 @@ def get_db():
 
 def init_db():
     try:
-        # Lazy import models
         from api.models.portfolio import Portfolio, Holding, Benchmark
         Base.metadata.create_all(bind=engine)
-        print("SUCCESS: Database tables created successfully")
-        # Test connection
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-        print("SUCCESS: Postgres connection test passed")
     except Exception as e:
-        print("ERROR in init_db():")
-        traceback.print_exc()
+        print(f"ERROR in init_db(): {e}")
